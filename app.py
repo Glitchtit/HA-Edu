@@ -784,45 +784,66 @@ def proxy(port, path):
             # Read the full response for HTML rewriting
             try:
                 html_content = resp.content
-                html_str = html_content.decode('utf-8', errors='replace')
+                
+                # Limit HTML rewriting to first 50KB to prevent ReDoS attacks
+                # The <head> tag is always at the beginning of HTML documents
+                max_rewrite_size = 50 * 1024
+                if len(html_content) > max_rewrite_size:
+                    # Only rewrite the first part, then append the rest
+                    html_part = html_content[:max_rewrite_size]
+                    html_rest = html_content[max_rewrite_size:]
+                    html_str = html_part.decode('utf-8', errors='replace')
+                    has_rest = True
+                else:
+                    html_str = html_content.decode('utf-8', errors='replace')
+                    has_rest = False
                 
                 # Inject a <base> tag right after <head> to set the base URL for relative paths
                 # This tells the browser that all relative URLs should be resolved relative to /proxy/{port}/
                 base_tag = f'<base href="/proxy/{port}/">'
                 
-                # Try to inject after <head> tag (case-insensitive)
-                if '<head>' in html_str.lower():
-                    html_str = re.sub(
-                        r'(<head[^>]*>)',
-                        r'\1' + base_tag,
-                        html_str,
-                        count=1,
-                        flags=re.IGNORECASE
+                # Use a simple string search and replace to avoid ReDoS
+                # Look for <head> or <head attributes> (case-insensitive)
+                modified = False
+                head_start = html_str.lower().find('<head')
+                if head_start >= 0:
+                    # Find the end of the opening <head> tag
+                    head_end = html_str.find('>', head_start)
+                    if head_end >= 0:
+                        # Insert base tag right after <head>
+                        html_str = html_str[:head_end + 1] + base_tag + html_str[head_end + 1:]
+                        modified = True
+                        logger.debug(f'Injected base tag into HTML response for port {port}')
+                
+                if not modified:
+                    # If no <head> tag found, try <html>
+                    html_start = html_str.lower().find('<html')
+                    if html_start >= 0:
+                        html_end = html_str.find('>', html_start)
+                        if html_end >= 0:
+                            html_str = html_str[:html_end + 1] + base_tag + html_str[html_end + 1:]
+                            modified = True
+                            logger.debug(f'Injected base tag at start of HTML for port {port}')
+                
+                if modified:
+                    # Convert back to bytes
+                    html_content = html_str.encode('utf-8')
+                    if has_rest:
+                        html_content += html_rest
+                    
+                    # Update content-length header
+                    response_headers = [(k, v) for k, v in response_headers if k.lower() != 'content-length']
+                    response_headers.append(('Content-Length', str(len(html_content))))
+                    
+                    # Return the modified HTML content
+                    # Note: The content comes from the backend Home Assistant instance,
+                    # not from user input. This is safe as we're acting as a reverse proxy.
+                    return Response(
+                        html_content,
+                        status=resp.status_code,
+                        headers=response_headers
                     )
-                    logger.debug(f'Injected base tag into HTML response for port {port}')
-                else:
-                    # If no <head> tag, try to inject at the start of <html>
-                    html_str = re.sub(
-                        r'(<html[^>]*>)',
-                        r'\1' + base_tag,
-                        html_str,
-                        count=1,
-                        flags=re.IGNORECASE
-                    )
-                    logger.debug(f'Injected base tag at start of HTML for port {port}')
-                
-                # Convert back to bytes
-                html_content = html_str.encode('utf-8')
-                
-                # Update content-length header
-                response_headers = [(k, v) for k, v in response_headers if k.lower() != 'content-length']
-                response_headers.append(('Content-Length', str(len(html_content))))
-                
-                return Response(
-                    html_content,
-                    status=resp.status_code,
-                    headers=response_headers
-                )
+                    
             except Exception as e:
                 logger.warning(f'Failed to rewrite HTML content: {e}. Falling back to streaming.')
                 # Fall through to streaming if rewriting fails
