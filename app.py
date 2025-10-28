@@ -83,7 +83,8 @@ def cleanup_orphaned_containers():
         # Get all containers with ha-edu prefix
         all_containers = client.containers.list(all=True, filters={'name': 'ha-edu-'})
         
-        instances_updated = False
+        # Track if any instance data was modified to optimize file I/O
+        has_instance_updates = False
         for container in all_containers:
             if container.id not in tracked_container_ids:
                 logger.info(f'Found orphaned container: {container.name} ({container.id[:12]})')
@@ -98,7 +99,7 @@ def cleanup_orphaned_containers():
                             inst['status'] = container.status
                             instances[server_name] = inst
                             found = True
-                            instances_updated = True
+                            has_instance_updates = True
                             break
                     
                     if not found:
@@ -110,8 +111,8 @@ def cleanup_orphaned_containers():
                 except Exception as e:
                     logger.error(f'Failed to handle orphaned container {container.name}: {str(e)}')
         
-        # Save instances only once if any updates were made
-        if instances_updated:
+        # Save instances only once if any updates were made across all containers
+        if has_instance_updates:
             save_instances(instances)
         
         logger.info('Orphaned container cleanup completed')
