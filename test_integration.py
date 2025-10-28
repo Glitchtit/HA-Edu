@@ -98,7 +98,11 @@ def simulate_port_conflict():
         finally:
             # Restore and cleanup
             app.DATA_FILE = old_data_file
-            os.unlink(temp_file)
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+            except Exception:
+                pass  # Ignore cleanup errors
             
     except Exception as e:
         print(f"\n✗ Integration test failed with error: {e}")
