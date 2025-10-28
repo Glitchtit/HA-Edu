@@ -3,7 +3,7 @@ import json
 import logging
 import secrets
 import re
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 import docker
 from datetime import datetime
 import requests
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 # Disable Flask's default static folder to avoid conflicts with Home Assistant's /static/ paths
 app = Flask(__name__, static_folder=None)
+# Set a secret key for session management
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 client = docker.from_env()
 
 # Configuration
@@ -587,32 +589,39 @@ def proxy_fallback(path=''):
     """Fallback proxy for requests that didn't include /proxy/{port}/ prefix
     
     This happens when Home Assistant's JavaScript makes API calls using relative URLs
-    or window.location.origin. We detect which instance by checking the Referer header.
+    or window.location.origin. We detect which instance by checking the Referer header,
+    session cookies, or falling back to single-instance mode.
     """
-    # Get the referer to determine which instance this request is for
-    referer = request.headers.get('Referer', '')
+    port = None
     
-    # Also check Origin header as fallback
+    # Strategy 1: Try to extract port from referer URL (e.g., http://domain/proxy/8123/)
+    referer = request.headers.get('Referer', '')
     if not referer:
         referer = request.headers.get('Origin', '')
     
-    # Extract port from referer URL (e.g., http://domain/proxy/8123/)
-    port_match = re.search(r'/proxy/(\d+)', referer)
+    if referer:
+        port_match = re.search(r'/proxy/(\d+)', referer)
+        if port_match:
+            port = int(port_match.group(1))
+            logger.debug(f'Extracted port {port} from referer: {referer}')
     
-    if not port_match:
-        # Log all headers for debugging
-        logger.warning(f'API request to {request.path} without valid referer. Headers: Referer={referer}, Origin={request.headers.get("Origin", "")}, Host={request.headers.get("Host", "")}')
-        
-        # Try to get port from session or cookies if available
-        # For now, if we only have one instance, use that
+    # Strategy 2: Try to get port from session cookie (set when accessing /proxy/{port}/)
+    if port is None and 'proxy_port' in session:
+        port = session['proxy_port']
+        logger.debug(f'Using port {port} from session cookie')
+    
+    # Strategy 3: If only one instance exists, use its port
+    if port is None:
         instances = load_instances()
         if len(instances) == 1:
             port = list(instances.values())[0]['port']
-            logger.info(f'Using single instance port {port} for fallback request')
+            logger.info(f'Using single instance port {port} for fallback request to {request.path}')
         else:
+            # Multiple instances and can't determine which one - log detailed info
+            logger.warning(f'API request to {request.path} without valid referer or session. '
+                         f'Headers: Referer={referer}, Origin={request.headers.get("Origin", "")}, '
+                         f'Host={request.headers.get("Host", "")}. {len(instances)} instances available.')
             return jsonify({'error': 'Unable to determine target instance. Please access through /proxy/{port}/ URL.'}), 400
-    else:
-        port = int(port_match.group(1))
     
     # Verify the port belongs to a valid instance
     instances = load_instances()
@@ -623,13 +632,14 @@ def proxy_fallback(path=''):
             break
     
     if not valid_port:
+        logger.warning(f'Invalid port {port} requested for {request.path}')
         return jsonify({'error': 'Invalid instance port'}), 404
     
     # Build the full path from the request
     full_path = request.path.lstrip('/')
     
     # Forward to the proxy function
-    logger.info(f'Fallback proxy: Redirecting /{full_path} to port {port}')
+    logger.debug(f'Fallback proxy: Redirecting /{full_path} to port {port}')
     return proxy(port, full_path)
 
 @app.route('/proxy/<int:port>/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
@@ -641,6 +651,9 @@ def proxy(port, path):
     exposing individual instance ports. All traffic goes through the 
     portal's single endpoint (port 5000).
     """
+    # Store the port in session for fallback requests
+    session['proxy_port'] = port
+    
     # Verify that the port belongs to a valid instance
     instances = load_instances()
     valid_port = False
@@ -758,10 +771,63 @@ def proxy(port, path):
             except:
                 pass
         
-        # Don't rewrite content - let the fallback routes handle everything
-        # This is cleaner and avoids issues with complex JavaScript rewriting
+        # For HTML responses, inject a <base> tag to help browsers resolve relative URLs
+        # This is crucial for making the proxy work correctly with Home Assistant
+        should_rewrite_html = (
+            content_type and 
+            'text/html' in content_type and 
+            resp.status_code == 200 and
+            request.method == 'GET'
+        )
         
-        # Stream the response back to the client
+        if should_rewrite_html:
+            # Read the full response for HTML rewriting
+            try:
+                html_content = resp.content
+                html_str = html_content.decode('utf-8', errors='replace')
+                
+                # Inject a <base> tag right after <head> to set the base URL for relative paths
+                # This tells the browser that all relative URLs should be resolved relative to /proxy/{port}/
+                base_tag = f'<base href="/proxy/{port}/">'
+                
+                # Try to inject after <head> tag (case-insensitive)
+                if '<head>' in html_str.lower():
+                    html_str = re.sub(
+                        r'(<head[^>]*>)',
+                        r'\1' + base_tag,
+                        html_str,
+                        count=1,
+                        flags=re.IGNORECASE
+                    )
+                    logger.debug(f'Injected base tag into HTML response for port {port}')
+                else:
+                    # If no <head> tag, try to inject at the start of <html>
+                    html_str = re.sub(
+                        r'(<html[^>]*>)',
+                        r'\1' + base_tag,
+                        html_str,
+                        count=1,
+                        flags=re.IGNORECASE
+                    )
+                    logger.debug(f'Injected base tag at start of HTML for port {port}')
+                
+                # Convert back to bytes
+                html_content = html_str.encode('utf-8')
+                
+                # Update content-length header
+                response_headers = [(k, v) for k, v in response_headers if k.lower() != 'content-length']
+                response_headers.append(('Content-Length', str(len(html_content))))
+                
+                return Response(
+                    html_content,
+                    status=resp.status_code,
+                    headers=response_headers
+                )
+            except Exception as e:
+                logger.warning(f'Failed to rewrite HTML content: {e}. Falling back to streaming.')
+                # Fall through to streaming if rewriting fails
+        
+        # For non-HTML or if rewriting failed, stream the response back to the client
         def generate():
             for chunk in resp.iter_content(chunk_size=8192):
                 if chunk:
