@@ -12,7 +12,8 @@ import requests
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Disable Flask's default static folder to avoid conflicts with Home Assistant's /static/ paths
+app = Flask(__name__, static_folder=None)
 client = docker.from_env()
 
 # Configuration
@@ -578,6 +579,8 @@ def render_proxy_error(status_code, title, message, details=None, suggestions=No
 @app.route('/frontend_latest/<path:path>', methods=['GET'])
 @app.route('/static/<path:path>', methods=['GET'])
 @app.route('/local/<path:path>', methods=['GET'])
+@app.route('/hacsfiles/<path:path>', methods=['GET'])
+@app.route('/lovelace/<path:path>', methods=['GET'])
 @app.route('/service_worker.js', methods=['GET'])
 @app.route('/manifest.json', methods=['GET'])
 def proxy_fallback(path=''):
