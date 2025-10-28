@@ -136,6 +136,13 @@ def copy_master_config_to_volume(volume_name):
         with open(MASTER_CONFIG_PATH, 'r') as f:
             master_config_content = f.read()
         
+        # Pull alpine image if not present
+        try:
+            client.images.get('alpine:latest')
+        except docker.errors.ImageNotFound:
+            logger.info('Pulling alpine:latest image...')
+            client.images.pull('alpine:latest')
+        
         # Create a temporary container with the volume mounted
         # Use alpine image - it's lightweight and has sh
         temp_container = client.containers.create(
