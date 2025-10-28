@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import secrets
 from flask import Flask, render_template, request, jsonify
 import docker
 from datetime import datetime
@@ -93,7 +94,7 @@ def create_instance():
                 'TZ': 'UTC'
             },
             volumes={
-                f'ha-edu-{container_name}': {'bind': '/config', 'mode': 'rw'}
+                container_name: {'bind': '/config', 'mode': 'rw'}
             },
             restart_policy={'Name': 'unless-stopped'}
         )
@@ -187,7 +188,8 @@ def reset_instance(server_name):
     data = request.json
     admin_password = data.get('admin_password', '')
     
-    if admin_password != ADMIN_PASSWORD:
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
         return jsonify({'error': 'Invalid admin password'}), 401
     
     instances = load_instances()
@@ -199,7 +201,6 @@ def reset_instance(server_name):
         instance = instances[server_name]
         container_name = instance['container_name']
         port = instance['port']
-        password = instance['password']
         
         # Stop and remove existing container
         try:
@@ -210,7 +211,7 @@ def reset_instance(server_name):
             pass  # Container already removed
         
         # Remove the volume to completely reset the instance
-        volume_name = f'ha-edu-{container_name}'
+        volume_name = container_name
         try:
             volume = client.volumes.get(volume_name)
             volume.remove()
