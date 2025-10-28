@@ -398,8 +398,8 @@ def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
 
-@app.route('/proxy/<int:port>/', defaults={'path': ''})
-@app.route('/proxy/<int:port>/<path:path>')
+@app.route('/proxy/<int:port>/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
+@app.route('/proxy/<int:port>/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
 def proxy(port, path):
     """Proxy endpoint to forward requests to Home Assistant instances
     
