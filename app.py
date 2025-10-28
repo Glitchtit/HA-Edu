@@ -692,7 +692,7 @@ def proxy(port, path):
     # Home Assistant's frontend can then handle the websocket failure gracefully (e.g., via polling).
     # According to RFC 6455 Section 4.2.1, a valid websocket upgrade requires both headers
     # The Connection header can contain multiple comma-separated values
-    connection_tokens = [token.strip().lower() for token in request.headers.get('Connection', '').split(',')]
+    connection_tokens = [token.strip().lower() for token in request.headers.get('Connection', '').split(',') if token.strip()]
     is_websocket_upgrade = (request.headers.get('Upgrade', '').lower() == 'websocket' and
                            'upgrade' in connection_tokens)
     if is_websocket_upgrade:
