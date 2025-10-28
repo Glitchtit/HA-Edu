@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import secrets
+import re
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 import docker
 from datetime import datetime
@@ -626,7 +627,6 @@ def proxy(port, path):
     try:
         # Forward the request to the HA instance
         # Copy headers but modify Host and other proxy-specific headers
-        # Forward the request to the HA instance
         headers = {}
         for key, value in request.headers.items():
             # Skip hop-by-hop headers and encoding headers that can cause issues
@@ -637,6 +637,8 @@ def proxy(port, path):
         headers['X-Forwarded-For'] = request.remote_addr
         headers['X-Forwarded-Proto'] = request.scheme
         headers['X-Forwarded-Host'] = request.host
+        headers['X-Forwarded-Prefix'] = f'/proxy/{port}'
+        headers['X-Ingress-Path'] = f'/proxy/{port}'
         
         # Make the request to the backend
         if request.method == 'GET':
@@ -671,14 +673,54 @@ def proxy(port, path):
         
         # Build response headers
         response_headers = []
+        content_type = None
         for key, value in resp.headers.items():
             # Skip hop-by-hop headers and encoding headers
             if key.lower() not in ['connection', 'keep-alive', 'proxy-authenticate', 
                                 'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 
                                 'upgrade', 'content-encoding', 'content-length']:
+                if key.lower() == 'content-type':
+                    content_type = value.lower()
                 response_headers.append((key, value))
         
-        # Stream the response back to the client
+        # Check if we need to rewrite content (HTML or JavaScript)
+        should_rewrite = content_type and ('text/html' in content_type or 
+                                          'application/javascript' in content_type or
+                                          'text/javascript' in content_type)
+        
+        if should_rewrite:
+            # Read entire response and rewrite URLs
+            content = resp.content
+            try:
+                # Decode content
+                text_content = content.decode('utf-8')
+                
+                # Rewrite absolute paths to include proxy prefix
+                # This handles URLs like /frontend_latest/..., /static/..., etc.
+                proxy_prefix = f'/proxy/{port}'
+                
+                # Replace common patterns in HTML and JavaScript
+                # Pattern 1: href="/..." and src="/..."
+                text_content = re.sub(r'(href|src)="(/[^"]*)"', 
+                                    rf'\1="{proxy_prefix}\2"', text_content)
+                # Pattern 2: action="/..."
+                text_content = re.sub(r'action="(/[^"]*)"', 
+                                    rf'action="{proxy_prefix}\1"', text_content)
+                # Pattern 3: JavaScript fetch('/...') or similar
+                text_content = re.sub(r'(["\'])(/(?:api|frontend|static|local|auth|service_worker)[^"\']*)\1', 
+                                    rf'\1{proxy_prefix}\2\1', text_content)
+                
+                # Update content-length header
+                response_headers = [(k, v) for k, v in response_headers if k.lower() != 'content-length']
+                response_headers.append(('Content-Length', str(len(text_content.encode('utf-8')))))
+                
+                return Response(text_content, status=resp.status_code, headers=response_headers)
+            except Exception as e:
+                logger.warning(f'Failed to rewrite response content: {str(e)}')
+                # Fall back to streaming original content
+                pass
+        
+        # Stream the response back to the client (for non-rewritable content)
         def generate():
             for chunk in resp.iter_content(chunk_size=8192):
                 if chunk:
