@@ -513,13 +513,16 @@ def proxy(port, path):
     try:
         # Forward the request to the HA instance
         # Copy headers but modify Host and other proxy-specific headers
+        # Forward the request to the HA instance
         headers = {}
         for key, value in request.headers.items():
-            # Skip hop-by-hop headers
-            if key.lower() not in ['host', 'connection', 'keep-alive', 'proxy-authenticate', 
-                                   'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 
-                                   'upgrade']:
+            if key.lower() not in ['host', 'connection', 'keep-alive']:
                 headers[key] = value
+
+        # Add proxy headers that HA needs
+        headers['X-Forwarded-For'] = request.remote_addr
+        headers['X-Forwarded-Proto'] = request.scheme
+        headers['X-Forwarded-Host'] = request.host
         
         # Make the request to the backend
         if request.method == 'GET':
