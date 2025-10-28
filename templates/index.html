@@ -149,6 +149,25 @@
             background: #e53e3e;
         }
         
+        .btn-reset {
+            background: #ed8936;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn-reset:hover {
+            background: #dd6b20;
+        }
+        
+        .btn-reset:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
         .status-badge {
             display: inline-block;
             padding: 4px 8px;
@@ -301,6 +320,7 @@
                     </div>
                     <div class="instance-actions">
                         <a href="http://{{ request.host.split(':')[0] }}:{{ instance.port }}" target="_blank" class="btn-access">Access</a>
+                        <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}" style="display:none;">Reset</button>
                         <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Delete</button>
                     </div>
                 </div>
@@ -337,7 +357,47 @@
         </div>
     </div>
     
+    <!-- Reset Instance Modal -->
+    <div id="resetModal" class="modal">
+        <div class="modal-content">
+            <h2>Reset Instance</h2>
+            <p>Enter admin password to reset <strong id="resetServerName"></strong> to default HA image.</p>
+            <p style="color: #e53e3e; margin: 10px 0;"><strong>Warning:</strong> This will delete all data and configurations for this instance!</p>
+            <form id="resetInstanceForm">
+                <div class="form-group">
+                    <label for="adminPassword">Admin Password:</label>
+                    <input type="password" id="adminPassword" name="adminPassword" required 
+                           placeholder="Enter admin password">
+                </div>
+                <div id="resetModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeResetModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="resetSubmitBtn">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
+        let currentResetServer = null;
+        
+        // Check if admin password is enabled on page load
+        async function checkAdminEnabled() {
+            try {
+                const response = await fetch('/api/admin/check');
+                const data = await response.json();
+                
+                if (data.admin_enabled) {
+                    // Show all reset buttons
+                    document.querySelectorAll('.btn-reset').forEach(btn => {
+                        btn.style.display = 'inline-block';
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to check admin status:', error);
+            }
+        }
+        
         function openModal() {
             const instanceCount = parseInt(document.getElementById('instanceCount').textContent);
             const maxInstances = {{ max_instances }};
@@ -356,11 +416,27 @@
             document.getElementById('addModal').style.display = 'none';
         }
         
+        function openResetModal(serverName) {
+            currentResetServer = serverName;
+            document.getElementById('resetServerName').textContent = serverName;
+            document.getElementById('resetModal').style.display = 'block';
+            document.getElementById('resetModalMessage').innerHTML = '';
+            document.getElementById('resetInstanceForm').reset();
+        }
+        
+        function closeResetModal() {
+            document.getElementById('resetModal').style.display = 'none';
+            currentResetServer = null;
+        }
+        
         // Close modal when clicking outside
         window.onclick = function(event) {
-            const modal = document.getElementById('addModal');
-            if (event.target === modal) {
+            const addModal = document.getElementById('addModal');
+            const resetModal = document.getElementById('resetModal');
+            if (event.target === addModal) {
                 closeModal();
+            } else if (event.target === resetModal) {
+                closeResetModal();
             }
         }
         
@@ -408,6 +484,52 @@
             }
         });
         
+        document.getElementById('resetInstanceForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('resetSubmitBtn');
+            const messageDiv = document.getElementById('resetModalMessage');
+            
+            const adminPassword = document.getElementById('adminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Resetting...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentResetServer)}/reset`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Instance reset successfully! Reloading...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Reset';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Failed to reset instance: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Reset';
+            }
+        });
+        
+        async function resetInstance(serverName) {
+            openResetModal(serverName);
+        }
+        
         async function deleteInstance(serverName) {
             if (!confirm(`Are you sure you want to delete the instance "${serverName}"?`)) {
                 return;
@@ -440,7 +562,9 @@
             addBtn.disabled = instanceCount >= maxInstances;
         }
         
+        // Initialize page
         updateInstanceCount();
+        checkAdminEnabled();
     </script>
 </body>
 </html>
