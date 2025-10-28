@@ -5,9 +5,8 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 
 ## Features
 
-- 🚀 **Easy Instance Creation**: Create new Home Assistant instances with a simple web interface
-- 🔐 **Password Protected**: Each instance can have its own password
-- 🔑 **Admin Password**: Optional admin password for managing all instances
+- 🚀 **Easy Instance Creation**: Create new Home Assistant instances with a simple web interface - no password required
+- 🔑 **Admin Password Protected**: Admin password required for deleting and resetting instances
 - ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
 - 📊 **Instance Management**: View and manage unlimited instances
 - 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
@@ -103,16 +102,18 @@ docker run -d \
 
 1. Click the "**+ Add New Instance**" button
 2. Enter a **Server Name** (e.g., "Student-Lab-01")
-3. Enter a **Password** for the instance
-4. Click "**Create**"
-5. Wait for the instance to be created (may take 1-2 minutes)
-6. Click "**Access**" to open the Home Assistant instance
+3. Click "**Create**"
+4. Wait for the instance to be created (may take 1-2 minutes)
+5. Click "**Access**" to open the Home Assistant instance
 
-### Deleting an Instance
+### Deleting an Instance (Admin Only)
+
+Deleting an instance requires the admin password:
 
 1. Click the "**Delete**" button on the instance card
-2. Confirm the deletion
-3. The instance and its data will be removed
+2. Enter the **Admin Password**
+3. Confirm the deletion
+4. The instance and its data will be removed
 
 ### Resetting an Instance (Admin Only)
 
@@ -133,7 +134,7 @@ Environment variables can be configured to customize the portal:
 | `BASE_PORT` | `8123` | Starting port number for HA instances (dynamically assigned) |
 | `DATA_FILE` | `/data/instances.json` | Path to store instance data |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant Docker image to use |
-| `ADMIN_PASSWORD` | (empty) | Admin password for reset functionality. If not set, reset buttons are hidden |
+| `ADMIN_PASSWORD` | (empty) | **Required** admin password for delete and reset operations. If not set, delete and reset operations will fail |
 
 ## Architecture
 
@@ -187,9 +188,8 @@ When an instance is deleted, its port becomes available for reuse by new instanc
 
 - The portal requires access to the Docker socket (`/var/run/docker.sock`)
 - Consider running behind a reverse proxy with authentication (e.g., Cloudflare tunnel)
-- Password storage is simplified for educational use - enhance for production
-- Admin password provides elevated access - store securely (e.g., in Unraid environment variables)
-- Admin password enables reset of any instance, even after student passwords change
+- **Admin password is required** for delete and reset operations - store securely (e.g., in Unraid environment variables)
+- Admin password provides elevated access for managing all instances
 - Limit network access to trusted networks only
 - **Network Isolation**: Instances are isolated from host LAN but have internet access
 - **Cloudflare Tunnel**: Recommended for secure external access with authentication
