@@ -1,8 +1,13 @@
 import os
 import json
+import logging
 from flask import Flask, render_template, request, jsonify
 import docker
 from datetime import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 client = docker.from_env()
@@ -113,7 +118,8 @@ def create_instance():
         }), 201
         
     except Exception as e:
-        return jsonify({'error': f'Failed to create instance: {str(e)}'}), 500
+        logger.error(f'Failed to create instance: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to create instance. Please try again or contact support.'}), 500
 
 @app.route('/api/instances/<server_name>', methods=['DELETE'])
 def delete_instance(server_name):
@@ -141,7 +147,8 @@ def delete_instance(server_name):
         return jsonify({'message': 'Instance deleted successfully'}), 200
         
     except Exception as e:
-        return jsonify({'error': f'Failed to delete instance: {str(e)}'}), 500
+        logger.error(f'Failed to delete instance: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to delete instance. Please try again or contact support.'}), 500
 
 @app.route('/api/instances/<server_name>/status', methods=['GET'])
 def get_instance_status(server_name):
