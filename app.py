@@ -551,7 +551,7 @@ def proxy(port, path):
         )
         
     except requests.exceptions.Timeout:
-        logger.error(f'Timeout while proxying to port {port}')
+        logger.warning(f'Timeout while proxying to port {port}')
         return render_proxy_error(
             504,
             'Request Timeout',
@@ -565,7 +565,7 @@ def proxy(port, path):
             ]
         )
     except requests.exceptions.ConnectionError:
-        logger.error(f'Connection error while proxying to port {port}')
+        logger.warning(f'Connection error while proxying to port {port} (instance may still be starting up)')
         return render_proxy_error(
             502,
             'Cannot Connect to Instance',
