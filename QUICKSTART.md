@@ -32,16 +32,16 @@ docker-compose up -d
 
 **Port Mappings:**
 - Container Port: `5000` → Host Port: `5000` (WebUI)
-- Container Port: `8123-8137` → Host Port: `8123-8137` (HA instances)
+- Note: HA instance ports are assigned dynamically, no need to pre-allocate
 
 **Volume Mappings:**
 - Container Path: `/var/run/docker.sock` → Host Path: `/var/run/docker.sock`
 - Container Path: `/data` → Host Path: `/mnt/user/appdata/ha-edu/data`
 
 **Environment Variables:**
-- `BASE_PORT`: `8123`
-- `MAX_INSTANCES`: `15`
+- `BASE_PORT`: `8123` (starting port for dynamic assignment)
 - `HA_IMAGE`: `ghcr.io/home-assistant/home-assistant:stable`
+- `ADMIN_PASSWORD`: (optional) For admin reset functionality
 
 3. Click "Apply" and start the container
 4. Access via WebUI icon or `http://[Unraid-IP]:5000`
@@ -59,11 +59,9 @@ mkdir -p ./data
 docker run -d \
   --name ha-edu-portal \
   -p 5000:5000 \
-  -p 8123-8137:8123-8137 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v $(pwd)/data:/data \
   -e BASE_PORT=8123 \
-  -e MAX_INSTANCES=15 \
   -e HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable \
   ha-edu-portal
 ```
@@ -93,18 +91,28 @@ docker run -d \
 
 ## Port Management
 
-The portal automatically assigns ports as follows:
+The portal dynamically assigns ports starting from BASE_PORT (default: 8123):
 - **Portal UI**: Port 5000
 - **Instance 1**: Port 8123
 - **Instance 2**: Port 8124
-- **...**
-- **Instance 15**: Port 8137
+- **Instance 3**: Port 8125
+- **... and so on**
+
+When an instance is deleted, its port becomes available for reuse by new instances.
+
+## Network Isolation
+
+- **Internet Access**: ✅ Instances can access the internet
+- **LAN Access**: ❌ Instances are isolated from host LAN
+- **Device Discovery**: ❌ Cannot discover devices on main network
+- **External Access**: Via Cloudflare tunnel (e.g., edu.wredlund.fi)
 
 ## Firewall Configuration
 
 Ensure the following ports are accessible:
 - Port 5000 (Portal UI)
-- Ports 8123-8137 (Home Assistant instances)
+- Ports starting from 8123 onwards (dynamically assigned HA instances)
+- For Cloudflare tunnel: Only port 5000 needs to be accessible to cloudflared
 
 ## Troubleshooting
 
@@ -122,10 +130,7 @@ Ensure the following ports are accessible:
 - Wait 1-2 minutes for Home Assistant to fully start
 - Check if container is running: `docker ps | grep ha-edu`
 - Verify firewall allows the port
-
-### Reached maximum instances
-- Delete unused instances to free up slots
-- Or increase `MAX_INSTANCES` environment variable (requires restart)
+- Check instance port assignment in the portal UI
 
 ## Configuration Options
 
@@ -133,10 +138,10 @@ Ensure the following ports are accessible:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_PORT` | `8123` | Starting port for instances |
-| `MAX_INSTANCES` | `15` | Maximum concurrent instances |
+| `BASE_PORT` | `8123` | Starting port for dynamic instance assignment |
 | `DATA_FILE` | `/data/instances.json` | Instance metadata storage path |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant image |
+| `ADMIN_PASSWORD` | (empty) | Optional admin password for reset functionality |
 
 ### Changing Configuration
 
@@ -146,11 +151,12 @@ Ensure the following ports are accessible:
 
 ## Best Practices
 
-1. **Regular Cleanup**: Delete unused instances to free resources
+1. **Port Management**: Ports are dynamically assigned and reused when instances are deleted
 2. **Backups**: Backup `/data/instances.json` to preserve instance metadata
 3. **Monitoring**: Check Docker logs regularly for issues
 4. **Updates**: Keep the Home Assistant image updated
-5. **Security**: Run behind a reverse proxy with authentication for production use
+5. **Security**: Use Cloudflare tunnel with authentication for external access
+6. **Network Isolation**: Instances are isolated from LAN but have internet access
 
 ## Support
 
