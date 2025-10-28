@@ -1,0 +1,25 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # ... other steps like actions/checkout ...
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          # Uses the Secrets/Variables you created in the GitHub repo settings
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # Use DOCKERHUB_TOKEN for the PAT
+          
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ha-edu:latest
