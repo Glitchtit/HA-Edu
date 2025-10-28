@@ -405,6 +405,37 @@ def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
 
+def render_proxy_error(status_code, title, message, details=None, suggestions=None) -> tuple:
+    """Render a user-friendly HTML error page for proxy errors
+    
+    Args:
+        status_code: HTTP status code (404, 502, 504, etc.)
+        title: Error title
+        message: Error message
+        details: Optional detailed explanation
+        suggestions: Optional list of suggestions for the user
+    
+    Returns:
+        tuple: (rendered HTML string, status code)
+    """
+    # Choose appropriate icon based on status code
+    icons = {
+        404: '🔍',
+        400: '⚠️',
+        502: '🔌',
+        504: '⏱️',
+        500: '⚙️'
+    }
+    icon = icons.get(status_code, '❌')
+    
+    return render_template('proxy_error.html',
+                          icon=icon,
+                          status_code=status_code,
+                          title=title,
+                          message=message,
+                          details=details,
+                          suggestions=suggestions), status_code
+
 @app.route('/proxy/<int:port>/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
 @app.route('/proxy/<int:port>/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
 def proxy(port, path):
@@ -423,7 +454,17 @@ def proxy(port, path):
             break
     
     if not valid_port:
-        return jsonify({'error': 'Instance not found'}), 404
+        return render_proxy_error(
+            404,
+            'Instance Not Found',
+            f'No Home Assistant instance is running on port {port}.',
+            details='This instance may have been deleted or the port number is incorrect.',
+            suggestions=[
+                'Go back to the portal homepage to see available instances',
+                'Check that you are using the correct access link',
+                'If the instance was recently deleted, this is expected'
+            ]
+        )
     
     # Build the target URL
     target_url = f'http://localhost:{port}/{path}'
@@ -434,7 +475,17 @@ def proxy(port, path):
     
     # Check if this is a WebSocket upgrade request
     if request.headers.get('Upgrade', '').lower() == 'websocket':
-        return jsonify({'error': 'WebSocket connections not supported through proxy. Please use direct port access.'}), 400
+        return render_proxy_error(
+            400,
+            'WebSocket Not Supported',
+            'WebSocket connections are not supported through the proxy.',
+            details='The proxy can only forward regular HTTP requests. WebSocket connections require direct access to the instance.',
+            suggestions=[
+                'Use the direct port access if WebSocket support is needed',
+                'Most Home Assistant features work without WebSocket',
+                'WebSocket is mainly used for real-time updates'
+            ]
+        )
     
     try:
         # Forward the request to the HA instance
@@ -466,7 +517,17 @@ def proxy(port, path):
         elif request.method == 'HEAD':
             resp = requests.head(target_url, headers=headers, timeout=30)
         else:
-            return jsonify({'error': f'Method {request.method} not supported'}), 405
+            return render_proxy_error(
+                405,
+                'Method Not Supported',
+                f'The HTTP method {request.method} is not supported by the proxy.',
+                details='Only GET, POST, PUT, DELETE, PATCH, OPTIONS, and HEAD methods are supported.',
+                suggestions=[
+                    'Check that your client is using a supported HTTP method',
+                    'Most Home Assistant operations use GET or POST',
+                    'If you need this method, please contact support'
+                ]
+            )
         
         # Build response headers
         response_headers = []
@@ -491,13 +552,46 @@ def proxy(port, path):
         
     except requests.exceptions.Timeout:
         logger.error(f'Timeout while proxying to port {port}')
-        return jsonify({'error': 'Request timeout'}), 504
+        return render_proxy_error(
+            504,
+            'Request Timeout',
+            'The request to the Home Assistant instance timed out.',
+            details=f'The instance on port {port} did not respond within 30 seconds.',
+            suggestions=[
+                'The instance might be under heavy load or processing a complex request',
+                'Try refreshing the page in a few moments',
+                'Check if the instance is responding by going back to the portal',
+                'If the problem persists, try accessing the instance directly'
+            ]
+        )
     except requests.exceptions.ConnectionError:
         logger.error(f'Connection error while proxying to port {port}')
-        return jsonify({'error': 'Cannot connect to instance. It may still be starting up.'}), 502
+        return render_proxy_error(
+            502,
+            'Cannot Connect to Instance',
+            'Unable to connect to the Home Assistant instance.',
+            details=f'The instance on port {port} may still be starting up or has stopped responding.',
+            suggestions=[
+                'Wait 1-2 minutes for the instance to fully start up',
+                'Refresh this page to try again',
+                'Go back to the portal to check the instance status',
+                'If you just created this instance, it needs time to initialize',
+                'For debugging, you can try direct port access if ports are exposed'
+            ]
+        )
     except Exception as e:
         logger.error(f'Error proxying request to port {port}: {str(e)}', exc_info=True)
-        return jsonify({'error': 'Proxy error'}), 500
+        return render_proxy_error(
+            500,
+            'Proxy Error',
+            'An unexpected error occurred while connecting to the instance.',
+            details=f'Technical details: {str(e)}',
+            suggestions=[
+                'Try refreshing the page',
+                'Go back to the portal homepage',
+                'If the problem persists, contact support'
+            ]
+        )
 
 if __name__ == '__main__':
     # Clean up orphaned containers on startup
