@@ -1022,13 +1022,15 @@ def proxy_websocket_connection(client_ws, backend_url, port):
             except:
                 pass
 
-@sock.route('/api/websocket')
-@sock.route('/proxy/<int:port>/api/websocket')
-def websocket_proxy(ws, port=None):
-    """WebSocket proxy endpoint for Home Assistant WebSocket API
+def _websocket_proxy_handler(ws, port=None):
+    """Internal WebSocket proxy handler shared by both routes
     
     This handler proxies WebSocket connections from clients to Home Assistant instances.
     It supports both direct paths (/api/websocket) and proxy paths (/proxy/{port}/api/websocket).
+    
+    Args:
+        ws: The WebSocket connection object
+        port: Optional port number (if not provided, will be determined from session/instance)
     """
     # If port is not in the URL, try to determine it from session or single instance
     if port is None:
@@ -1070,6 +1072,16 @@ def websocket_proxy(ws, port=None):
     
     # Proxy the WebSocket connection
     proxy_websocket_connection(ws, backend_url, port)
+
+@sock.route('/api/websocket')
+def websocket_proxy_direct(ws):
+    """WebSocket proxy endpoint for direct /api/websocket path"""
+    _websocket_proxy_handler(ws, port=None)
+
+@sock.route('/proxy/<int:port>/api/websocket')
+def websocket_proxy_with_port(ws, port):
+    """WebSocket proxy endpoint for /proxy/{port}/api/websocket path"""
+    _websocket_proxy_handler(ws, port=port)
 
 if __name__ == '__main__':
     # Clean up orphaned containers on startup

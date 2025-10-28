@@ -56,15 +56,28 @@ def test_websocket_route_exists():
     try:
         import app as app_module
         
-        # Check if websocket_proxy function exists
-        if not hasattr(app_module, 'websocket_proxy'):
-            print("✗ websocket_proxy function not found")
+        # Check if websocket handler functions exist
+        if not hasattr(app_module, 'websocket_proxy_direct'):
+            print("✗ websocket_proxy_direct function not found")
             return False
-        print("✓ websocket_proxy function exists")
+        print("✓ websocket_proxy_direct function exists")
         
-        # The function is decorated by @sock.route, so it's wrapped
-        # We just need to verify it exists
-        print("✓ websocket_proxy is registered (decorated by @sock.route)")
+        if not hasattr(app_module, 'websocket_proxy_with_port'):
+            print("✗ websocket_proxy_with_port function not found")
+            return False
+        print("✓ websocket_proxy_with_port function exists")
+        
+        # Check for the internal WebSocket proxy handler function
+        if not hasattr(app_module, '_websocket_proxy_handler'):
+            print("✗ _websocket_proxy_handler function not found")
+            return False
+        print("✓ _websocket_proxy_handler function exists")
+        
+        # Verify the internal handler is callable
+        if not callable(app_module._websocket_proxy_handler):
+            print("✗ _websocket_proxy_handler is not callable")
+            return False
+        print("✓ _websocket_proxy_handler is callable")
         
         # Check for the WebSocket proxy helper function
         if not hasattr(app_module, 'proxy_websocket_connection'):
