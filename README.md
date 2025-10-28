@@ -91,7 +91,7 @@ The portal includes a built-in proxy that allows all Home Assistant instances to
 - Query strings and URL paths are preserved
 - Response headers and status codes are passed through correctly
 - Validates that requested ports belong to actual instances
-- Note: WebSocket connections are not proxied and will show an error (use direct port access if WebSocket support is critical)
+- WebSocket upgrade requests are forwarded to the backend (the backend handles the websocket protocol)
 
 To set up Cloudflare tunnel:
 1. Install cloudflared on your Unraid server
