@@ -589,14 +589,27 @@ def proxy_fallback(path=''):
     # Get the referer to determine which instance this request is for
     referer = request.headers.get('Referer', '')
     
+    # Also check Origin header as fallback
+    if not referer:
+        referer = request.headers.get('Origin', '')
+    
     # Extract port from referer URL (e.g., http://domain/proxy/8123/)
-    port_match = re.search(r'/proxy/(\d+)/', referer)
+    port_match = re.search(r'/proxy/(\d+)', referer)
     
     if not port_match:
-        logger.warning(f'API request to /{request.path} without valid referer: {referer}')
-        return jsonify({'error': 'Unable to determine target instance'}), 400
-    
-    port = int(port_match.group(1))
+        # Log all headers for debugging
+        logger.warning(f'API request to {request.path} without valid referer. Headers: Referer={referer}, Origin={request.headers.get("Origin", "")}, Host={request.headers.get("Host", "")}')
+        
+        # Try to get port from session or cookies if available
+        # For now, if we only have one instance, use that
+        instances = load_instances()
+        if len(instances) == 1:
+            port = list(instances.values())[0]['port']
+            logger.info(f'Using single instance port {port} for fallback request')
+        else:
+            return jsonify({'error': 'Unable to determine target instance. Please access through /proxy/{port}/ URL.'}), 400
+    else:
+        port = int(port_match.group(1))
     
     # Verify the port belongs to a valid instance
     instances = load_instances()
@@ -729,73 +742,10 @@ def proxy(port, path):
                     content_type = value.lower()
                 response_headers.append((key, value))
         
-        # Check if we need to rewrite content (HTML or JavaScript)
-        should_rewrite = content_type and ('text/html' in content_type or 
-                                          'application/javascript' in content_type or
-                                          'text/javascript' in content_type)
+        # Don't rewrite content - let the fallback routes handle everything
+        # This is cleaner and avoids issues with complex JavaScript rewriting
         
-        if should_rewrite:
-            # Read entire response and rewrite URLs
-            content = resp.content
-            try:
-                # Decode content
-                text_content = content.decode('utf-8')
-                
-                # Rewrite absolute paths to include proxy prefix
-                # This handles URLs like /frontend_latest/..., /static/..., etc.
-                proxy_prefix = f'/proxy/{port}'
-                
-                logger.debug(f'Rewriting {content_type} content (size: {len(text_content)} bytes)')
-                
-                # Replace common patterns in HTML and JavaScript
-                # Pattern 1: HTML attributes - href="/..." and src="/..."
-                text_content = re.sub(r'(href|src)="(/[^"]*)"', 
-                                    rf'\1="{proxy_prefix}\2"', text_content)
-                
-                # Pattern 2: HTML attributes - action="/..."
-                text_content = re.sub(r'action="(/[^"]*)"', 
-                                    rf'action="{proxy_prefix}\1"', text_content)
-                
-                # Pattern 3: JavaScript string literals - "/"  or '/'
-                # Match any quoted string that starts with / followed by common HA paths
-                # This is more aggressive and catches fetch(), new URL(), etc.
-                text_content = re.sub(r'(["\'`])(/(?:api|frontend|static|local|auth|service_worker|hacsfiles|lovelace)[^"\'`]*)\1', 
-                                    rf'\1{proxy_prefix}\2\1', text_content)
-                
-                # Pattern 4: Special case for route definitions and path checks
-                # Match patterns like: path:"/" or pathname==="/api" 
-                text_content = re.sub(r'(path\s*:\s*|pathname\s*===?\s*)(["\'`])(/[^"\'`]*)\2', 
-                                    rf'\1\2{proxy_prefix}\3\2', text_content)
-                
-                # Pattern 5: URL constructor and similar - new URL("/api/...", ...)
-                text_content = re.sub(r'(new\s+URL\s*\(\s*)(["\'`])(/[^"\'`]*)\2', 
-                                    rf'\1\2{proxy_prefix}\3\2', text_content)
-                
-                # Pattern 6: Standalone absolute paths in JavaScript - e.g., return "/api/..."
-                # Be careful not to match things that look like divisions or comments
-                text_content = re.sub(r'(\s|=|\(|,|return\s+)(["\'`])(/(?:api|frontend|static|local|auth)[^"\'`]*)\2', 
-                                    rf'\1\2{proxy_prefix}\3\2', text_content)
-                
-                # Pattern 7: Inject base tag for HTML documents to help with relative URLs
-                if 'text/html' in content_type and '<head>' in text_content:
-                    base_tag = f'<base href="{proxy_prefix}/">'
-                    text_content = text_content.replace('<head>', f'<head>{base_tag}', 1)
-                
-                # Update content-length header
-                response_headers = [(k, v) for k, v in response_headers if k.lower() != 'content-length']
-                response_headers.append(('Content-Length', str(len(text_content.encode('utf-8')))))
-                
-                return Response(text_content, status=resp.status_code, headers=response_headers)
-            except UnicodeDecodeError:
-                logger.debug(f'Content is not UTF-8 text, streaming as binary')
-                # Fall back to streaming original content
-                pass
-            except Exception as e:
-                logger.warning(f'Failed to rewrite response content: {str(e)}', exc_info=True)
-                # Fall back to streaming original content
-                pass
-        
-        # Stream the response back to the client (for non-rewritable content)
+        # Stream the response back to the client
         def generate():
             for chunk in resp.iter_content(chunk_size=8192):
                 if chunk:
