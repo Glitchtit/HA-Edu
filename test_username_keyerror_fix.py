@@ -72,9 +72,10 @@ def test_username_field_handling():
     
     # Test the old broken code for comparison
     print("\nTesting OLD code (should fail with KeyError)...")
+    teacher_username = 'newteacher'
     try:
         # This is the old broken code - SHOULD raise KeyError
-        existing_users = [u for u in auth_data['data']['users'] if u['username'] == 'newteacher']
+        existing_users = [u for u in auth_data['data']['users'] if u['username'] == teacher_username]
         print(f"✗ Old code did not raise KeyError (unexpected)")
         return False
     except KeyError as e:
