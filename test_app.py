@@ -62,10 +62,8 @@ def test_functions():
         
         # Test port calculation
         app.BASE_PORT = 8123
-        app.MAX_INSTANCES = 15
         
         print(f"✓ BASE_PORT: {app.BASE_PORT}")
-        print(f"✓ MAX_INSTANCES: {app.MAX_INSTANCES}")
         
         # Test that functions exist
         functions = ['load_instances', 'save_instances', 'get_available_port']
@@ -75,6 +73,13 @@ def test_functions():
             else:
                 print(f"✗ Function missing: {func}")
                 return False
+        
+        # Test that MAX_INSTANCES is removed
+        if not hasattr(app, 'MAX_INSTANCES'):
+            print("✓ MAX_INSTANCES removed (no instance limit)")
+        else:
+            print("✗ MAX_INSTANCES still exists (should be removed)")
+            return False
         
         return True
     except Exception as e:
