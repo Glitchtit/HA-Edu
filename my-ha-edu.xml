@@ -23,7 +23,6 @@ Features:&#xD;
 Access the portal at http://[IP]:[PORT:5000]</Overview>
   <Category>Tools: Status:Stable</Category>
   <WebUI>http://[IP]:[PORT:5000]</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/Glitchtit/HA-Edu/main/ha-edu.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/home-assistant/brands/master/core_integrations/homeassistant/icon.png</Icon>
   <ExtraParams>--restart=unless-stopped</ExtraParams>
   <PostArgs/>
