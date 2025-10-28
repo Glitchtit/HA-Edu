@@ -5,6 +5,7 @@ Tests for the WebSocket proxy functionality
 
 import sys
 import os
+import traceback
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,7 +47,6 @@ def test_websocket_initialization():
         return True
     except Exception as e:
         print(f"✗ Error: {e}")
-        import traceback
         traceback.print_exc()
         return False
 
@@ -81,7 +81,6 @@ def test_websocket_route_exists():
         return True
     except Exception as e:
         print(f"✗ Error: {e}")
-        import traceback
         traceback.print_exc()
         return False
 
@@ -136,7 +135,6 @@ def test_websocket_url_patterns():
         
     except Exception as e:
         print(f"✗ Error: {e}")
-        import traceback
         traceback.print_exc()
         return False
 
@@ -178,7 +176,6 @@ def main():
             results.append(result)
         except Exception as e:
             print(f"✗ Test failed with exception: {e}")
-            import traceback
             traceback.print_exc()
             results.append(False)
     
