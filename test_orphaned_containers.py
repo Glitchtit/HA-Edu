@@ -59,14 +59,14 @@ def test_portal_container_not_orphaned():
                 app.cleanup_orphaned_containers()
                 
                 # Verify portal container was NOT stopped or removed
-                if not mock_portal_container.stop.called and not mock_portal_container.remove.called:
+                if mock_portal_container.stop.call_count == 0 and mock_portal_container.remove.call_count == 0:
                     print("✓ ha-edu-portal container was not stopped or removed")
                 else:
                     print("✗ ERROR: ha-edu-portal container was incorrectly stopped or removed")
                     return False
                 
                 # Verify orphaned container WAS stopped and removed
-                if mock_orphaned_container.stop.called and mock_orphaned_container.remove.called:
+                if mock_orphaned_container.stop.call_count > 0 and mock_orphaned_container.remove.call_count > 0:
                     print("✓ Truly orphaned container was stopped and removed")
                 else:
                     print("✗ ERROR: Orphaned container was not properly cleaned up")
@@ -133,7 +133,7 @@ def test_portal_container_different_names():
                 # Verify each container's cleanup status
                 all_correct = True
                 for mock_container, should_cleanup in mock_containers:
-                    was_cleaned = mock_container.stop.called and mock_container.remove.called
+                    was_cleaned = mock_container.stop.call_count > 0 and mock_container.remove.call_count > 0
                     
                     if should_cleanup and was_cleaned:
                         print(f"✓ {mock_container.name} was correctly cleaned up")
@@ -218,21 +218,21 @@ def test_tracked_containers_not_cleaned():
                 app.cleanup_orphaned_containers()
                 
                 # Verify portal was not cleaned
-                if not mock_portal.stop.called and not mock_portal.remove.called:
+                if mock_portal.stop.call_count == 0 and mock_portal.remove.call_count == 0:
                     print("✓ Portal container was not cleaned")
                 else:
                     print("✗ ERROR: Portal container was incorrectly cleaned")
                     return False
                 
                 # Verify tracked container was not cleaned
-                if not mock_tracked.stop.called and not mock_tracked.remove.called:
+                if mock_tracked.stop.call_count == 0 and mock_tracked.remove.call_count == 0:
                     print("✓ Tracked container was not cleaned")
                 else:
                     print("✗ ERROR: Tracked container was incorrectly cleaned")
                     return False
                 
                 # Verify orphaned container was cleaned
-                if mock_orphaned.stop.called and mock_orphaned.remove.called:
+                if mock_orphaned.stop.call_count > 0 and mock_orphaned.remove.call_count > 0:
                     print("✓ Orphaned container was cleaned")
                 else:
                     print("✗ ERROR: Orphaned container was not cleaned")
