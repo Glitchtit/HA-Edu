@@ -334,66 +334,134 @@ def create_teacher_account(volume_name, teacher_username, teacher_password):
 import bcrypt
 import json
 import uuid
-import os
 from datetime import datetime, timezone
 
-# Read existing auth file
+TEACHER_USERNAME = {teacher_username!r}
+TEACHER_PASSWORD = {teacher_password!r}
+
+now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+def build_entry_from_template(template, base):
+    '''Merge structure from template into base with safe defaults.'''
+    if not isinstance(template, dict):
+        return base
+
+    result = dict(base)
+    for key, value in template.items():
+        if key in base:
+            continue
+
+        if isinstance(value, list):
+            result[key] = []
+        elif isinstance(value, dict):
+            result[key] = dict()
+        else:
+            result[key] = None
+
+    return result
+
 with open('/config/.storage/auth', 'r') as f:
     auth_data = json.load(f)
 
-# Read existing auth_provider file
 with open('/config/.storage/auth_provider.homeassistant', 'r') as f:
     provider_data = json.load(f)
 
-# Generate new user ID and credential ID
-user_id = str(uuid.uuid4()).replace('-', '')
-credential_id = str(uuid.uuid4()).replace('-', '')
+auth_data.setdefault('data', dict())
+auth_users = auth_data['data'].setdefault('users', [])
+auth_credentials = auth_data['data'].setdefault('credentials', [])
+provider_root = provider_data.setdefault('data', dict())
+provider_users_list = provider_root.setdefault('users', [])
 
-# Check if teacher username already exists
-existing_users = [u for u in auth_data['data']['users'] if u.get('username') == '{teacher_username}']
+# Ensure teacher user does not already exist
+existing_users = [
+    u for u in auth_users
+    if u.get('username') == TEACHER_USERNAME
+]
 if existing_users:
     print('exists')
     exit(0)
 
-# Hash the password
-password_hash = bcrypt.hashpw('{teacher_password}'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+user_id = uuid.uuid4().hex
+credential_id = uuid.uuid4().hex
+provider_user_id = uuid.uuid4().hex
 
-# Create new user entry
-new_user = {{
-    'id': user_id,
-    'group_ids': ['system-admin'],
-    'is_owner': False,
-    'is_active': True,
-    'name': '{teacher_username}',
-    'system_generated': False,
-    'local_only': False,
-    'username': '{teacher_username}',
-    'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-}}
+password_hash = bcrypt.hashpw(
+    TEACHER_PASSWORD.encode('utf-8'),
+    bcrypt.gensalt(rounds=12)
+).decode('utf-8')
 
-# Create new credential entry
-new_credential = {{
-    'id': credential_id,
-    'user_id': user_id,
-    'auth_provider_type': 'homeassistant',
-    'auth_provider_id': None,
-    'data': {{'username': '{teacher_username}'}},
-    'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-}}
+user_template = auth_users[0] if auth_users else dict()
+credential_template = auth_credentials[0] if auth_credentials else dict()
+provider_template = provider_users_list[0] if provider_users_list else dict()
 
-# Create new provider data entry
-new_provider_entry = {{
-    'username': '{teacher_username}',
-    'password': password_hash,
-    'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-}}
+new_user = build_entry_from_template(
+    user_template,
+    {{
+        'id': user_id,
+        'group_ids': ['system-admin'],
+        'is_owner': False,
+        'is_active': True,
+        'name': TEACHER_USERNAME,
+        'system_generated': False,
+        'local_only': False,
+        'username': TEACHER_USERNAME,
+        'created_at': now
+    }}
+)
 
-# Add to data structures
-auth_data['data']['users'].append(new_user)
-auth_data['data']['credentials'].append(new_credential)
-provider_data['data']['users'].append(new_provider_entry)
+# Ensure list fields don't share references
+if 'group_ids' in new_user:
+    new_user['group_ids'] = list(new_user.get('group_ids', ['system-admin']))
+    if not new_user['group_ids']:
+        new_user['group_ids'] = ['system-admin']
+    if 'system-admin' not in new_user['group_ids']:
+        new_user['group_ids'].append('system-admin')
 
-# Write back to files
+if 'refresh_tokens' in new_user:
+    new_user['refresh_tokens'] = []
+
+if 'credentials' in new_user:
+    new_user['credentials'] = []
+
+new_credential = build_entry_from_template(
+    credential_template,
+    {{
+        'id': credential_id,
+        'user_id': user_id,
+        'auth_provider_type': 'homeassistant',
+        'auth_provider_id': None,
+        'data': {{'username': TEACHER_USERNAME}},
+        'is_active': True,
+        'created_at': now,
+        'last_used_at': None,
+        'last_used_version': None
+    }}
+)
+
+if isinstance(new_credential.get('data'), dict):
+    new_credential['data'] = {{'username': TEACHER_USERNAME}}
+
+new_provider_entry = build_entry_from_template(
+    provider_template,
+    {{
+        'id': provider_user_id,
+        'user_id': user_id,
+        'username': TEACHER_USERNAME,
+        'password': password_hash,
+        'name': TEACHER_USERNAME,
+        'is_active': True,
+        'system_generated': False,
+        'local_only': False,
+        'created_at': now,
+        'last_used_at': None,
+        'last_used_version': None
+    }}
+)
+
+auth_users.append(new_user)
+auth_credentials.append(new_credential)
+provider_users_list.append(new_provider_entry)
+
 with open('/config/.storage/auth', 'w') as f:
     json.dump(auth_data, f, indent=2)
 
