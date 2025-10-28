@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  ha-edu-portal:
+    build: .
+    container_name: ha-edu-portal
+    ports:
+      - "5000:5000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
+    environment:
+      - BASE_PORT=8123
+      - MAX_INSTANCES=15
+      - DATA_FILE=/data/instances.json
+      - HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
+    restart: unless-stopped
+    networks:
+      - ha-edu-network
+
+networks:
+  ha-edu-network:
+    driver: bridge
