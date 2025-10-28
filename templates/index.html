@@ -79,6 +79,21 @@
             cursor: not-allowed;
         }
         
+        .btn-unlock {
+            background: #f6ad55;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn-unlock:hover {
+            background: #ed8936;
+        }
+        
         .btn-delete-all {
             background: #e53e3e;
             color: white;
@@ -437,6 +452,7 @@
             <h2>Manage Instances</h2>
             <div class="controls-row">
                 <button id="addNewBtn" class="add-button" onclick="openModal()">+ Add New Instance</button>
+                <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Unlock Admin Features">🔑</button>
                 <button id="deleteAllBtn" class="btn-delete-all hidden" onclick="openDeleteAllModal()">Delete All</button>
                 <label class="toggle-container hidden" id="toggleContainer">
                     <span class="toggle-label">Instance Creation:</span>
@@ -501,6 +517,26 @@
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn-submit" id="submitBtn">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Unlock Admin Features Modal -->
+    <div id="unlockModal" class="modal">
+        <div class="modal-content">
+            <h2>🔑 Unlock Admin Features</h2>
+            <p>Enter the admin password to show admin controls.</p>
+            <form id="unlockAdminForm">
+                <div class="form-group">
+                    <label for="unlockAdminPassword">Admin Password:</label>
+                    <input type="password" id="unlockAdminPassword" name="unlockAdminPassword" required 
+                           placeholder="Enter admin password">
+                </div>
+                <div id="unlockModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeUnlockModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="unlockSubmitBtn">Unlock</button>
                 </div>
             </form>
         </div>
@@ -624,6 +660,7 @@
         let currentDeleteServer = null;
         let currentTeacherAccessServer = null;
         let pendingToggleState = null;
+        let adminUnlocked = false;
         
         // Check if admin password is enabled on page load
         async function checkAdminEnabled() {
@@ -632,17 +669,23 @@
                 const data = await response.json();
                 
                 if (data.admin_enabled) {
-                    // Show all reset buttons
-                    document.querySelectorAll('.btn-reset').forEach(btn => {
-                        btn.classList.remove('hidden');
-                    });
-                    // Show delete all button and toggle container
-                    document.getElementById('deleteAllBtn').classList.remove('hidden');
-                    document.getElementById('toggleContainer').classList.remove('hidden');
+                    // Show the unlock button instead of showing admin buttons directly
+                    document.getElementById('unlockAdminBtn').classList.remove('hidden');
                 }
             } catch (error) {
                 console.error('Failed to check admin status:', error);
             }
+        }
+        
+        // Show all admin buttons
+        function showAdminButtons() {
+            // Show all reset buttons
+            document.querySelectorAll('.btn-reset').forEach(btn => {
+                btn.classList.remove('hidden');
+            });
+            // Show delete all button and toggle container
+            document.getElementById('deleteAllBtn').classList.remove('hidden');
+            document.getElementById('toggleContainer').classList.remove('hidden');
         }
         
         // Check if teacher access feature is enabled
@@ -652,15 +695,21 @@
                 const data = await response.json();
                 
                 if (data.teacher_access_enabled) {
-                    // Show all teacher access buttons
-                    document.querySelectorAll('.btn-teacher-access').forEach(btn => {
-                        btn.classList.remove('hidden');
-                    });
-                    // Store teacher username for display
+                    // Store teacher info but don't show buttons yet (wait for unlock)
+                    window.teacherAccessEnabled = true;
                     window.teacherUsername = data.teacher_username;
                 }
             } catch (error) {
                 console.error('Failed to check teacher access status:', error);
+            }
+        }
+        
+        // Show teacher access buttons (called after unlock)
+        function showTeacherAccessButtons() {
+            if (window.teacherAccessEnabled) {
+                document.querySelectorAll('.btn-teacher-access').forEach(btn => {
+                    btn.classList.remove('hidden');
+                });
             }
         }
         
@@ -691,6 +740,16 @@
         
         function closeModal() {
             document.getElementById('addModal').style.display = 'none';
+        }
+        
+        function openUnlockModal() {
+            document.getElementById('unlockModal').style.display = 'block';
+            document.getElementById('unlockModalMessage').innerHTML = '';
+            document.getElementById('unlockAdminForm').reset();
+        }
+        
+        function closeUnlockModal() {
+            document.getElementById('unlockModal').style.display = 'none';
         }
         
         function openResetModal(serverName) {
@@ -778,6 +837,7 @@
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
+            const unlockModal = document.getElementById('unlockModal');
             const resetModal = document.getElementById('resetModal');
             const deleteModal = document.getElementById('deleteModal');
             const deleteAllModal = document.getElementById('deleteAllModal');
@@ -785,6 +845,8 @@
             const teacherAccessModal = document.getElementById('teacherAccessModal');
             if (event.target === addModal) {
                 closeModal();
+            } else if (event.target === unlockModal) {
+                closeUnlockModal();
             } else if (event.target === resetModal) {
                 closeResetModal();
             } else if (event.target === deleteModal) {
@@ -837,6 +899,53 @@
                 messageDiv.innerHTML = `<div class="error-message">Failed to create instance: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Create';
+            }
+        });
+        
+        document.getElementById('unlockAdminForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('unlockSubmitBtn');
+            const messageDiv = document.getElementById('unlockModalMessage');
+            
+            const adminPassword = document.getElementById('unlockAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Unlocking...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/admin/unlock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Admin features unlocked!</div>`;
+                    adminUnlocked = true;
+                    showAdminButtons();
+                    showTeacherAccessButtons();
+                    // Hide the unlock button after unlocking
+                    document.getElementById('unlockAdminBtn').classList.add('hidden');
+                    setTimeout(() => {
+                        closeUnlockModal();
+                    }, 1000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Unlock';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Failed to unlock: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Unlock';
             }
         });
         
