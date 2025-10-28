@@ -490,7 +490,7 @@ def proxy(port, path):
         )
     
     # Build the target URL
-    target_url = f'http://172.17.0.1:{port}/{path}'
+    target_url = f'http://192.168.50.111:{port}/{path}'
     
     # Get query string if present
     if request.query_string:
