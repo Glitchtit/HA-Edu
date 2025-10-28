@@ -71,6 +71,25 @@ def get_available_port():
     
     return port
 
+def update_instances_status(instances):
+    """Update status for all instances by checking actual container state
+    
+    Args:
+        instances: Dictionary of instances to update (modified in place)
+    """
+    for server_name, instance in instances.items():
+        try:
+            container = client.containers.get(instance['container_id'])
+            instance['status'] = container.status
+        except docker.errors.NotFound:
+            instance['status'] = 'removed'
+        except docker.errors.APIError as e:
+            logger.warning(f'Docker API error getting status for {server_name}: {str(e)}')
+            instance['status'] = 'unknown'
+        except Exception as e:
+            logger.warning(f'Unexpected error getting status for {server_name}: {str(e)}')
+            instance['status'] = 'unknown'
+
 def cleanup_orphaned_containers():
     """Clean up containers that are running but not tracked in instances.json
     
@@ -185,13 +204,17 @@ def copy_master_config_to_volume(volume_name):
 def index():
     """Main page with instance management UI"""
     instances = load_instances()
+    # Update status for each instance by checking actual container state
+    update_instances_status(instances)
     # No max_instances limit - show active count only
     return render_template('index.html', instances=instances)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
-    """API endpoint to get all instances"""
+    """API endpoint to get all instances with real-time status"""
     instances = load_instances()
+    # Update status for each instance by checking actual container state
+    update_instances_status(instances)
     return jsonify(instances)
 
 @app.route('/api/instances', methods=['POST'])
