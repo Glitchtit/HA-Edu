@@ -8,37 +8,42 @@ import os
 import json
 import tempfile
 from unittest.mock import patch, MagicMock
+from contextlib import contextmanager
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+@contextmanager
+def setup_test_instance(port=8123):
+    """Context manager to set up test instance data and clean up afterwards"""
+    # Create a temporary data file with test instance
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        test_data_file = f.name
+        json.dump({
+            'test-instance': {
+                'container_id': 'test123',
+                'container_name': 'ha-edu-test-instance',
+                'port': port,
+                'status': 'running',
+                'created_at': '2024-01-01T00:00:00'
+            }
+        }, f)
+    
+    import app
+    original_data_file = app.DATA_FILE
+    app.DATA_FILE = test_data_file
+    
+    try:
+        yield app.app.test_client()
+    finally:
+        app.DATA_FILE = original_data_file
+        os.unlink(test_data_file)
 
 def test_proxy_endpoint_integration():
     """Test proxy endpoint with Flask test client"""
     print("Testing proxy endpoint integration...")
     try:
-        import app
-        
-        # Create a test client
-        test_client = app.app.test_client()
-        
-        # Create a temporary data file with test instance
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            test_data_file = f.name
-            json.dump({
-                'test-instance': {
-                    'container_id': 'test123',
-                    'container_name': 'ha-edu-test-instance',
-                    'port': 8123,
-                    'status': 'running',
-                    'created_at': '2024-01-01T00:00:00'
-                }
-            }, f)
-        
-        # Override DATA_FILE temporarily
-        original_data_file = app.DATA_FILE
-        app.DATA_FILE = test_data_file
-        
-        try:
+        with setup_test_instance() as test_client:
             # Test 1: Valid proxy request with mock backend
             print("\nTest 1: Proxy to valid instance...")
             with patch('app.requests.get') as mock_get:
@@ -128,12 +133,6 @@ def test_proxy_endpoint_integration():
             print("\n✓ All integration tests passed")
             return True
             
-        finally:
-            # Restore original DATA_FILE
-            app.DATA_FILE = original_data_file
-            # Clean up temp file
-            os.unlink(test_data_file)
-            
     except Exception as e:
         print(f"✗ Integration test error: {e}")
         import traceback
@@ -144,24 +143,7 @@ def test_proxy_preserves_paths():
     """Test that proxy correctly forwards paths"""
     print("\nTesting proxy path forwarding...")
     try:
-        import app
-        
-        test_client = app.app.test_client()
-        
-        # Create a temporary data file with test instance
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            test_data_file = f.name
-            json.dump({
-                'test-instance': {
-                    'port': 8123,
-                    'status': 'running'
-                }
-            }, f)
-        
-        original_data_file = app.DATA_FILE
-        app.DATA_FILE = test_data_file
-        
-        try:
+        with setup_test_instance() as test_client:
             with patch('app.requests.get') as mock_get:
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -181,10 +163,6 @@ def test_proxy_preserves_paths():
                     print(f"✗ Path not preserved. Called URL: {called_url}")
                     return False
                     
-        finally:
-            app.DATA_FILE = original_data_file
-            os.unlink(test_data_file)
-            
     except Exception as e:
         print(f"✗ Path forwarding test error: {e}")
         import traceback
@@ -195,24 +173,7 @@ def test_proxy_preserves_query_strings():
     """Test that proxy correctly forwards query strings"""
     print("\nTesting proxy query string forwarding...")
     try:
-        import app
-        
-        test_client = app.app.test_client()
-        
-        # Create a temporary data file with test instance
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            test_data_file = f.name
-            json.dump({
-                'test-instance': {
-                    'port': 8123,
-                    'status': 'running'
-                }
-            }, f)
-        
-        original_data_file = app.DATA_FILE
-        app.DATA_FILE = test_data_file
-        
-        try:
+        with setup_test_instance() as test_client:
             with patch('app.requests.get') as mock_get:
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -232,10 +193,6 @@ def test_proxy_preserves_query_strings():
                     print(f"✗ Query string not preserved. Called URL: {called_url}")
                     return False
                     
-        finally:
-            app.DATA_FILE = original_data_file
-            os.unlink(test_data_file)
-            
     except Exception as e:
         print(f"✗ Query string test error: {e}")
         import traceback
