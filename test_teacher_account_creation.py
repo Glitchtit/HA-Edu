@@ -160,15 +160,33 @@ def sample_storage(tmp_path):
         }
     }
 
+    person = {
+        'data': {
+            'items': [
+                {
+                    'id': 'person_existing',
+                    'name': 'Student',
+                    'user_id': 'existinguser',
+                    'device_trackers': [],
+                    'picture': None,
+                    'type': 'user'
+                }
+            ]
+        }
+    }
+
     auth_file = storage_dir / 'auth'
     auth_provider_file = storage_dir / 'auth_provider.homeassistant'
+    person_file = storage_dir / 'person'
     auth_file.write_text(json.dumps(auth))
     auth_provider_file.write_text(json.dumps(auth_provider))
+    person_file.write_text(json.dumps(person))
 
     return types.SimpleNamespace(
         root=str(storage_root),
         auth_path=auth_file,
         provider_path=auth_provider_file,
+        person_path=person_file,
     )
 
 
@@ -189,6 +207,7 @@ def test_teacher_account_contains_required_fields(monkeypatch, sample_storage):
 
     updated_auth = json.loads(sample_storage.auth_path.read_text())
     updated_provider = json.loads(sample_storage.provider_path.read_text())
+    updated_person = json.loads(sample_storage.person_path.read_text())
 
     assert len(updated_auth['data']['users']) == 2
     new_user = updated_auth['data']['users'][-1]
@@ -209,3 +228,71 @@ def test_teacher_account_contains_required_fields(monkeypatch, sample_storage):
     assert provider_entry['is_active'] is True
     assert provider_entry['password'].startswith('$2')
     assert provider_entry.get('last_used_version') is None
+
+    assert len(updated_person['data']['items']) == 2
+    person_entry = next(
+        item for item in updated_person['data']['items']
+        if item['user_id'] == new_user['id']
+    )
+    assert person_entry['name'] == 'admin'
+    assert person_entry['device_trackers'] == []
+    assert person_entry.get('type') == 'user'
+
+
+def test_teacher_account_creates_person_file_when_missing(monkeypatch, sample_storage):
+    sample_storage.person_path.unlink()
+
+    fake_container = FakeContainer(sample_storage.root)
+    fake_client = FakeDockerClient(fake_container)
+
+    original_client = app.client
+    app.client = fake_client
+
+    try:
+        success, message = app.create_teacher_account('volume', 'admin', 'adminpass')
+    finally:
+        app.client = original_client
+
+    assert success, message
+    assert message == 'Teacher account created successfully'
+
+    updated_person = json.loads(sample_storage.person_path.read_text())
+    updated_auth = json.loads(sample_storage.auth_path.read_text())
+
+    assert len(updated_person['data']['items']) == 1
+    new_user = next(
+        item for item in updated_auth['data']['users']
+        if item['username'] == 'admin'
+    )
+    person_entry = updated_person['data']['items'][0]
+    assert person_entry['user_id'] == new_user['id']
+    assert person_entry['name'] == 'admin'
+
+
+def test_teacher_account_handles_password_hash_field(monkeypatch, sample_storage):
+    provider_data = json.loads(sample_storage.provider_path.read_text())
+    existing_entry = provider_data['data']['users'][0]
+    existing_entry['password_hash'] = existing_entry.pop('password')
+    existing_entry['password_algorithm'] = 'bcrypt'
+    existing_entry['password_cleartext'] = None
+    sample_storage.provider_path.write_text(json.dumps(provider_data))
+
+    fake_container = FakeContainer(sample_storage.root)
+    fake_client = FakeDockerClient(fake_container)
+
+    original_client = app.client
+    app.client = fake_client
+
+    try:
+        success, message = app.create_teacher_account('volume', 'admin', 'adminpass')
+    finally:
+        app.client = original_client
+
+    assert success, message
+
+    updated_provider = json.loads(sample_storage.provider_path.read_text())
+    provider_entry = updated_provider['data']['users'][-1]
+
+    assert provider_entry['password_hash'].startswith('$2')
+    assert provider_entry['password'].startswith('$2')
+    assert provider_entry['password_cleartext'] is None

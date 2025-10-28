@@ -334,6 +334,7 @@ def create_teacher_account(volume_name, teacher_username, teacher_password):
 import bcrypt
 import json
 import uuid
+import os
 from datetime import datetime, timezone
 
 TEACHER_USERNAME = {teacher_username!r}
@@ -366,11 +367,24 @@ with open('/config/.storage/auth', 'r') as f:
 with open('/config/.storage/auth_provider.homeassistant', 'r') as f:
     provider_data = json.load(f)
 
+person_path = '/config/.storage/person'
+if os.path.exists(person_path):
+    with open(person_path, 'r') as f:
+        person_data = json.load(f)
+else:
+    person_data = {{
+        'data': {{
+            'items': []
+        }}
+    }}
+
 auth_data.setdefault('data', dict())
 auth_users = auth_data['data'].setdefault('users', [])
 auth_credentials = auth_data['data'].setdefault('credentials', [])
 provider_root = provider_data.setdefault('data', dict())
 provider_users_list = provider_root.setdefault('users', [])
+person_root = person_data.setdefault('data', dict())
+person_items = person_root.setdefault('items', [])
 
 # Ensure teacher user does not already exist
 existing_users = [
@@ -393,6 +407,7 @@ password_hash = bcrypt.hashpw(
 user_template = auth_users[0] if auth_users else dict()
 credential_template = auth_credentials[0] if auth_credentials else dict()
 provider_template = provider_users_list[0] if provider_users_list else dict()
+person_template = person_items[0] if person_items else dict()
 
 new_user = build_entry_from_template(
     user_template,
@@ -441,32 +456,87 @@ new_credential = build_entry_from_template(
 if isinstance(new_credential.get('data'), dict):
     new_credential['data'] = {{'username': TEACHER_USERNAME}}
 
+provider_base = {{
+    'id': provider_user_id,
+    'user_id': user_id,
+    'username': TEACHER_USERNAME,
+    'password': password_hash,
+    'name': TEACHER_USERNAME,
+    'is_active': True,
+    'system_generated': False,
+    'local_only': False,
+    'created_at': now,
+    'last_used_at': None,
+    'last_used_version': None
+}}
+
+password_keys = [
+    'password',
+    'password_hash',
+    'hashed_password',
+]
+for key in password_keys:
+    if key in provider_template and key not in provider_base:
+        provider_base[key] = password_hash
+
+if 'password_cleartext' in provider_template and 'password_cleartext' not in provider_base:
+    provider_base['password_cleartext'] = None
+
+if 'password_algorithm' in provider_template and 'password_algorithm' not in provider_base:
+    provider_base['password_algorithm'] = provider_template.get('password_algorithm', 'bcrypt') or 'bcrypt'
+
+if 'password_alg' in provider_template and 'password_alg' not in provider_base:
+    provider_base['password_alg'] = provider_template.get('password_alg', 'bcrypt') or 'bcrypt'
+
+if 'password_version' in provider_template and 'password_version' not in provider_base:
+    provider_base['password_version'] = provider_template['password_version']
+
 new_provider_entry = build_entry_from_template(
     provider_template,
-    {{
-        'id': provider_user_id,
-        'user_id': user_id,
-        'username': TEACHER_USERNAME,
-        'password': password_hash,
-        'name': TEACHER_USERNAME,
-        'is_active': True,
-        'system_generated': False,
-        'local_only': False,
-        'created_at': now,
-        'last_used_at': None,
-        'last_used_version': None
-    }}
+    provider_base
 )
+
+for key in password_keys:
+    new_provider_entry[key] = provider_base.get(key, password_hash)
+
+if 'password_cleartext' in new_provider_entry:
+    new_provider_entry['password_cleartext'] = None
 
 auth_users.append(new_user)
 auth_credentials.append(new_credential)
 provider_users_list.append(new_provider_entry)
+
+new_person = build_entry_from_template(
+    person_template,
+    {{
+        'id': f'person_{{user_id}}',
+        'name': TEACHER_USERNAME,
+        'user_id': user_id,
+        'device_trackers': [],
+        'picture': None,
+        'type': 'user'
+    }}
+)
+
+if 'device_trackers' in new_person:
+    new_person['device_trackers'] = []
+
+if 'user_id' not in new_person or new_person['user_id'] is None:
+    new_person['user_id'] = user_id
+
+if 'name' not in new_person or not new_person['name']:
+    new_person['name'] = TEACHER_USERNAME
+
+person_items.append(new_person)
 
 with open('/config/.storage/auth', 'w') as f:
     json.dump(auth_data, f, indent=2)
 
 with open('/config/.storage/auth_provider.homeassistant', 'w') as f:
     json.dump(provider_data, f, indent=2)
+
+with open(person_path, 'w') as f:
+    json.dump(person_data, f, indent=2)
 
 print('success')
 """
