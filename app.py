@@ -456,22 +456,51 @@ new_credential = build_entry_from_template(
 if isinstance(new_credential.get('data'), dict):
     new_credential['data'] = {{'username': TEACHER_USERNAME}}
 
+provider_base = {{
+    'id': provider_user_id,
+    'user_id': user_id,
+    'username': TEACHER_USERNAME,
+    'password': password_hash,
+    'name': TEACHER_USERNAME,
+    'is_active': True,
+    'system_generated': False,
+    'local_only': False,
+    'created_at': now,
+    'last_used_at': None,
+    'last_used_version': None
+}}
+
+password_keys = [
+    'password',
+    'password_hash',
+    'hashed_password',
+]
+for key in password_keys:
+    if key in provider_template and key not in provider_base:
+        provider_base[key] = password_hash
+
+if 'password_cleartext' in provider_template and 'password_cleartext' not in provider_base:
+    provider_base['password_cleartext'] = None
+
+if 'password_algorithm' in provider_template and 'password_algorithm' not in provider_base:
+    provider_base['password_algorithm'] = provider_template.get('password_algorithm', 'bcrypt') or 'bcrypt'
+
+if 'password_alg' in provider_template and 'password_alg' not in provider_base:
+    provider_base['password_alg'] = provider_template.get('password_alg', 'bcrypt') or 'bcrypt'
+
+if 'password_version' in provider_template and 'password_version' not in provider_base:
+    provider_base['password_version'] = provider_template['password_version']
+
 new_provider_entry = build_entry_from_template(
     provider_template,
-    {{
-        'id': provider_user_id,
-        'user_id': user_id,
-        'username': TEACHER_USERNAME,
-        'password': password_hash,
-        'name': TEACHER_USERNAME,
-        'is_active': True,
-        'system_generated': False,
-        'local_only': False,
-        'created_at': now,
-        'last_used_at': None,
-        'last_used_version': None
-    }}
+    provider_base
 )
+
+for key in password_keys:
+    new_provider_entry[key] = provider_base.get(key, password_hash)
+
+if 'password_cleartext' in new_provider_entry:
+    new_provider_entry['password_cleartext'] = None
 
 auth_users.append(new_user)
 auth_credentials.append(new_credential)
