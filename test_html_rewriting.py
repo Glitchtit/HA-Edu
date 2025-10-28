@@ -93,9 +93,22 @@ def test_html_base_tag_injection():
                 
                 if head_pos >= 0 and base_pos > head_pos:
                     print("✓ Base tag positioned after <head> tag")
-                    return True
                 else:
                     print("✗ Base tag not properly positioned")
+                    return False
+                
+                # Test with mixed-case HTML
+                print("  Testing with mixed-case HTML...")
+                mixed_case_html = b'<HTML><HEAD id="test"><title>Test</title></HEAD><body>Test</body></HTML>'
+                mock_response.content = mixed_case_html
+                response = test_client.get('/proxy/8123/')
+                response_html = response.data.decode('utf-8')
+                
+                if '<base href="/proxy/8123/">' in response_html:
+                    print("  ✓ Base tag correctly injected into mixed-case HTML")
+                    return True
+                else:
+                    print("  ✗ Base tag not found in mixed-case HTML response")
                     return False
                     
     except Exception as e:

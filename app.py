@@ -805,9 +805,12 @@ def proxy(port, path):
                 # Use a simple string search and replace to avoid ReDoS
                 # Look for <head> or <head attributes> (case-insensitive)
                 modified = False
-                head_start = html_str.lower().find('<head')
+                html_lower = html_str.lower()
+                
+                # Try to find <head> tag (case-insensitive)
+                head_start = html_lower.find('<head')
                 if head_start >= 0:
-                    # Find the end of the opening <head> tag
+                    # Find the end of the opening <head> tag (use original string from the found position)
                     head_end = html_str.find('>', head_start)
                     if head_end >= 0:
                         # Insert base tag right after <head>
@@ -817,8 +820,9 @@ def proxy(port, path):
                 
                 if not modified:
                     # If no <head> tag found, try <html>
-                    html_start = html_str.lower().find('<html')
+                    html_start = html_lower.find('<html')
                     if html_start >= 0:
+                        # Find the end of the opening <html> tag (use original string from the found position)
                         html_end = html_str.find('>', html_start)
                         if html_end >= 0:
                             html_str = html_str[:html_end + 1] + base_tag + html_str[html_end + 1:]
