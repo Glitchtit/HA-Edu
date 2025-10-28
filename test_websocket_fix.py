@@ -68,7 +68,8 @@ def test_no_duplicate_decorators():
     print("\nTesting for duplicate decorator pattern...")
     try:
         # Read the app.py file and check for the problematic pattern
-        with open('/home/runner/work/HA-Edu/HA-Edu/app.py', 'r') as f:
+        app_py_path = os.path.join(os.path.dirname(__file__), 'app.py')
+        with open(app_py_path, 'r') as f:
             content = f.read()
         
         # Look for consecutive @sock.route decorators (the problematic pattern)
