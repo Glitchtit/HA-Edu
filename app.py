@@ -669,6 +669,21 @@ def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
 
+@app.route('/api/admin/unlock', methods=['POST'])
+def unlock_admin():
+    """API endpoint to verify admin password and unlock admin features"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    return jsonify({'message': 'Admin features unlocked', 'unlocked': True}), 200
+
 @app.route('/api/instances/delete-all', methods=['POST'])
 def delete_all_instances():
     """API endpoint to delete all instances (requires admin password)"""
