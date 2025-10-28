@@ -56,18 +56,20 @@ def copy_master_config_to_volume(volume_name):
     Creates a temporary container to copy the master configuration
     into the specified volume's /config directory.
     """
+    import tarfile
+    import io
+    
     try:
         # Read the master configuration file
         with open(MASTER_CONFIG_PATH, 'r') as f:
             master_config_content = f.read()
         
         # Create a temporary container with the volume mounted
-        # Use alpine image to write the configuration file
+        # Use alpine image - it's lightweight and has sh
         temp_container = client.containers.create(
             'alpine:latest',
-            command=['sh', '-c', 'cat > /config/configuration.yaml && cat > /config/automations.yaml && cat > /config/scripts.yaml && cat > /config/scenes.yaml'],
-            volumes={volume_name: {'bind': '/config', 'mode': 'rw'}},
-            stdin_open=True
+            command=['sh', '-c', 'sleep 30'],
+            volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
         )
         
         # Start the container
@@ -75,15 +77,16 @@ def copy_master_config_to_volume(volume_name):
         
         # Write the master config and empty files for automations, scripts, and scenes
         # These files are required by the master configuration
-        exec_result = temp_container.exec_run(
-            ['sh', '-c', f'echo \'{master_config_content}\' > /config/configuration.yaml && echo "[]" > /config/automations.yaml && echo "{{}}" > /config/scripts.yaml && echo "[]" > /config/scenes.yaml'],
-            stdin=False
+        # Use exec_run to write files
+        temp_container.exec_run(
+            ['sh', '-c', f'cat > /config/configuration.yaml << \'EOF\'\n{master_config_content}\nEOF']
         )
+        temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/automations.yaml'])
+        temp_container.exec_run(['sh', '-c', 'echo "{}" > /config/scripts.yaml'])
+        temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/scenes.yaml'])
         
-        # Wait for container to finish
-        temp_container.wait(timeout=10)
-        
-        # Clean up
+        # Stop and clean up
+        temp_container.stop()
         temp_container.remove()
         
         logger.info(f'Successfully copied master configuration to volume {volume_name}')
@@ -93,6 +96,7 @@ def copy_master_config_to_volume(volume_name):
         logger.error(f'Failed to copy master configuration to volume {volume_name}: {str(e)}', exc_info=True)
         # Clean up on error
         try:
+            temp_container.stop()
             temp_container.remove(force=True)
         except:
             pass
