@@ -424,7 +424,7 @@ print('success')
                 return True, 'Teacher account created successfully'
         
         logger.error(f'Failed to create teacher account: {output}')
-        return False, f'Failed to create teacher account: {output}'
+        return False, 'Failed to create teacher account'
         
     except Exception as e:
         logger.error(f'Failed to create teacher account in volume {volume_name}: {str(e)}', exc_info=True)
@@ -434,7 +434,7 @@ print('success')
             temp_container.remove(force=True)
         except:
             pass
-        return False, f'An error occurred: {str(e)}'
+        return False, 'An error occurred while creating teacher account'
 
 @app.route('/')
 def index():
