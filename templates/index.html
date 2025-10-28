@@ -95,10 +95,14 @@
         }
         
         .toggle-container {
-            display: flex;
+            display: none;
             align-items: center;
             gap: 10px;
             cursor: pointer;
+        }
+        
+        .toggle-container:not(.hidden) {
+            display: flex;
         }
         
         .toggle-label {
@@ -355,6 +359,10 @@
             font-size: 18px;
             padding: 40px;
         }
+        
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -368,8 +376,8 @@
             <h2>Manage Instances</h2>
             <div class="controls-row">
                 <button id="addNewBtn" class="add-button" onclick="openModal()">+ Add New Instance</button>
-                <button id="deleteAllBtn" class="btn-delete-all" onclick="openDeleteAllModal()" style="display:none;">Delete All</button>
-                <label class="toggle-container" style="display:none;" id="toggleContainer">
+                <button id="deleteAllBtn" class="btn-delete-all hidden" onclick="openDeleteAllModal()">Delete All</button>
+                <label class="toggle-container hidden" id="toggleContainer">
                     <span class="toggle-label">Instance Creation:</span>
                     <input type="checkbox" id="instanceCreationToggle" checked>
                     <span class="toggle-slider"></span>
@@ -396,7 +404,7 @@
                     </div>
                     <div class="instance-actions">
                         <a href="/proxy/{{ instance.port }}/" target="_blank" class="btn-access">Access</a>
-                        <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}" style="display:none;">Reset</button>
+                        <button class="btn-reset hidden" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Reset</button>
                         <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Delete</button>
                     </div>
                 </div>
@@ -525,11 +533,11 @@
                 if (data.admin_enabled) {
                     // Show all reset buttons
                     document.querySelectorAll('.btn-reset').forEach(btn => {
-                        btn.style.display = 'inline-block';
+                        btn.classList.remove('hidden');
                     });
                     // Show delete all button and toggle container
-                    document.getElementById('deleteAllBtn').style.display = 'inline-block';
-                    document.getElementById('toggleContainer').style.display = 'flex';
+                    document.getElementById('deleteAllBtn').classList.remove('hidden');
+                    document.getElementById('toggleContainer').classList.remove('hidden');
                 }
             } catch (error) {
                 console.error('Failed to check admin status:', error);
