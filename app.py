@@ -86,6 +86,10 @@ def cleanup_orphaned_containers():
         # Track if any instance data was modified to optimize file I/O
         has_instance_updates = False
         for container in all_containers:
+            # Skip the portal container itself
+            if container.name == 'ha-edu-portal':
+                continue
+            
             if container.id not in tracked_container_ids:
                 logger.info(f'Found orphaned container: {container.name} ({container.id[:12]})')
                 try:
