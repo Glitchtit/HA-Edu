@@ -200,8 +200,11 @@ def get_instances():
             instance['status'] = container.status
         except docker.errors.NotFound:
             instance['status'] = 'removed'
+        except docker.errors.APIError as e:
+            logger.warning(f'Docker API error getting status for {server_name}: {str(e)}')
+            instance['status'] = 'unknown'
         except Exception as e:
-            logger.warning(f'Failed to get status for {server_name}: {str(e)}')
+            logger.warning(f'Unexpected error getting status for {server_name}: {str(e)}')
             instance['status'] = 'unknown'
     
     return jsonify(instances)

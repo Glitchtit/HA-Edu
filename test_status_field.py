@@ -12,6 +12,15 @@ from unittest.mock import Mock, patch, MagicMock
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Import docker.errors for testing
+import docker.errors
+
+
+class UnknownContainerError(ValueError):
+    """Custom exception for test scenarios with unknown containers"""
+    pass
+
+
 def test_get_instances_updates_status():
     """Test that get_instances endpoint updates status from Docker"""
     print("Testing get_instances status update...")
@@ -68,9 +77,8 @@ def test_get_instances_updates_status():
                     elif container_id == 'stopped_container':
                         return mock_stopped
                     elif container_id == 'removed_container':
-                        import docker.errors
                         raise docker.errors.NotFound('Container not found')
-                    raise Exception('Unknown container')
+                    raise UnknownContainerError('Unknown container')
                 
                 mock_docker_client.containers.get.side_effect = get_container_side_effect
                 
