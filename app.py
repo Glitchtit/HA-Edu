@@ -350,7 +350,7 @@ user_id = str(uuid.uuid4()).replace('-', '')
 credential_id = str(uuid.uuid4()).replace('-', '')
 
 # Check if teacher username already exists
-existing_users = [u for u in auth_data['data']['users'] if u['username'] == '{teacher_username}']
+existing_users = [u for u in auth_data['data']['users'] if u.get('username') == '{teacher_username}']
 if existing_users:
     print('exists')
     exit(0)
