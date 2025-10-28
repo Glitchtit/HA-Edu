@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>ha-edu-portal</Name>
+  <Repository>ghcr.io/glitchtit/ha-edu:latest</Repository>
+  <Registry>https://ghcr.io/</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Glitchtit/HA-Edu/issues</Support>
+  <Project>https://github.com/Glitchtit/HA-Edu</Project>
+  <Overview>Educational Portal for Home Assistant - A web-based portal for managing multiple Home Assistant demo instances for educational purposes. Perfect for classroom environments where students need their own isolated Home Assistant instances.&#xD;
+&#xD;
+Features:&#xD;
+- Easy instance creation with web interface&#xD;
+- Password protected instances&#xD;
+- Admin password for managing all instances&#xD;
+- Instance reset functionality&#xD;
+- Automatic port assignment&#xD;
+- Network isolation with internet access&#xD;
+- Cloudflare tunnel ready&#xD;
+&#xD;
+Access the portal at http://[IP]:[PORT:5000]</Overview>
+  <Category>Tools: Status:Stable</Category>
+  <WebUI>http://[IP]:[PORT:5000]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Glitchtit/HA-Edu/main/ha-edu.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/home-assistant/brands/master/core_integrations/homeassistant/icon.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="5000" Default="5000" Mode="tcp" Description="Port for accessing the HA-Edu portal web interface" Type="Port" Display="always" Required="true" Mask="false">5000</Config>
+  <Config Name="Docker Socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="rw" Description="Docker socket for managing Home Assistant containers. Required for creating and managing instances." Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="Data Directory" Target="/data" Default="/mnt/user/appdata/ha-edu" Mode="rw" Description="Directory for storing instance data and configuration" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ha-edu</Config>
+  <Config Name="Base Port" Target="BASE_PORT" Default="8123" Mode="" Description="Starting port number for Home Assistant instances. Ports are assigned dynamically starting from this value." Type="Variable" Display="always" Required="false" Mask="false">8123</Config>
+  <Config Name="Data File Path" Target="DATA_FILE" Default="/data/instances.json" Mode="" Description="Path to store instance data within the container. Usually does not need to be changed." Type="Variable" Display="advanced" Required="false" Mask="false">/data/instances.json</Config>
+  <Config Name="Home Assistant Image" Target="HA_IMAGE" Default="ghcr.io/home-assistant/home-assistant:stable" Mode="" Description="Home Assistant Docker image to use for instances. Change to use a specific version or different image." Type="Variable" Display="advanced" Required="false" Mask="false">ghcr.io/home-assistant/home-assistant:stable</Config>
+  <Config Name="Admin Password" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Admin password for reset functionality. If not set, reset buttons will be hidden. Leave empty to disable admin features. If enabling, use a strong password (recommended: 12+ characters with mix of letters, numbers, and symbols)." Type="Variable" Display="always" Required="false" Mask="true"/>
+</Container>

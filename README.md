@@ -41,6 +41,18 @@ docker-compose up -d
 
 ### Deployment on Unraid
 
+#### Option 1: Using Template (Recommended)
+
+1. In Unraid's Docker tab, click "Add Container"
+2. In the "Template" dropdown, select "ha-edu-portal" or add the template URL:
+   ```
+   https://raw.githubusercontent.com/Glitchtit/HA-Edu/main/ha-edu.xml
+   ```
+3. Configure the settings as needed (all environment variables have sensible defaults)
+4. Click "Apply" to create the container
+
+#### Option 2: Manual Configuration
+
 1. Add a new container in Unraid's Docker tab
 2. Configure the following settings:
    - **Repository**: Build from this repository or use a pre-built image
