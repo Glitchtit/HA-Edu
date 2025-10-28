@@ -39,9 +39,29 @@ def get_available_port():
     
     Dynamically assigns ports starting from BASE_PORT.
     Reuses ports from deleted instances before assigning new ones.
+    Also checks for ports actually in use by running containers.
     """
     instances = load_instances()
     used_ports = set(inst['port'] for inst in instances.values())
+    
+    # Get ports used by running containers
+    try:
+        containers = client.containers.list(all=True)
+        for container in containers:
+            # Check if container has port mappings
+            if container.attrs.get('NetworkSettings', {}).get('Ports'):
+                ports_dict = container.attrs['NetworkSettings']['Ports']
+                for container_port, host_bindings in ports_dict.items():
+                    if host_bindings:
+                        for binding in host_bindings:
+                            if binding and 'HostPort' in binding:
+                                try:
+                                    host_port = int(binding['HostPort'])
+                                    used_ports.add(host_port)
+                                except (ValueError, TypeError):
+                                    pass
+    except Exception as e:
+        logger.warning(f'Failed to check running containers for port usage: {str(e)}')
     
     # Start from BASE_PORT and find the first available port
     port = BASE_PORT
@@ -49,6 +69,51 @@ def get_available_port():
         port += 1
     
     return port
+
+def cleanup_orphaned_containers():
+    """Clean up containers that are running but not tracked in instances.json
+    
+    This handles cases where containers were left running from previous sessions
+    or when instances.json was lost/corrupted.
+    """
+    try:
+        instances = load_instances()
+        tracked_container_ids = set(inst['container_id'] for inst in instances.values())
+        
+        # Get all containers with ha-edu prefix
+        all_containers = client.containers.list(all=True, filters={'name': 'ha-edu-'})
+        
+        for container in all_containers:
+            if container.id not in tracked_container_ids:
+                logger.info(f'Found orphaned container: {container.name} ({container.id[:12]})')
+                try:
+                    # Try to find if this container belongs to a tracked instance by name
+                    found = False
+                    for server_name, inst in instances.items():
+                        if inst.get('container_name') == container.name:
+                            # Update the instance with correct container ID
+                            logger.info(f'Updating instance {server_name} with container ID {container.id[:12]}')
+                            inst['container_id'] = container.id
+                            inst['status'] = container.status
+                            instances[server_name] = inst
+                            found = True
+                            break
+                    
+                    if found:
+                        save_instances(instances)
+                    else:
+                        # Truly orphaned - stop and remove
+                        logger.info(f'Removing truly orphaned container: {container.name}')
+                        if container.status == 'running':
+                            container.stop(timeout=10)
+                        container.remove()
+                except Exception as e:
+                    logger.error(f'Failed to handle orphaned container {container.name}: {str(e)}')
+        
+        logger.info('Orphaned container cleanup completed')
+        
+    except Exception as e:
+        logger.error(f'Failed to cleanup orphaned containers: {str(e)}', exc_info=True)
 
 def copy_master_config_to_volume(volume_name):
     """Copy master configuration.yaml to a Docker volume
@@ -318,4 +383,7 @@ def check_admin():
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
 
 if __name__ == '__main__':
+    # Clean up orphaned containers on startup
+    logger.info('Starting HA-Edu Portal...')
+    cleanup_orphaned_containers()
     app.run(host='0.0.0.0', port=5000, debug=False)
