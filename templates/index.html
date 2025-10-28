@@ -343,11 +343,6 @@
                     <input type="text" id="serverName" name="serverName" required 
                            placeholder="e.g., Student-Lab-01">
                 </div>
-                <div class="form-group">
-                    <label for="password">Password:</label>
-                    <input type="password" id="password" name="password" required 
-                           placeholder="Enter a secure password">
-                </div>
                 <div id="modalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
@@ -378,8 +373,30 @@
         </div>
     </div>
     
+    <!-- Delete Instance Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <h2>Delete Instance</h2>
+            <p>Enter admin password to delete <strong id="deleteServerName"></strong>.</p>
+            <p style="color: #e53e3e; margin: 10px 0;"><strong>Warning:</strong> This will permanently delete the instance and all its data!</p>
+            <form id="deleteInstanceForm">
+                <div class="form-group">
+                    <label for="deleteAdminPassword">Admin Password:</label>
+                    <input type="password" id="deleteAdminPassword" name="deleteAdminPassword" required 
+                           placeholder="Enter admin password">
+                </div>
+                <div id="deleteModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="deleteSubmitBtn">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         let currentResetServer = null;
+        let currentDeleteServer = null;
         
         // Check if admin password is enabled on page load
         async function checkAdminEnabled() {
@@ -421,14 +438,30 @@
             currentResetServer = null;
         }
         
+        function openDeleteModal(serverName) {
+            currentDeleteServer = serverName;
+            document.getElementById('deleteServerName').textContent = serverName;
+            document.getElementById('deleteModal').style.display = 'block';
+            document.getElementById('deleteModalMessage').innerHTML = '';
+            document.getElementById('deleteInstanceForm').reset();
+        }
+        
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+            currentDeleteServer = null;
+        }
+        
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
             const resetModal = document.getElementById('resetModal');
+            const deleteModal = document.getElementById('deleteModal');
             if (event.target === addModal) {
                 closeModal();
             } else if (event.target === resetModal) {
                 closeResetModal();
+            } else if (event.target === deleteModal) {
+                closeDeleteModal();
             }
         }
         
@@ -439,7 +472,6 @@
             const messageDiv = document.getElementById('modalMessage');
             
             const serverName = document.getElementById('serverName').value;
-            const password = document.getElementById('password').value;
             
             submitBtn.disabled = true;
             submitBtn.textContent = 'Creating...';
@@ -452,8 +484,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        server_name: serverName,
-                        password: password
+                        server_name: serverName
                     })
                 });
                 
@@ -518,30 +549,54 @@
             }
         });
         
-        async function resetInstance(serverName) {
-            openResetModal(serverName);
-        }
-        
-        async function deleteInstance(serverName) {
-            if (!confirm(`Are you sure you want to delete the instance "${serverName}"?`)) {
-                return;
-            }
+        document.getElementById('deleteInstanceForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('deleteSubmitBtn');
+            const messageDiv = document.getElementById('deleteModalMessage');
+            
+            const adminPassword = document.getElementById('deleteAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Deleting...';
+            messageDiv.innerHTML = '';
             
             try {
-                const response = await fetch(`/api/instances/${encodeURIComponent(serverName)}`, {
-                    method: 'DELETE'
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentDeleteServer)}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    location.reload();
+                    messageDiv.innerHTML = `<div class="success-message">Instance deleted successfully! Reloading...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
                 } else {
-                    alert(`Failed to delete instance: ${data.error}`);
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Delete';
                 }
             } catch (error) {
-                alert(`Failed to delete instance: ${error.message}`);
+                messageDiv.innerHTML = `<div class="error-message">Failed to delete instance: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Delete';
             }
+        });
+        
+        async function resetInstance(serverName) {
+            openResetModal(serverName);
+        }
+        
+        async function deleteInstance(serverName) {
+            openDeleteModal(serverName);
         }
         
         // Update instance count

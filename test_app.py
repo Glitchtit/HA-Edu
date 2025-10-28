@@ -98,9 +98,10 @@ def test_templates():
             checks = [
                 ('Add New', 'Add New button'),
                 ('server_name', 'Server name field'),
-                ('password', 'Password field'),
                 ('modal', 'Modal dialog'),
-                ('/api/instances', 'API endpoint reference')
+                ('/api/instances', 'API endpoint reference'),
+                ('deleteModal', 'Delete modal dialog'),
+                ('deleteAdminPassword', 'Delete admin password field')
             ]
             for check, desc in checks:
                 if check in content:

@@ -191,10 +191,9 @@ def create_instance():
     """API endpoint to create a new Home Assistant instance"""
     data = request.json
     server_name = data.get('server_name', '').strip()
-    password = data.get('password', '').strip()
     
-    if not server_name or not password:
-        return jsonify({'error': 'Server name and password are required'}), 400
+    if not server_name:
+        return jsonify({'error': 'Server name is required'}), 400
     
     instances = load_instances()
     
@@ -232,13 +231,10 @@ def create_instance():
         )
         
         # Save instance info
-        # Note: Password storage is simplified for educational use.
-        # For production, use proper password hashing (e.g., bcrypt)
         instances[server_name] = {
             'container_id': container.id,
             'container_name': container_name,
             'port': port,
-            'password': password,
             'created_at': datetime.now().isoformat(),
             'status': 'running'
         }
@@ -257,7 +253,17 @@ def create_instance():
 
 @app.route('/api/instances/<server_name>', methods=['DELETE'])
 def delete_instance(server_name):
-    """API endpoint to delete an instance"""
+    """API endpoint to delete an instance (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
     instances = load_instances()
     
     if server_name not in instances:
