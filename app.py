@@ -335,7 +335,7 @@ import bcrypt
 import json
 import uuid
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Read existing auth file
 with open('/config/.storage/auth', 'r') as f:
@@ -368,7 +368,7 @@ new_user = {{
     'system_generated': False,
     'local_only': False,
     'username': '{teacher_username}',
-    'created_at': datetime.utcnow().isoformat() + 'Z'
+    'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 }}
 
 # Create new credential entry
@@ -378,14 +378,14 @@ new_credential = {{
     'auth_provider_type': 'homeassistant',
     'auth_provider_id': None,
     'data': {{'username': '{teacher_username}'}},
-    'created_at': datetime.utcnow().isoformat() + 'Z'
+    'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 }}
 
 # Create new provider data entry
 new_provider_entry = {{
     'username': '{teacher_username}',
     'password': password_hash,
-    'created_at': datetime.utcnow().isoformat() + 'Z'
+    'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 }}
 
 # Add to data structures
