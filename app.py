@@ -629,7 +629,8 @@ def proxy(port, path):
         # Forward the request to the HA instance
         headers = {}
         for key, value in request.headers.items():
-            if key.lower() not in ['host', 'connection', 'keep-alive']:
+            # Skip hop-by-hop headers and encoding headers that can cause issues
+            if key.lower() not in ['host', 'connection', 'keep-alive', 'accept-encoding']:
                 headers[key] = value
 
         # Add proxy headers that HA needs
@@ -671,10 +672,10 @@ def proxy(port, path):
         # Build response headers
         response_headers = []
         for key, value in resp.headers.items():
-            # Skip hop-by-hop headers
+            # Skip hop-by-hop headers and encoding headers
             if key.lower() not in ['connection', 'keep-alive', 'proxy-authenticate', 
-                                   'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 
-                                   'upgrade']:
+                                'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 
+                                'upgrade', 'content-encoding', 'content-length']:
                 response_headers.append((key, value))
         
         # Stream the response back to the client
