@@ -692,6 +692,9 @@ def proxy(port, path):
             if key.lower() not in ['host', 'connection', 'keep-alive', 'accept-encoding']:
                 headers[key] = value
 
+        # Set the correct Host header for the backend
+        headers['Host'] = f'192.168.50.111:{port}'
+        
         # Add proxy headers that HA needs
         headers['X-Forwarded-For'] = request.remote_addr
         headers['X-Forwarded-Proto'] = request.scheme
@@ -741,6 +744,16 @@ def proxy(port, path):
                 if key.lower() == 'content-type':
                     content_type = value.lower()
                 response_headers.append((key, value))
+        
+        # Log response status for debugging
+        if resp.status_code >= 400:
+            logger.warning(f'Backend returned error status {resp.status_code} for {target_url}')
+            # Try to log response body for errors
+            try:
+                error_body = resp.text[:500] if hasattr(resp, 'text') else 'Unable to read response'
+                logger.warning(f'Error response body: {error_body}')
+            except:
+                pass
         
         # Don't rewrite content - let the fallback routes handle everything
         # This is cleaner and avoids issues with complex JavaScript rewriting
