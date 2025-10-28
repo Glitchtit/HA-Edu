@@ -7,6 +7,7 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 
 - 🚀 **Easy Instance Creation**: Create new Home Assistant instances with a simple web interface - no password required
 - 🔑 **Admin Password Protected**: Admin password required for deleting and resetting instances
+- 👨‍🏫 **Teacher Access**: Optional feature to add teacher admin accounts to student instances after onboarding
 - ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
 - 📊 **Instance Management**: View and manage unlimited instances
 - 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
@@ -144,6 +145,30 @@ If an admin password is configured, you can reset any instance to its default st
 4. The instance will be completely reset to a fresh Home Assistant installation
 5. **Warning**: This will delete all data and configurations for that instance!
 
+### Teacher Access (Optional Feature)
+
+The Teacher Access feature allows instructors to add a secondary admin account to student instances for monitoring purposes. This preserves the educational value of students going through onboarding themselves while giving teachers access.
+
+**Requirements:**
+- Both `TEACHER_USERNAME` and `TEACHER_PASSWORD` environment variables must be configured
+- Admin password must be configured
+- Students must complete the onboarding process first
+
+**How to use:**
+
+1. Students create and set up their instances using the onboarding wizard
+2. After students complete onboarding, click the "**👨‍🏫 Teacher**" button on the instance card
+3. Enter the **Admin Password**
+4. Confirm to create the teacher admin account
+5. Teacher can now log in using the configured teacher credentials
+
+**Key Features:**
+- Teacher account is created as a secondary administrator
+- Student's account and data remain unchanged
+- Teacher can monitor student progress and configurations
+- Cannot be added until student completes onboarding
+- Instance cards show a "👨‍🏫 Teacher Access" badge when enabled
+
 ## Configuration
 
 Environment variables can be configured to customize the portal:
@@ -154,6 +179,8 @@ Environment variables can be configured to customize the portal:
 | `DATA_FILE` | `/data/instances.json` | Path to store instance data |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant Docker image to use |
 | `ADMIN_PASSWORD` | (empty) | **Required** admin password for delete and reset operations. If not set, delete and reset operations will fail |
+| `TEACHER_USERNAME` | (empty) | *Optional* Username for teacher admin account. Required for Teacher Access feature |
+| `TEACHER_PASSWORD` | (empty) | *Optional* Password for teacher admin account. Required for Teacher Access feature |
 
 ## Architecture
 

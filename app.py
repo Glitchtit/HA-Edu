@@ -30,6 +30,8 @@ BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
 # MAX_INSTANCES removed - no limit on instances, ports assigned dynamically
 HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
+TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
+TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 
 def load_data():
@@ -235,6 +237,204 @@ def copy_master_config_to_volume(volume_name):
         except:
             pass
         return False
+
+def check_instance_onboarding_complete(volume_name):
+    """Check if a Home Assistant instance has completed onboarding
+    
+    Checks for the existence of .storage/auth file in the volume,
+    which indicates that at least one user has been created.
+    
+    Args:
+        volume_name: Name of the Docker volume to check
+        
+    Returns:
+        bool: True if onboarding is complete, False otherwise
+    """
+    try:
+        # Pull alpine image if not present
+        try:
+            client.images.get('alpine:latest')
+        except docker.errors.ImageNotFound:
+            logger.info('Pulling alpine:latest image...')
+            client.images.pull('alpine:latest')
+        
+        # Create a temporary container to check the file
+        temp_container = client.containers.create(
+            'alpine:latest',
+            command=['sh', '-c', 'test -f /config/.storage/auth && echo "exists" || echo "missing"'],
+            volumes={volume_name: {'bind': '/config', 'mode': 'ro'}}
+        )
+        
+        # Start and wait for container
+        temp_container.start()
+        exit_code = temp_container.wait()
+        
+        # Get output
+        output = temp_container.logs().decode('utf-8').strip()
+        
+        # Clean up
+        temp_container.remove()
+        
+        return output == 'exists'
+        
+    except Exception as e:
+        logger.error(f'Failed to check onboarding status for volume {volume_name}: {str(e)}', exc_info=True)
+        return False
+
+def create_teacher_account(volume_name, teacher_username, teacher_password):
+    """Create a teacher admin account in a Home Assistant instance
+    
+    Directly manipulates .storage/auth and .storage/auth_provider.homeassistant
+    files in the instance volume using a temporary Alpine container.
+    
+    Args:
+        volume_name: Name of the Docker volume
+        teacher_username: Username for the teacher account
+        teacher_password: Password for the teacher account
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        # Pull alpine image if not present
+        try:
+            client.images.get('alpine:latest')
+        except docker.errors.ImageNotFound:
+            logger.info('Pulling alpine:latest image...')
+            client.images.pull('alpine:latest')
+        
+        # Create a temporary container with the volume mounted
+        temp_container = client.containers.create(
+            'alpine:latest',
+            command=['sh', '-c', 'sleep 60'],
+            volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
+        )
+        
+        # Start the container
+        temp_container.start()
+        
+        # Install Python in the container for bcrypt hashing
+        install_result = temp_container.exec_run(['sh', '-c', 'apk add --no-cache python3 py3-pip'])
+        if install_result.exit_code != 0:
+            logger.error(f'Failed to install Python in temp container: {install_result.output.decode()}')
+            temp_container.stop()
+            temp_container.remove()
+            return False, 'Failed to install dependencies in temporary container'
+        
+        # Install bcrypt
+        bcrypt_result = temp_container.exec_run(['sh', '-c', 'pip3 install --break-system-packages bcrypt'])
+        if bcrypt_result.exit_code != 0:
+            logger.error(f'Failed to install bcrypt: {bcrypt_result.output.decode()}')
+            temp_container.stop()
+            temp_container.remove()
+            return False, 'Failed to install bcrypt library'
+        
+        # Generate bcrypt hash for the password
+        hash_script = f"""
+import bcrypt
+import json
+import uuid
+import os
+from datetime import datetime
+
+# Read existing auth file
+with open('/config/.storage/auth', 'r') as f:
+    auth_data = json.load(f)
+
+# Read existing auth_provider file
+with open('/config/.storage/auth_provider.homeassistant', 'r') as f:
+    provider_data = json.load(f)
+
+# Generate new user ID and credential ID
+user_id = str(uuid.uuid4()).replace('-', '')
+credential_id = str(uuid.uuid4()).replace('-', '')
+
+# Check if teacher username already exists
+existing_users = [u for u in auth_data['data']['users'] if u['username'] == '{teacher_username}']
+if existing_users:
+    print('exists')
+    exit(0)
+
+# Hash the password
+password_hash = bcrypt.hashpw('{teacher_password}'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+
+# Create new user entry
+new_user = {{
+    'id': user_id,
+    'group_ids': ['system-admin'],
+    'is_owner': False,
+    'is_active': True,
+    'name': '{teacher_username}',
+    'system_generated': False,
+    'local_only': False,
+    'username': '{teacher_username}',
+    'created_at': datetime.utcnow().isoformat() + 'Z'
+}}
+
+# Create new credential entry
+new_credential = {{
+    'id': credential_id,
+    'user_id': user_id,
+    'auth_provider_type': 'homeassistant',
+    'auth_provider_id': None,
+    'data': {{'username': '{teacher_username}'}},
+    'created_at': datetime.utcnow().isoformat() + 'Z'
+}}
+
+# Create new provider data entry
+new_provider_entry = {{
+    'username': '{teacher_username}',
+    'password': password_hash,
+    'created_at': datetime.utcnow().isoformat() + 'Z'
+}}
+
+# Add to data structures
+auth_data['data']['users'].append(new_user)
+auth_data['data']['credentials'].append(new_credential)
+provider_data['data']['users'].append(new_provider_entry)
+
+# Write back to files
+with open('/config/.storage/auth', 'w') as f:
+    json.dump(auth_data, f, indent=2)
+
+with open('/config/.storage/auth_provider.homeassistant', 'w') as f:
+    json.dump(provider_data, f, indent=2)
+
+print('success')
+"""
+        
+        # Write the script to the container
+        temp_container.exec_run(['sh', '-c', f'cat > /tmp/create_user.py << \'EOF\'\n{hash_script}\nEOF'])
+        
+        # Run the script
+        result = temp_container.exec_run(['python3', '/tmp/create_user.py'])
+        
+        # Clean up
+        temp_container.stop()
+        temp_container.remove()
+        
+        output = result.output.decode('utf-8').strip()
+        
+        if result.exit_code == 0:
+            if output == 'exists':
+                logger.info(f'Teacher account already exists in volume {volume_name}')
+                return False, 'Teacher account already exists'
+            elif output == 'success':
+                logger.info(f'Successfully created teacher account in volume {volume_name}')
+                return True, 'Teacher account created successfully'
+        
+        logger.error(f'Failed to create teacher account: {output}')
+        return False, 'Failed to create teacher account'
+        
+    except Exception as e:
+        logger.error(f'Failed to create teacher account in volume {volume_name}: {str(e)}', exc_info=True)
+        # Clean up on error
+        try:
+            temp_container.stop()
+            temp_container.remove(force=True)
+        except:
+            pass
+        return False, 'An error occurred while creating teacher account'
 
 @app.route('/')
 def index():
@@ -550,6 +750,75 @@ def set_instance_creation_status():
         'message': 'Instance creation status updated successfully',
         'instance_creation_enabled': enabled
     }), 200
+
+@app.route('/api/settings/teacher-access', methods=['GET'])
+def check_teacher_access():
+    """API endpoint to check if teacher access feature is enabled"""
+    enabled = bool(TEACHER_USERNAME and TEACHER_PASSWORD)
+    return jsonify({
+        'teacher_access_enabled': enabled,
+        'teacher_username': TEACHER_USERNAME if enabled else None
+    }), 200
+
+@app.route('/api/instances/<server_name>/add-teacher-access', methods=['POST'])
+def add_teacher_access(server_name):
+    """API endpoint to add teacher access to an instance (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    if not TEACHER_USERNAME or not TEACHER_PASSWORD:
+        return jsonify({'error': 'Teacher access not configured. Please set TEACHER_USERNAME and TEACHER_PASSWORD environment variables.'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    instances = load_instances()
+    
+    if server_name not in instances:
+        return jsonify({'error': 'Instance not found'}), 404
+    
+    instance = instances[server_name]
+    
+    # Check if teacher access has already been added
+    if instance.get('teacher_access_added', False):
+        return jsonify({'error': 'Teacher access has already been added to this instance'}), 400
+    
+    try:
+        # Check if instance has completed onboarding
+        volume_name = instance['container_name']
+        
+        if not check_instance_onboarding_complete(volume_name):
+            return jsonify({
+                'error': 'Instance has not completed onboarding yet. Students must complete the onboarding process before teacher access can be added.'
+            }), 400
+        
+        # Create teacher account
+        success, message = create_teacher_account(volume_name, TEACHER_USERNAME, TEACHER_PASSWORD)
+        
+        if not success:
+            return jsonify({'error': message}), 400
+        
+        # Update instance metadata
+        instance['teacher_access_added'] = True
+        instance['teacher_access_added_at'] = datetime.now().isoformat()
+        instances[server_name] = instance
+        save_instances(instances)
+        
+        # Log for audit trail
+        logger.info(f'Teacher access added to instance {server_name} by admin. Teacher username: {TEACHER_USERNAME}')
+        
+        return jsonify({
+            'message': 'Teacher access added successfully',
+            'teacher_username': TEACHER_USERNAME
+        }), 200
+        
+    except Exception as e:
+        logger.error(f'Failed to add teacher access to instance {server_name}: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to add teacher access. Please try again or contact support.'}), 500
 
 def render_proxy_error(status_code, title, message, details=None, suggestions=None) -> tuple:
     """Render a user-friendly HTML error page for proxy errors

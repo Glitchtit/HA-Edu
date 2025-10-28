@@ -89,6 +89,23 @@ docker run -d \
 2. Confirm the deletion
 3. The instance and its data will be removed
 
+### Using Teacher Access (Optional)
+
+If the teacher access feature is enabled (by setting `TEACHER_USERNAME` and `TEACHER_PASSWORD`):
+
+1. **Wait for students to complete onboarding**: Students must go through the Home Assistant onboarding wizard and create their account first
+2. Click the **"👨‍🏫 Teacher"** button on the instance card
+3. Enter the **Admin Password**
+4. Confirm to add teacher access
+5. The teacher can now log in to that instance using the configured teacher credentials
+6. A **"👨‍🏫 Teacher Access"** badge will appear on the instance card
+
+**Benefits:**
+- Teachers can monitor student progress without disrupting their learning
+- Students retain full admin access to their instances
+- Preserves the educational value of students doing onboarding themselves
+- Teacher account is a secondary admin, not a replacement
+
 ## Port Management
 
 The portal dynamically assigns ports starting from BASE_PORT (default: 8123):
@@ -142,6 +159,8 @@ Ensure the following ports are accessible:
 | `DATA_FILE` | `/data/instances.json` | Instance metadata storage path |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant image |
 | `ADMIN_PASSWORD` | (empty) | Optional admin password for reset functionality |
+| `TEACHER_USERNAME` | (empty) | Optional username for teacher admin account |
+| `TEACHER_PASSWORD` | (empty) | Optional password for teacher admin account |
 
 ### Changing Configuration
 
