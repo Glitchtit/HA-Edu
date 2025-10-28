@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY app.py .
 COPY templates/ templates/
+COPY master_configuration.yaml .
 
 # Create data directory
 RUN mkdir -p /data

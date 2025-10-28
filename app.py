@@ -19,6 +19,7 @@ BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
 # MAX_INSTANCES removed - no limit on instances, ports assigned dynamically
 HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
+MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 
 def load_instances():
     """Load instances from JSON file"""
@@ -48,6 +49,55 @@ def get_available_port():
         port += 1
     
     return port
+
+def copy_master_config_to_volume(volume_name):
+    """Copy master configuration.yaml to a Docker volume
+    
+    Creates a temporary container to copy the master configuration
+    into the specified volume's /config directory.
+    """
+    try:
+        # Read the master configuration file
+        with open(MASTER_CONFIG_PATH, 'r') as f:
+            master_config_content = f.read()
+        
+        # Create a temporary container with the volume mounted
+        # Use alpine image - it's lightweight and has sh
+        temp_container = client.containers.create(
+            'alpine:latest',
+            command=['sh', '-c', 'sleep 30'],
+            volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
+        )
+        
+        # Start the container
+        temp_container.start()
+        
+        # Write the master config and empty files for automations, scripts, and scenes
+        # These files are required by the master configuration
+        # Use exec_run to write files
+        temp_container.exec_run(
+            ['sh', '-c', f'cat > /config/configuration.yaml << \'EOF\'\n{master_config_content}\nEOF']
+        )
+        temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/automations.yaml'])
+        temp_container.exec_run(['sh', '-c', 'echo "{}" > /config/scripts.yaml'])
+        temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/scenes.yaml'])
+        
+        # Stop and clean up
+        temp_container.stop()
+        temp_container.remove()
+        
+        logger.info(f'Successfully copied master configuration to volume {volume_name}')
+        return True
+        
+    except Exception as e:
+        logger.error(f'Failed to copy master configuration to volume {volume_name}: {str(e)}', exc_info=True)
+        # Clean up on error
+        try:
+            temp_container.stop()
+            temp_container.remove(force=True)
+        except:
+            pass
+        return False
 
 @app.route('/')
 def index():
@@ -84,6 +134,10 @@ def create_instance():
     try:
         # Create container
         container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
+        volume_name = container_name
+        
+        # Copy master configuration to the volume before starting the container
+        copy_master_config_to_volume(volume_name)
         
         # Network configuration: Create container with bridge network for internet access
         # but isolated from host LAN. This works with Cloudflare tunnel setup.
@@ -96,7 +150,7 @@ def create_instance():
                 'TZ': 'UTC'
             },
             volumes={
-                container_name: {'bind': '/config', 'mode': 'rw'}
+                volume_name: {'bind': '/config', 'mode': 'rw'}
             },
             restart_policy={'Name': 'unless-stopped'},
             # Use default bridge network for isolation from host LAN
@@ -221,6 +275,9 @@ def reset_instance(server_name):
             volume.remove()
         except docker.errors.NotFound:
             pass  # Volume doesn't exist or already removed
+        
+        # Copy master configuration to the volume before starting the container
+        copy_master_config_to_volume(volume_name)
         
         # Create a new container with the same configuration
         # Network configuration: Use bridge network for isolation from host LAN

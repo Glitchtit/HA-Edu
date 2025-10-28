@@ -149,6 +149,28 @@ Each Home Assistant instance:
 - Uses bridge network mode for isolation from host LAN
 - Has internet access but cannot discover LAN devices
 - Runs in demo mode for educational purposes
+- Starts with a pre-configured master configuration that includes:
+  - 5 demo lights
+  - 1 weather entity
+  - 1 thermostat
+  - 2 device trackers
+  - 1 camera
+  - 2 buttons
+
+## Master Configuration
+
+The portal uses a master `configuration.yaml` file that is automatically copied to each new instance or reset instance. This configuration enables Home Assistant's demo mode and provides sample entities for educational purposes.
+
+The master configuration includes:
+- **Demo Platform**: Enables all demo integrations
+- **5 Lights**: Demo Light 1-5 for testing automations and controls
+- **Weather**: Demo weather entity for location-based scenarios
+- **Climate**: Demo thermostat for temperature control learning
+- **Device Trackers**: 2 demo trackers for presence detection scenarios
+- **Camera**: Demo camera for media and security scenarios
+- **Buttons**: 2 input buttons for triggering automations
+
+When an instance is created or reset, this master configuration is automatically deployed, ensuring a consistent starting point for all users.
 
 ## Port Assignment
 
@@ -210,14 +232,17 @@ python app.py
 
 ```
 HA-Edu/
-├── app.py                 # Main Flask application
+├── app.py                      # Main Flask application
+├── master_configuration.yaml   # Master HA config with demo entities
 ├── templates/
-│   └── index.html        # Web UI template
-├── static/               # Static assets (if needed)
-├── Dockerfile            # Container definition
-├── docker-compose.yml    # Compose configuration
-├── requirements.txt      # Python dependencies
-└── README.md            # This file
+│   └── index.html             # Web UI template
+├── static/                    # Static assets (if needed)
+├── Dockerfile                 # Container definition
+├── docker-compose.yml         # Compose configuration
+├── requirements.txt           # Python dependencies
+├── test_app.py                # Application tests
+├── test_master_config.py      # Master configuration tests
+└── README.md                  # This file
 ```
 
 ## License

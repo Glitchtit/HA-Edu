@@ -1,0 +1,60 @@
+# Master Home Assistant Configuration for HA-Edu
+# This configuration enables demo mode and provides sample entities for educational purposes
+
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
+
+# Enable demo mode with predefined entities
+demo:
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+# Additional demo lights (5 lights total)
+light:
+  - platform: demo
+    name: "Demo Light 1"
+  - platform: demo
+    name: "Demo Light 2"
+  - platform: demo
+    name: "Demo Light 3"
+  - platform: demo
+    name: "Demo Light 4"
+  - platform: demo
+    name: "Demo Light 5"
+
+# Weather demo platform
+weather:
+  - platform: demo
+    name: "Demo Weather"
+
+# Thermostat (climate) demo platform
+climate:
+  - platform: demo
+    name: "Demo Thermostat"
+
+# Device trackers (2 trackers)
+device_tracker:
+  - platform: demo
+    devices:
+      demo_tracker_1: "Device Tracker 1"
+      demo_tracker_2: "Device Tracker 2"
+
+# Camera demo platform
+camera:
+  - platform: demo
+    name: "Demo Camera"
+
+# Buttons (2 buttons using input_button helper)
+input_button:
+  demo_button_1:
+    name: "Demo Button 1"
+    icon: mdi:button-cursor
+  demo_button_2:
+    name: "Demo Button 2"
+    icon: mdi:button-pointer
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
