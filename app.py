@@ -93,6 +93,8 @@ def create_instance():
         )
         
         # Save instance info
+        # Note: Password storage is simplified for educational use.
+        # For production, use proper password hashing (e.g., bcrypt)
         instances[server_name] = {
             'container_id': container.id,
             'container_name': container_name,
@@ -107,7 +109,7 @@ def create_instance():
             'message': 'Instance created successfully',
             'server_name': server_name,
             'port': port,
-            'url': f'http://localhost:{port}'
+            'url': f'http://{request.host.split(":")[0]}:{port}'
         }), 201
         
     except Exception as e:

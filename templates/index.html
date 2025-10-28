@@ -300,7 +300,7 @@
                         <strong>Created:</strong> {{ instance.created_at.split('T')[0] }}
                     </div>
                     <div class="instance-actions">
-                        <a href="http://localhost:{{ instance.port }}" target="_blank" class="btn-access">Access</a>
+                        <a href="http://{{ request.host.split(':')[0] }}:{{ instance.port }}" target="_blank" class="btn-access">Access</a>
                         <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Delete</button>
                     </div>
                 </div>
