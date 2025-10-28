@@ -686,30 +686,35 @@ def proxy(port, path):
     logger.info(f'Proxying {request.method} request to: {target_url}')
     
     # Check if this is a WebSocket upgrade request
-    if request.headers.get('Upgrade', '').lower() == 'websocket':
-        return render_proxy_error(
-            400,
-            'WebSocket Not Supported',
-            'WebSocket connections are not supported through the proxy.',
-            details='The proxy can only forward regular HTTP requests. WebSocket connections require direct access to the instance.',
-            suggestions=[
-                'Use the direct port access if WebSocket support is needed',
-                'Most Home Assistant features work without WebSocket',
-                'WebSocket is mainly used for real-time updates'
-            ]
-        )
+    # Note: We forward the websocket handshake request to the backend even though
+    # Flask cannot maintain a persistent websocket connection. This allows the backend
+    # to respond with an appropriate error/fallback rather than us blocking it immediately.
+    # Home Assistant's frontend can then handle the websocket failure gracefully (e.g., via polling).
+    is_websocket_upgrade = request.headers.get('Upgrade', '').lower() == 'websocket'
+    if is_websocket_upgrade:
+        logger.info(f'WebSocket upgrade request detected for port {port}, forwarding to backend')
     
     try:
         # Forward the request to the HA instance
         # Copy headers but modify Host and other proxy-specific headers
         headers = {}
+        skip_headers = ['host', 'keep-alive', 'accept-encoding']
+        # For websocket upgrade requests, we need to forward Connection and Upgrade headers
+        if not is_websocket_upgrade:
+            skip_headers.append('connection')
+        
         for key, value in request.headers.items():
             # Skip hop-by-hop headers and encoding headers that can cause issues
-            if key.lower() not in ['host', 'connection', 'keep-alive', 'accept-encoding']:
+            if key.lower() not in skip_headers:
                 headers[key] = value
 
         # Set the correct Host header for the backend
         headers['Host'] = f'192.168.50.111:{port}'
+        
+        # For websocket upgrade, ensure Connection and Upgrade headers are set properly
+        if is_websocket_upgrade:
+            headers['Connection'] = 'Upgrade'
+            headers['Upgrade'] = 'websocket'
         
         # Add proxy headers that HA needs
         headers['X-Forwarded-For'] = request.remote_addr
@@ -752,11 +757,16 @@ def proxy(port, path):
         # Build response headers
         response_headers = []
         content_type = None
+        # For websocket upgrades, we need to preserve Connection and Upgrade headers
+        skip_response_headers = ['proxy-authenticate', 'proxy-authorization', 'te', 
+                                'trailers', 'transfer-encoding', 'content-encoding', 'content-length']
+        if not is_websocket_upgrade:
+            # For regular requests, skip these hop-by-hop headers
+            skip_response_headers.extend(['connection', 'keep-alive', 'upgrade'])
+        
         for key, value in resp.headers.items():
-            # Skip hop-by-hop headers and encoding headers
-            if key.lower() not in ['connection', 'keep-alive', 'proxy-authenticate', 
-                                'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 
-                                'upgrade', 'content-encoding', 'content-length']:
+            # Skip hop-by-hop headers and encoding headers (except for websocket upgrades)
+            if key.lower() not in skip_response_headers:
                 if key.lower() == 'content-type':
                     content_type = value.lower()
                 response_headers.append((key, value))

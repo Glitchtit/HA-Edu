@@ -73,15 +73,39 @@ def test_proxy_endpoint_integration():
                 print(f"✗ Expected 404, got {response.status_code}")
                 return False
             
-            # Test 3: WebSocket upgrade rejection
+            # Test 3: WebSocket upgrade forwarding
             print("\nTest 3: WebSocket upgrade handling...")
-            response = test_client.get('/proxy/8123/', headers={'Upgrade': 'websocket'})
-            
-            if response.status_code == 400:
-                print("✓ Proxy rejects WebSocket upgrades with 400")
-            else:
-                print(f"✗ Expected 400, got {response.status_code}")
-                return False
+            # Note: Flask's test client in Werkzeug 3.x blocks websocket upgrade requests
+            # before they reach route handlers. We test the proxy function directly instead.
+            with patch('app.requests.get') as mock_get:
+                # Mock the backend response for websocket upgrade
+                mock_response = MagicMock()
+                mock_response.status_code = 101  # Switching Protocols
+                mock_response.headers = {'Upgrade': 'websocket', 'Connection': 'Upgrade'}
+                mock_response.iter_content = lambda chunk_size: []
+                mock_get.return_value = mock_response
+                
+                # Test with request context to simulate websocket headers
+                import app as app_module
+                with app_module.app.test_request_context('/proxy/8123/api/websocket',
+                                                         headers={'Upgrade': 'websocket', 'Connection': 'Upgrade'}):
+                    response = app_module.proxy(8123, 'api/websocket')
+                    
+                    # Extract status code from response
+                    status_code = response[1] if isinstance(response, tuple) else response.status_code
+                    
+                    if status_code == 101:
+                        print("✓ Proxy forwards WebSocket upgrade requests to backend")
+                        # Verify that Upgrade and Connection headers were forwarded
+                        call_headers = mock_get.call_args[1]['headers']
+                        if 'Upgrade' in call_headers and call_headers['Upgrade'] == 'websocket':
+                            print("✓ WebSocket Upgrade header forwarded correctly")
+                        else:
+                            print(f"✗ Upgrade header not forwarded correctly: {call_headers}")
+                            return False
+                    else:
+                        print(f"✗ Expected 101, got {status_code}")
+                        return False
             
             # Test 4: POST request proxying
             print("\nTest 4: POST request proxying...")
