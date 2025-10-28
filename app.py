@@ -810,7 +810,8 @@ def proxy(port, path):
                 # Try to find <head> tag (case-insensitive)
                 head_start = html_lower.find('<head')
                 if head_start >= 0:
-                    # Find the end of the opening <head> tag (use original string from the found position)
+                    # Find the end of the opening <head> tag in the original string
+                    # (the position from lowercase search is valid for the original string)
                     head_end = html_str.find('>', head_start)
                     if head_end >= 0:
                         # Insert base tag right after <head>
@@ -822,7 +823,8 @@ def proxy(port, path):
                     # If no <head> tag found, try <html>
                     html_start = html_lower.find('<html')
                     if html_start >= 0:
-                        # Find the end of the opening <html> tag (use original string from the found position)
+                        # Find the end of the opening <html> tag in the original string
+                        # (the position from lowercase search is valid for the original string)
                         html_end = html_str.find('>', html_start)
                         if html_end >= 0:
                             html_str = html_str[:html_end + 1] + base_tag + html_str[html_end + 1:]
