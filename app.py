@@ -405,7 +405,7 @@ def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
 
-def render_proxy_error(status_code, title, message, details=None, suggestions=None):
+def render_proxy_error(status_code, title, message, details=None, suggestions=None) -> tuple:
     """Render a user-friendly HTML error page for proxy errors
     
     Args:
@@ -414,6 +414,9 @@ def render_proxy_error(status_code, title, message, details=None, suggestions=No
         message: Error message
         details: Optional detailed explanation
         suggestions: Optional list of suggestions for the user
+    
+    Returns:
+        tuple: (rendered HTML string, status code)
     """
     # Choose appropriate icon based on status code
     icons = {
@@ -514,7 +517,17 @@ def proxy(port, path):
         elif request.method == 'HEAD':
             resp = requests.head(target_url, headers=headers, timeout=30)
         else:
-            return jsonify({'error': f'Method {request.method} not supported'}), 405
+            return render_proxy_error(
+                405,
+                'Method Not Supported',
+                f'The HTTP method {request.method} is not supported by the proxy.',
+                details='Only GET, POST, PUT, DELETE, PATCH, OPTIONS, and HEAD methods are supported.',
+                suggestions=[
+                    'Check that your client is using a supported HTTP method',
+                    'Most Home Assistant operations use GET or POST',
+                    'If you need this method, please contact support'
+                ]
+            )
         
         # Build response headers
         response_headers = []
