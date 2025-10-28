@@ -56,9 +56,6 @@ def copy_master_config_to_volume(volume_name):
     Creates a temporary container to copy the master configuration
     into the specified volume's /config directory.
     """
-    import tarfile
-    import io
-    
     try:
         # Read the master configuration file
         with open(MASTER_CONFIG_PATH, 'r') as f:
