@@ -7,6 +7,8 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 
 - 🚀 **Easy Instance Creation**: Create new Home Assistant instances with a simple web interface
 - 🔐 **Password Protected**: Each instance can have its own password
+- 🔑 **Admin Password**: Optional admin password for managing all instances
+- ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
 - 📊 **Instance Management**: View and manage up to 15 concurrent instances
 - 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
 - 🔄 **Automatic Port Assignment**: Systematically assigns ports from 8123-8137
@@ -48,6 +50,7 @@ docker-compose up -d
      - `BASE_PORT`: `8123` (starting port for instances)
      - `MAX_INSTANCES`: `15` (maximum number of instances)
      - `HA_IMAGE`: `ghcr.io/home-assistant/home-assistant:stable`
+     - `ADMIN_PASSWORD`: (optional) Admin password for reset functionality
 
 ### Manual Docker Build
 
@@ -84,6 +87,16 @@ docker run -d \
 2. Confirm the deletion
 3. The instance and its data will be removed
 
+### Resetting an Instance (Admin Only)
+
+If an admin password is configured, you can reset any instance to its default state:
+
+1. Click the "**Reset**" button on the instance card (only visible when admin password is set)
+2. Enter the **Admin Password**
+3. Confirm the reset
+4. The instance will be completely reset to a fresh Home Assistant installation
+5. **Warning**: This will delete all data and configurations for that instance!
+
 ## Configuration
 
 Environment variables can be configured to customize the portal:
@@ -94,6 +107,7 @@ Environment variables can be configured to customize the portal:
 | `MAX_INSTANCES` | `15` | Maximum number of concurrent instances |
 | `DATA_FILE` | `/data/instances.json` | Path to store instance data |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant Docker image to use |
+| `ADMIN_PASSWORD` | (empty) | Admin password for reset functionality. If not set, reset buttons are hidden |
 
 ## Architecture
 
@@ -122,6 +136,8 @@ Ports are assigned sequentially:
 - The portal requires access to the Docker socket (`/var/run/docker.sock`)
 - Consider running behind a reverse proxy with authentication
 - Password storage is simplified for educational use - enhance for production
+- Admin password provides elevated access - store securely (e.g., in Unraid environment variables)
+- Admin password enables reset of any instance, even after student passwords change
 - Limit network access to trusted networks only
 
 ## Troubleshooting

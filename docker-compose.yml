@@ -14,6 +14,7 @@ services:
       - MAX_INSTANCES=15
       - DATA_FILE=/data/instances.json
       - HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     restart: unless-stopped
     networks:
       - ha-edu-network

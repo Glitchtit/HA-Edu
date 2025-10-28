@@ -17,6 +17,7 @@ DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
 BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
 MAX_INSTANCES = int(os.getenv('MAX_INSTANCES', '15'))
 HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 
 def load_instances():
     """Load instances from JSON file"""
@@ -176,6 +177,81 @@ def get_instance_status(server_name):
         instances[server_name] = instance
         save_instances(instances)
         return jsonify({'status': 'removed'}), 200
+
+@app.route('/api/instances/<server_name>/reset', methods=['POST'])
+def reset_instance(server_name):
+    """API endpoint to reset an instance to default HA image (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json
+    admin_password = data.get('admin_password', '')
+    
+    if admin_password != ADMIN_PASSWORD:
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    instances = load_instances()
+    
+    if server_name not in instances:
+        return jsonify({'error': 'Instance not found'}), 404
+    
+    try:
+        instance = instances[server_name]
+        container_name = instance['container_name']
+        port = instance['port']
+        password = instance['password']
+        
+        # Stop and remove existing container
+        try:
+            container = client.containers.get(instance['container_id'])
+            container.stop()
+            container.remove()
+        except docker.errors.NotFound:
+            pass  # Container already removed
+        
+        # Remove the volume to completely reset the instance
+        volume_name = f'ha-edu-{container_name}'
+        try:
+            volume = client.volumes.get(volume_name)
+            volume.remove()
+        except docker.errors.NotFound:
+            pass  # Volume doesn't exist or already removed
+        
+        # Create a new container with the same configuration
+        new_container = client.containers.run(
+            HA_IMAGE,
+            name=container_name,
+            detach=True,
+            ports={'8123/tcp': port},
+            environment={
+                'TZ': 'UTC'
+            },
+            volumes={
+                volume_name: {'bind': '/config', 'mode': 'rw'}
+            },
+            restart_policy={'Name': 'unless-stopped'}
+        )
+        
+        # Update instance info with new container ID
+        instance['container_id'] = new_container.id
+        instance['status'] = 'running'
+        instance['reset_at'] = datetime.now().isoformat()
+        instances[server_name] = instance
+        save_instances(instances)
+        
+        return jsonify({
+            'message': 'Instance reset successfully',
+            'server_name': server_name
+        }), 200
+        
+    except Exception as e:
+        logger.error(f'Failed to reset instance: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to reset instance. Please try again or contact support.'}), 500
+
+@app.route('/api/admin/check', methods=['GET'])
+def check_admin():
+    """API endpoint to check if admin password is configured"""
+    return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

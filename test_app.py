@@ -133,6 +133,67 @@ def test_dockerfile():
         print(f"✗ Dockerfile not found: {dockerfile_path}")
         return False
 
+def test_admin_password_feature():
+    """Test admin password functionality"""
+    print("\nTesting admin password feature...")
+    try:
+        import app
+        
+        # Check if ADMIN_PASSWORD config exists
+        if hasattr(app, 'ADMIN_PASSWORD'):
+            print("✓ ADMIN_PASSWORD configuration exists")
+        else:
+            print("✗ ADMIN_PASSWORD configuration missing")
+            return False
+        
+        # Check if reset route exists
+        routes = [rule.rule for rule in app.app.url_map.iter_rules()]
+        if any('/reset' in r for r in routes):
+            print("✓ Reset endpoint registered")
+        else:
+            print("✗ Reset endpoint missing")
+            return False
+        
+        # Check if admin check route exists
+        if any('/admin/check' in r for r in routes):
+            print("✓ Admin check endpoint registered")
+        else:
+            print("✗ Admin check endpoint missing")
+            return False
+        
+        # Check template for reset functionality
+        template_path = os.path.join(os.path.dirname(__file__), 'templates', 'index.html')
+        with open(template_path, 'r') as f:
+            content = f.read()
+            checks = [
+                ('btn-reset', 'Reset button styling'),
+                ('resetInstance', 'Reset function'),
+                ('resetModal', 'Reset modal'),
+                ('adminPassword', 'Admin password field'),
+                ('checkAdminEnabled', 'Admin check function')
+            ]
+            for check, desc in checks:
+                if check in content:
+                    print(f"✓ Found: {desc}")
+                else:
+                    print(f"✗ Missing: {desc}")
+                    return False
+        
+        # Check .env.example for ADMIN_PASSWORD
+        env_path = os.path.join(os.path.dirname(__file__), '.env.example')
+        with open(env_path, 'r') as f:
+            content = f.read()
+            if 'ADMIN_PASSWORD' in content:
+                print("✓ ADMIN_PASSWORD in .env.example")
+            else:
+                print("✗ ADMIN_PASSWORD missing in .env.example")
+                return False
+        
+        return True
+    except Exception as e:
+        print(f"✗ Admin password feature test error: {e}")
+        return False
+
 def main():
     """Run all tests"""
     print("=" * 60)
@@ -144,7 +205,8 @@ def main():
         test_app_structure,
         test_functions,
         test_templates,
-        test_dockerfile
+        test_dockerfile,
+        test_admin_password_feature
     ]
     
     results = []
