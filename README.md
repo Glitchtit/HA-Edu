@@ -15,6 +15,7 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 - 🌐 **Network Isolation**: Instances have internet access but are isolated from host LAN
 - 📱 **Responsive UI**: Clean, modern interface that works on all devices
 - ☁️ **Cloudflare Tunnel Ready**: Designed to work with Cloudflare tunnel for secure external access
+- 🔀 **Built-in Proxy**: Access all instances through a single endpoint without exposing individual ports
 
 ## Quick Start
 
@@ -73,12 +74,30 @@ The portal is designed to work with Cloudflare tunnel for secure external access
 - **LAN Access**: ❌ Instances are isolated from the host's LAN network
 - **Device Discovery**: ❌ Instances cannot discover devices on the main network
 - **External Access**: ✅ Via Cloudflare tunnel (e.g., edu.wredlund.fi)
+- **Port Exposure**: ✅ No need to expose individual instance ports - built-in proxy routes all traffic through port 5000
+
+#### Proxy Feature
+
+The portal includes a built-in proxy that allows all Home Assistant instances to be accessed through the portal's single endpoint (port 5000). When users click "Access" on an instance, they're redirected to `/proxy/<port>/` which internally forwards all requests to the appropriate Home Assistant instance.
+
+**Benefits:**
+- ✅ Only port 5000 needs to be exposed through Cloudflare tunnel
+- ✅ No need to configure individual ports for each instance
+- ✅ Works seamlessly with firewall restrictions
+- ✅ Simplified network configuration
+
+**Technical Details:**
+- The proxy forwards all HTTP methods (GET, POST, PUT, DELETE, etc.)
+- Query strings and URL paths are preserved
+- Response headers and status codes are passed through correctly
+- Validates that requested ports belong to actual instances
+- Note: WebSocket connections are not proxied and will show an error (use direct port access if WebSocket support is critical)
 
 To set up Cloudflare tunnel:
 1. Install cloudflared on your Unraid server
 2. Create a tunnel and point it to the portal (port 5000)
 3. Configure authentication in Cloudflare dashboard
-4. Users access instances through the portal UI via the tunnel
+4. Users access instances through the portal UI via the tunnel - all instance access automatically goes through the proxy
 
 ### Manual Docker Build
 
@@ -140,13 +159,15 @@ Environment variables can be configured to customize the portal:
 
 The portal consists of:
 - **Flask Web Application**: Provides the UI and API
+- **Built-in Proxy Server**: Routes all instance traffic through the portal
 - **Docker SDK**: Manages Home Assistant containers
 - **Instance Storage**: JSON-based storage for instance metadata
 
 Each Home Assistant instance:
 - Runs in its own Docker container
 - Has a dedicated volume for configuration
-- Is accessible on a unique dynamically-assigned port
+- Is accessible on a unique dynamically-assigned port (internal)
+- Accessible via the proxy at `/proxy/<port>/` (external)
 - Uses bridge network mode for isolation from host LAN
 - Has internet access but cannot discover LAN devices
 - Runs in demo mode for educational purposes
@@ -175,14 +196,16 @@ When an instance is created or reset, this master configuration is automatically
 
 ## Port Assignment
 
-Ports are assigned dynamically:
-- Portal UI: `5000`
-- HA Instance 1: `8123` (BASE_PORT)
-- HA Instance 2: `8124` (BASE_PORT + 1)
-- HA Instance 3: `8125` (BASE_PORT + 2)
+Ports are assigned dynamically for internal container communication:
+- Portal UI: `5000` (exposed externally)
+- HA Instance 1: `8123` (BASE_PORT, internal only)
+- HA Instance 2: `8124` (BASE_PORT + 1, internal only)
+- HA Instance 3: `8125` (BASE_PORT + 2, internal only)
 - ... and so on
 
 When an instance is deleted, its port becomes available for reuse by new instances.
+
+**Note**: With the built-in proxy, only port 5000 needs to be exposed externally. All instances are accessed via `/proxy/<port>/` through the portal.
 
 ## Security Considerations
 
@@ -192,6 +215,7 @@ When an instance is deleted, its port becomes available for reuse by new instanc
 - Admin password provides elevated access for managing all instances
 - Limit network access to trusted networks only
 - **Network Isolation**: Instances are isolated from host LAN but have internet access
+- **Proxy Security**: The proxy validates that requested ports belong to actual instances before forwarding
 - **Cloudflare Tunnel**: Recommended for secure external access with authentication
 - Instances cannot discover or access devices on the host's network
 
@@ -210,7 +234,8 @@ When an instance is deleted, its port becomes available for reuse by new instanc
 ### Instance not accessible
 - Wait 1-2 minutes for Home Assistant to fully start
 - Check the container is running: `docker ps`
-- Verify firewall rules allow the port
+- Check the proxy error message in browser (502 usually means instance is still starting)
+- For debugging, you can still access instances directly via their ports if they're exposed
 
 ## Development
 
@@ -232,17 +257,19 @@ python app.py
 
 ```
 HA-Edu/
-├── app.py                      # Main Flask application
-├── master_configuration.yaml   # Master HA config with demo entities
+├── app.py                        # Main Flask application with proxy
+├── master_configuration.yaml     # Master HA config with demo entities
 ├── templates/
-│   └── index.html             # Web UI template
-├── static/                    # Static assets (if needed)
-├── Dockerfile                 # Container definition
-├── docker-compose.yml         # Compose configuration
-├── requirements.txt           # Python dependencies
-├── test_app.py                # Application tests
-├── test_master_config.py      # Master configuration tests
-└── README.md                  # This file
+│   └── index.html               # Web UI template
+├── static/                      # Static assets (if needed)
+├── Dockerfile                   # Container definition
+├── docker-compose.yml           # Compose configuration
+├── requirements.txt             # Python dependencies
+├── test_app.py                  # Application tests
+├── test_proxy.py                # Proxy functionality tests
+├── test_proxy_integration.py    # Proxy integration tests
+├── test_master_config.py        # Master configuration tests
+└── README.md                    # This file
 ```
 
 ## License

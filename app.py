@@ -2,9 +2,10 @@ import os
 import json
 import logging
 import secrets
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 import docker
 from datetime import datetime
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -244,7 +245,7 @@ def create_instance():
             'message': 'Instance created successfully',
             'server_name': server_name,
             'port': port,
-            'url': f'http://{request.host.split(":")[0]}:{port}'
+            'url': f'/proxy/{port}/'
         }), 201
         
     except Exception as e:
@@ -396,6 +397,100 @@ def reset_instance(server_name):
 def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
+
+@app.route('/proxy/<int:port>/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
+@app.route('/proxy/<int:port>/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
+def proxy(port, path):
+    """Proxy endpoint to forward requests to Home Assistant instances
+    
+    This allows users to access HA instances through the portal without
+    exposing individual instance ports. All traffic goes through the 
+    portal's single endpoint (port 5000).
+    """
+    # Verify that the port belongs to a valid instance
+    instances = load_instances()
+    valid_port = False
+    for inst in instances.values():
+        if inst['port'] == port:
+            valid_port = True
+            break
+    
+    if not valid_port:
+        return jsonify({'error': 'Instance not found'}), 404
+    
+    # Build the target URL
+    target_url = f'http://localhost:{port}/{path}'
+    
+    # Get query string if present
+    if request.query_string:
+        target_url += f'?{request.query_string.decode("utf-8")}'
+    
+    # Check if this is a WebSocket upgrade request
+    if request.headers.get('Upgrade', '').lower() == 'websocket':
+        return jsonify({'error': 'WebSocket connections not supported through proxy. Please use direct port access.'}), 400
+    
+    try:
+        # Forward the request to the HA instance
+        # Copy headers but modify Host and other proxy-specific headers
+        headers = {}
+        for key, value in request.headers.items():
+            # Skip hop-by-hop headers
+            if key.lower() not in ['host', 'connection', 'keep-alive', 'proxy-authenticate', 
+                                   'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 
+                                   'upgrade']:
+                headers[key] = value
+        
+        # Make the request to the backend
+        if request.method == 'GET':
+            resp = requests.get(target_url, headers=headers, stream=True, timeout=30)
+        elif request.method == 'POST':
+            resp = requests.post(target_url, headers=headers, data=request.get_data(), 
+                               stream=True, timeout=30)
+        elif request.method == 'PUT':
+            resp = requests.put(target_url, headers=headers, data=request.get_data(), 
+                              stream=True, timeout=30)
+        elif request.method == 'DELETE':
+            resp = requests.delete(target_url, headers=headers, stream=True, timeout=30)
+        elif request.method == 'PATCH':
+            resp = requests.patch(target_url, headers=headers, data=request.get_data(), 
+                                stream=True, timeout=30)
+        elif request.method == 'OPTIONS':
+            resp = requests.options(target_url, headers=headers, stream=True, timeout=30)
+        elif request.method == 'HEAD':
+            resp = requests.head(target_url, headers=headers, timeout=30)
+        else:
+            return jsonify({'error': f'Method {request.method} not supported'}), 405
+        
+        # Build response headers
+        response_headers = []
+        for key, value in resp.headers.items():
+            # Skip hop-by-hop headers
+            if key.lower() not in ['connection', 'keep-alive', 'proxy-authenticate', 
+                                   'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 
+                                   'upgrade']:
+                response_headers.append((key, value))
+        
+        # Stream the response back to the client
+        def generate():
+            for chunk in resp.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+        
+        return Response(
+            stream_with_context(generate()),
+            status=resp.status_code,
+            headers=response_headers
+        )
+        
+    except requests.exceptions.Timeout:
+        logger.error(f'Timeout while proxying to port {port}')
+        return jsonify({'error': 'Request timeout'}), 504
+    except requests.exceptions.ConnectionError:
+        logger.error(f'Connection error while proxying to port {port}')
+        return jsonify({'error': 'Cannot connect to instance. It may still be starting up.'}), 502
+    except Exception as e:
+        logger.error(f'Error proxying request to port {port}: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Proxy error'}), 500
 
 if __name__ == '__main__':
     # Clean up orphaned containers on startup
