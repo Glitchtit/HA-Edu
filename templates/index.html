@@ -52,6 +52,13 @@
             color: #333;
         }
         
+        .controls-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
         .add-button {
             background: #667eea;
             color: white;
@@ -70,6 +77,67 @@
         .add-button:disabled {
             background: #ccc;
             cursor: not-allowed;
+        }
+        
+        .btn-delete-all {
+            background: #e53e3e;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn-delete-all:hover {
+            background: #c53030;
+        }
+        
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        
+        .toggle-label {
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .toggle-container input[type="checkbox"] {
+            display: none;
+        }
+        
+        .toggle-slider {
+            position: relative;
+            width: 50px;
+            height: 24px;
+            background: #ccc;
+            border-radius: 24px;
+            transition: background 0.3s;
+        }
+        
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+        
+        .toggle-container input[type="checkbox"]:checked + .toggle-slider {
+            background: #48bb78;
+        }
+        
+        .toggle-container input[type="checkbox"]:checked + .toggle-slider::before {
+            transform: translateX(26px);
         }
         
         .instance-count {
@@ -298,7 +366,15 @@
         
         <div class="controls">
             <h2>Manage Instances</h2>
-            <button id="addNewBtn" class="add-button" onclick="openModal()">+ Add New Instance</button>
+            <div class="controls-row">
+                <button id="addNewBtn" class="add-button" onclick="openModal()">+ Add New Instance</button>
+                <button id="deleteAllBtn" class="btn-delete-all" onclick="openDeleteAllModal()" style="display:none;">Delete All</button>
+                <label class="toggle-container" style="display:none;" id="toggleContainer">
+                    <span class="toggle-label">Instance Creation:</span>
+                    <input type="checkbox" id="instanceCreationToggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
             <div class="instance-count">
                 <span id="instanceCount">{{ instances|length }}</span> instances active
             </div>
@@ -394,9 +470,51 @@
         </div>
     </div>
     
+    <!-- Delete All Instances Modal -->
+    <div id="deleteAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Delete All Instances</h2>
+            <p>Enter admin password to delete <strong>all instances</strong>.</p>
+            <p style="color: #e53e3e; margin: 10px 0;"><strong>Warning:</strong> This will permanently delete ALL instances and all their data!</p>
+            <form id="deleteAllInstancesForm">
+                <div class="form-group">
+                    <label for="deleteAllAdminPassword">Admin Password:</label>
+                    <input type="password" id="deleteAllAdminPassword" name="deleteAllAdminPassword" required 
+                           placeholder="Enter admin password">
+                </div>
+                <div id="deleteAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeDeleteAllModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="deleteAllSubmitBtn">Delete All</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Toggle Instance Creation Modal -->
+    <div id="toggleModal" class="modal">
+        <div class="modal-content">
+            <h2>Toggle Instance Creation</h2>
+            <p>Enter admin password to <strong id="toggleAction"></strong> instance creation.</p>
+            <form id="toggleInstanceCreationForm">
+                <div class="form-group">
+                    <label for="toggleAdminPassword">Admin Password:</label>
+                    <input type="password" id="toggleAdminPassword" name="toggleAdminPassword" required 
+                           placeholder="Enter admin password">
+                </div>
+                <div id="toggleModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeToggleModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="toggleSubmitBtn">Confirm</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         let currentResetServer = null;
         let currentDeleteServer = null;
+        let pendingToggleState = null;
         
         // Check if admin password is enabled on page load
         async function checkAdminEnabled() {
@@ -409,9 +527,31 @@
                     document.querySelectorAll('.btn-reset').forEach(btn => {
                         btn.style.display = 'inline-block';
                     });
+                    // Show delete all button and toggle container
+                    document.getElementById('deleteAllBtn').style.display = 'inline-block';
+                    document.getElementById('toggleContainer').style.display = 'flex';
                 }
             } catch (error) {
                 console.error('Failed to check admin status:', error);
+            }
+        }
+        
+        // Check instance creation status
+        async function checkInstanceCreationStatus() {
+            try {
+                const response = await fetch('/api/settings/instance-creation');
+                const data = await response.json();
+                
+                const toggle = document.getElementById('instanceCreationToggle');
+                const addBtn = document.getElementById('addNewBtn');
+                toggle.checked = data.instance_creation_enabled;
+                addBtn.disabled = !data.instance_creation_enabled;
+                
+                if (!data.instance_creation_enabled) {
+                    addBtn.title = 'Instance creation is currently disabled';
+                }
+            } catch (error) {
+                console.error('Failed to check instance creation status:', error);
             }
         }
         
@@ -451,17 +591,49 @@
             currentDeleteServer = null;
         }
         
+        function openDeleteAllModal() {
+            document.getElementById('deleteAllModal').style.display = 'block';
+            document.getElementById('deleteAllModalMessage').innerHTML = '';
+            document.getElementById('deleteAllInstancesForm').reset();
+        }
+        
+        function closeDeleteAllModal() {
+            document.getElementById('deleteAllModal').style.display = 'none';
+        }
+        
+        function openToggleModal(enabled) {
+            pendingToggleState = enabled;
+            const action = enabled ? 'enable' : 'disable';
+            document.getElementById('toggleAction').textContent = action;
+            document.getElementById('toggleModal').style.display = 'block';
+            document.getElementById('toggleModalMessage').innerHTML = '';
+            document.getElementById('toggleInstanceCreationForm').reset();
+        }
+        
+        function closeToggleModal() {
+            document.getElementById('toggleModal').style.display = 'none';
+            pendingToggleState = null;
+            // Revert toggle state if cancelled
+            checkInstanceCreationStatus();
+        }
+        
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
             const resetModal = document.getElementById('resetModal');
             const deleteModal = document.getElementById('deleteModal');
+            const deleteAllModal = document.getElementById('deleteAllModal');
+            const toggleModal = document.getElementById('toggleModal');
             if (event.target === addModal) {
                 closeModal();
             } else if (event.target === resetModal) {
                 closeResetModal();
             } else if (event.target === deleteModal) {
                 closeDeleteModal();
+            } else if (event.target === deleteAllModal) {
+                closeDeleteAllModal();
+            } else if (event.target === toggleModal) {
+                closeToggleModal();
             }
         }
         
@@ -591,6 +763,96 @@
             }
         });
         
+        document.getElementById('deleteAllInstancesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('deleteAllSubmitBtn');
+            const messageDiv = document.getElementById('deleteAllModalMessage');
+            
+            const adminPassword = document.getElementById('deleteAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Deleting...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/instances/delete-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">${data.message}. Reloading...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Delete All';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Failed to delete all instances: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Delete All';
+            }
+        });
+        
+        document.getElementById('toggleInstanceCreationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('toggleSubmitBtn');
+            const messageDiv = document.getElementById('toggleModalMessage');
+            
+            const adminPassword = document.getElementById('toggleAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/settings/instance-creation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword,
+                        enabled: pendingToggleState
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">${data.message}. Reloading...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Confirm';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Failed to update setting: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Confirm';
+            }
+        });
+        
+        // Handle toggle change
+        document.getElementById('instanceCreationToggle').addEventListener('change', function(e) {
+            openToggleModal(e.target.checked);
+        });
+        
         async function resetInstance(serverName) {
             openResetModal(serverName);
         }
@@ -608,6 +870,7 @@
         // Initialize page
         updateInstanceCount();
         checkAdminEnabled();
+        checkInstanceCreationStatus();
     </script>
 </body>
 </html>
