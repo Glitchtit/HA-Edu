@@ -22,18 +22,44 @@ HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 
-def load_instances():
-    """Load instances from JSON file"""
+def load_data():
+    """Load all data from JSON file"""
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+            data = json.load(f)
+            # Handle legacy format - if data is just instances dict
+            if 'instances' not in data and 'settings' not in data:
+                return {'instances': data, 'settings': {'instance_creation_enabled': True}}
+            return data
+    return {'instances': {}, 'settings': {'instance_creation_enabled': True}}
+
+def save_data(data):
+    """Save all data to JSON file"""
+    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+    with open(DATA_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
+def load_instances():
+    """Load instances from JSON file"""
+    data = load_data()
+    return data.get('instances', {})
 
 def save_instances(instances):
     """Save instances to JSON file"""
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    with open(DATA_FILE, 'w') as f:
-        json.dump(instances, f, indent=2)
+    data = load_data()
+    data['instances'] = instances
+    save_data(data)
+
+def load_settings():
+    """Load settings from JSON file"""
+    data = load_data()
+    return data.get('settings', {'instance_creation_enabled': True})
+
+def save_settings(settings):
+    """Save settings to JSON file"""
+    data = load_data()
+    data['settings'] = settings
+    save_data(data)
 
 def get_available_port():
     """Get next available port for a new instance
@@ -220,6 +246,11 @@ def get_instances():
 @app.route('/api/instances', methods=['POST'])
 def create_instance():
     """API endpoint to create a new Home Assistant instance"""
+    # Check if instance creation is enabled
+    settings = load_settings()
+    if not settings.get('instance_creation_enabled', True):
+        return jsonify({'error': 'Instance creation is currently disabled'}), 403
+    
     data = request.json
     server_name = data.get('server_name', '').strip()
     
@@ -427,6 +458,88 @@ def reset_instance(server_name):
 def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
+
+@app.route('/api/instances/delete-all', methods=['POST'])
+def delete_all_instances():
+    """API endpoint to delete all instances (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    instances = load_instances()
+    
+    if not instances:
+        return jsonify({'message': 'No instances to delete'}), 200
+    
+    deleted_count = 0
+    failed_count = 0
+    
+    try:
+        # Delete all instances
+        for server_name, instance in list(instances.items()):
+            try:
+                # Stop and remove container
+                try:
+                    container = client.containers.get(instance['container_id'])
+                    container.stop()
+                    container.remove()
+                except docker.errors.NotFound:
+                    pass  # Container already removed
+                
+                deleted_count += 1
+            except Exception as e:
+                logger.error(f'Failed to delete instance {server_name}: {str(e)}')
+                failed_count += 1
+        
+        # Clear all instances
+        save_instances({})
+        
+        return jsonify({
+            'message': f'Successfully deleted {deleted_count} instance(s)',
+            'deleted_count': deleted_count,
+            'failed_count': failed_count
+        }), 200
+        
+    except Exception as e:
+        logger.error(f'Failed to delete all instances: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to delete all instances. Please try again or contact support.'}), 500
+
+@app.route('/api/settings/instance-creation', methods=['GET'])
+def get_instance_creation_status():
+    """API endpoint to get instance creation status"""
+    settings = load_settings()
+    return jsonify({
+        'instance_creation_enabled': settings.get('instance_creation_enabled', True)
+    }), 200
+
+@app.route('/api/settings/instance-creation', methods=['POST'])
+def set_instance_creation_status():
+    """API endpoint to set instance creation status (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    enabled = data.get('enabled', True)
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    settings = load_settings()
+    settings['instance_creation_enabled'] = enabled
+    save_settings(settings)
+    
+    return jsonify({
+        'message': 'Instance creation status updated successfully',
+        'instance_creation_enabled': enabled
+    }), 200
 
 def render_proxy_error(status_code, title, message, details=None, suggestions=None) -> tuple:
     """Render a user-friendly HTML error page for proxy errors
