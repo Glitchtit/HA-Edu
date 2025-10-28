@@ -236,6 +236,36 @@
             cursor: not-allowed;
         }
         
+        .btn-teacher-access {
+            background: #9f7aea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn-teacher-access:hover {
+            background: #805ad5;
+        }
+        
+        .btn-teacher-access:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .teacher-access-badge {
+            display: inline-block;
+            background: #d6bcfa;
+            color: #553c9a;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        
         .status-badge {
             display: inline-block;
             padding: 4px 8px;
@@ -423,7 +453,12 @@
             {% if instances %}
                 {% for name, instance in instances.items() %}
                 <div class="instance-card" data-server-name="{{ name }}">
-                    <h3>{{ name }}</h3>
+                    <h3>
+                        {{ name }}
+                        {% if instance.get('teacher_access_added', False) %}
+                        <span class="teacher-access-badge">👨‍🏫 Teacher Access</span>
+                        {% endif %}
+                    </h3>
                     <div class="instance-info">
                         <strong>Port:</strong> {{ instance.port }}
                     </div>
@@ -435,6 +470,10 @@
                     </div>
                     <div class="instance-actions">
                         <a href="/proxy/{{ instance.port }}/" target="_blank" class="btn-access">Access</a>
+                        <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
+                                {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
+                            👨‍🏫 Teacher
+                        </button>
                         <button class="btn-reset hidden" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Reset</button>
                         <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Delete</button>
                     </div>
@@ -550,9 +589,40 @@
         </div>
     </div>
     
+    <!-- Add Teacher Access Modal -->
+    <div id="teacherAccessModal" class="modal">
+        <div class="modal-content">
+            <h2>👨‍🏫 Add Teacher Access</h2>
+            <p>Enter admin password to add teacher access to <strong id="teacherAccessServerName"></strong>.</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ What does this do?</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Creates a secondary admin account for the teacher (<strong id="teacherUsernameDisplay"></strong>)</li>
+                    <li>Student's account and data remain unchanged</li>
+                    <li>Allows teacher to monitor student progress</li>
+                    <li>Can only be used after student completes onboarding</li>
+                </ul>
+            </div>
+            <div id="teacherAccessStatus" style="margin: 10px 0;"></div>
+            <form id="teacherAccessForm">
+                <div class="form-group">
+                    <label for="teacherAccessAdminPassword">Admin Password:</label>
+                    <input type="password" id="teacherAccessAdminPassword" name="teacherAccessAdminPassword" required 
+                           placeholder="Enter admin password">
+                </div>
+                <div id="teacherAccessModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeTeacherAccessModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="teacherAccessSubmitBtn">Add Teacher Access</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         let currentResetServer = null;
         let currentDeleteServer = null;
+        let currentTeacherAccessServer = null;
         let pendingToggleState = null;
         
         // Check if admin password is enabled on page load
@@ -572,6 +642,25 @@
                 }
             } catch (error) {
                 console.error('Failed to check admin status:', error);
+            }
+        }
+        
+        // Check if teacher access feature is enabled
+        async function checkTeacherAccessEnabled() {
+            try {
+                const response = await fetch('/api/settings/teacher-access');
+                const data = await response.json();
+                
+                if (data.teacher_access_enabled) {
+                    // Show all teacher access buttons
+                    document.querySelectorAll('.btn-teacher-access').forEach(btn => {
+                        btn.classList.remove('hidden');
+                    });
+                    // Store teacher username for display
+                    window.teacherUsername = data.teacher_username;
+                }
+            } catch (error) {
+                console.error('Failed to check teacher access status:', error);
             }
         }
         
@@ -656,6 +745,36 @@
             checkInstanceCreationStatus();
         }
         
+        function openTeacherAccessModal(serverName) {
+            currentTeacherAccessServer = serverName;
+            document.getElementById('teacherAccessServerName').textContent = serverName;
+            document.getElementById('teacherUsernameDisplay').textContent = window.teacherUsername || 'teacher';
+            document.getElementById('teacherAccessModal').style.display = 'block';
+            document.getElementById('teacherAccessModalMessage').innerHTML = '';
+            document.getElementById('teacherAccessForm').reset();
+            
+            // Check if teacher access has already been added
+            const instances = document.querySelectorAll('.instance-card');
+            instances.forEach(card => {
+                if (card.dataset.serverName === serverName) {
+                    const hasBadge = card.querySelector('.teacher-access-badge');
+                    if (hasBadge) {
+                        document.getElementById('teacherAccessStatus').innerHTML = 
+                            '<div style="background: #d6bcfa; color: #553c9a; padding: 10px; border-radius: 5px; margin: 10px 0;">' +
+                            '✓ Teacher access has already been added to this instance' +
+                            '</div>';
+                    } else {
+                        document.getElementById('teacherAccessStatus').innerHTML = '';
+                    }
+                }
+            });
+        }
+        
+        function closeTeacherAccessModal() {
+            document.getElementById('teacherAccessModal').style.display = 'none';
+            currentTeacherAccessServer = null;
+        }
+        
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
@@ -663,6 +782,7 @@
             const deleteModal = document.getElementById('deleteModal');
             const deleteAllModal = document.getElementById('deleteAllModal');
             const toggleModal = document.getElementById('toggleModal');
+            const teacherAccessModal = document.getElementById('teacherAccessModal');
             if (event.target === addModal) {
                 closeModal();
             } else if (event.target === resetModal) {
@@ -673,6 +793,8 @@
                 closeDeleteAllModal();
             } else if (event.target === toggleModal) {
                 closeToggleModal();
+            } else if (event.target === teacherAccessModal) {
+                closeTeacherAccessModal();
             }
         }
         
@@ -887,6 +1009,48 @@
             }
         });
         
+        document.getElementById('teacherAccessForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('teacherAccessSubmitBtn');
+            const messageDiv = document.getElementById('teacherAccessModalMessage');
+            
+            const adminPassword = document.getElementById('teacherAccessAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Adding...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentTeacherAccessServer)}/add-teacher-access`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Teacher access added successfully! Username: ${data.teacher_username}. Reloading...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Add Teacher Access';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Failed to add teacher access: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Teacher Access';
+            }
+        });
+        
         // Handle toggle change
         document.getElementById('instanceCreationToggle').addEventListener('change', function(e) {
             openToggleModal(e.target.checked);
@@ -900,6 +1064,10 @@
             openDeleteModal(serverName);
         }
         
+        async function addTeacherAccess(serverName) {
+            openTeacherAccessModal(serverName);
+        }
+        
         // Update instance count
         function updateInstanceCount() {
             const instanceCount = document.querySelectorAll('.instance-card').length;
@@ -909,6 +1077,7 @@
         // Initialize page
         updateInstanceCount();
         checkAdminEnabled();
+        checkTeacherAccessEnabled();
         checkInstanceCreationStatus();
     </script>
 </body>
