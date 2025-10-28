@@ -3,10 +3,13 @@ import json
 import logging
 import secrets
 import re
+import threading
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
+from flask_sock import Sock
 import docker
 from datetime import datetime
 import requests
+import simple_websocket
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +20,9 @@ app = Flask(__name__, static_folder=None)
 # Set a secret key for session management
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 client = docker.from_env()
+
+# Initialize WebSocket support
+sock = Sock(app)
 
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
@@ -917,6 +923,153 @@ def proxy(port, path):
                 'If the problem persists, contact support'
             ]
         )
+
+def proxy_websocket_connection(client_ws, backend_url, port):
+    """Proxy a WebSocket connection between client and Home Assistant backend
+    
+    Args:
+        client_ws: The client WebSocket connection (flask-sock)
+        backend_url: The backend WebSocket URL (ws://...)
+        port: The port number for logging
+    """
+    backend_ws = None
+    try:
+        # Connect to the backend WebSocket
+        logger.info(f'Establishing WebSocket connection to backend: {backend_url}')
+        backend_ws = simple_websocket.Client(backend_url)
+        logger.info(f'WebSocket connection established for port {port}')
+        
+        # Create two threads to forward messages in both directions
+        client_to_backend_error = []
+        backend_to_client_error = []
+        
+        def forward_client_to_backend():
+            """Forward messages from client to backend"""
+            try:
+                while True:
+                    try:
+                        # Receive message from client
+                        message = client_ws.receive(timeout=0.1)
+                        if message is None:
+                            continue
+                        # Send to backend
+                        backend_ws.send(message)
+                    except simple_websocket.ConnectionClosed:
+                        logger.info(f'Client WebSocket closed for port {port}')
+                        break
+                    except Exception as e:
+                        if 'timeout' not in str(e).lower():
+                            logger.warning(f'Error forwarding client->backend for port {port}: {e}')
+                            client_to_backend_error.append(e)
+                            break
+            except Exception as e:
+                logger.error(f'Fatal error in client->backend thread for port {port}: {e}')
+                client_to_backend_error.append(e)
+        
+        def forward_backend_to_client():
+            """Forward messages from backend to client"""
+            try:
+                while True:
+                    try:
+                        # Receive message from backend
+                        message = backend_ws.receive(timeout=0.1)
+                        if message is None:
+                            continue
+                        # Send to client
+                        client_ws.send(message)
+                    except simple_websocket.ConnectionClosed:
+                        logger.info(f'Backend WebSocket closed for port {port}')
+                        break
+                    except Exception as e:
+                        if 'timeout' not in str(e).lower():
+                            logger.warning(f'Error forwarding backend->client for port {port}: {e}')
+                            backend_to_client_error.append(e)
+                            break
+            except Exception as e:
+                logger.error(f'Fatal error in backend->client thread for port {port}: {e}')
+                backend_to_client_error.append(e)
+        
+        # Start forwarding threads
+        client_thread = threading.Thread(target=forward_client_to_backend, daemon=True)
+        backend_thread = threading.Thread(target=forward_backend_to_client, daemon=True)
+        
+        client_thread.start()
+        backend_thread.start()
+        
+        # Wait for both threads to complete
+        client_thread.join()
+        backend_thread.join()
+        
+        logger.info(f'WebSocket proxy closed for port {port}')
+        
+    except simple_websocket.ConnectionError as e:
+        logger.error(f'Failed to connect to backend WebSocket at {backend_url}: {e}')
+        try:
+            client_ws.close(reason=1011, message=f'Backend connection failed: {str(e)}')
+        except:
+            pass
+    except Exception as e:
+        logger.error(f'Error in WebSocket proxy for port {port}: {e}', exc_info=True)
+        try:
+            client_ws.close(reason=1011, message='Proxy error')
+        except:
+            pass
+    finally:
+        # Clean up connections
+        if backend_ws:
+            try:
+                backend_ws.close()
+            except:
+                pass
+
+@sock.route('/api/websocket')
+@sock.route('/proxy/<int:port>/api/websocket')
+def websocket_proxy(ws, port=None):
+    """WebSocket proxy endpoint for Home Assistant WebSocket API
+    
+    This handler proxies WebSocket connections from clients to Home Assistant instances.
+    It supports both direct paths (/api/websocket) and proxy paths (/proxy/{port}/api/websocket).
+    """
+    # If port is not in the URL, try to determine it from session or single instance
+    if port is None:
+        # Try to get port from session
+        if 'proxy_port' in session:
+            port = session['proxy_port']
+            logger.info(f'Using port {port} from session for WebSocket')
+        else:
+            # Check if there's only one instance
+            instances = load_instances()
+            if len(instances) == 1:
+                port = list(instances.values())[0]['port']
+                logger.info(f'Using single instance port {port} for WebSocket')
+            else:
+                logger.error(f'Cannot determine target instance for WebSocket. {len(instances)} instances available.')
+                ws.close(reason=1008, message='Unable to determine target instance')
+                return
+    
+    # Verify that the port belongs to a valid instance
+    instances = load_instances()
+    valid_port = False
+    for inst in instances.values():
+        if inst['port'] == port:
+            valid_port = True
+            break
+    
+    if not valid_port:
+        logger.warning(f'Invalid port {port} requested for WebSocket')
+        ws.close(reason=1008, message=f'Invalid instance port {port}')
+        return
+    
+    # Store port in session for future requests
+    session['proxy_port'] = port
+    
+    # Build the backend WebSocket URL
+    backend_url = f'ws://192.168.50.111:{port}/api/websocket'
+    
+    logger.info(f'WebSocket proxy established for port {port}')
+    
+    # Proxy the WebSocket connection
+    proxy_websocket_connection(ws, backend_url, port)
 
 if __name__ == '__main__':
     # Clean up orphaned containers on startup
