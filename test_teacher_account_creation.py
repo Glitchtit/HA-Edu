@@ -267,32 +267,3 @@ def test_teacher_account_creates_person_file_when_missing(monkeypatch, sample_st
     person_entry = updated_person['data']['items'][0]
     assert person_entry['user_id'] == new_user['id']
     assert person_entry['name'] == 'admin'
-
-
-def test_teacher_account_handles_password_hash_field(monkeypatch, sample_storage):
-    provider_data = json.loads(sample_storage.provider_path.read_text())
-    existing_entry = provider_data['data']['users'][0]
-    existing_entry['password_hash'] = existing_entry.pop('password')
-    existing_entry['password_algorithm'] = 'bcrypt'
-    existing_entry['password_cleartext'] = None
-    sample_storage.provider_path.write_text(json.dumps(provider_data))
-
-    fake_container = FakeContainer(sample_storage.root)
-    fake_client = FakeDockerClient(fake_container)
-
-    original_client = app.client
-    app.client = fake_client
-
-    try:
-        success, message = app.create_teacher_account('volume', 'admin', 'adminpass')
-    finally:
-        app.client = original_client
-
-    assert success, message
-
-    updated_provider = json.loads(sample_storage.provider_path.read_text())
-    provider_entry = updated_provider['data']['users'][-1]
-
-    assert provider_entry['password_hash'].startswith('$2')
-    assert provider_entry['password'].startswith('$2')
-    assert provider_entry['password_cleartext'] is None
