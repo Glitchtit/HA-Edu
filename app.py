@@ -690,7 +690,9 @@ def proxy(port, path):
     # Flask cannot maintain a persistent websocket connection. This allows the backend
     # to respond with an appropriate error/fallback rather than us blocking it immediately.
     # Home Assistant's frontend can then handle the websocket failure gracefully (e.g., via polling).
-    is_websocket_upgrade = request.headers.get('Upgrade', '').lower() == 'websocket'
+    # According to RFC 6455, a valid websocket upgrade requires both headers
+    is_websocket_upgrade = (request.headers.get('Upgrade', '').lower() == 'websocket' and
+                           'upgrade' in request.headers.get('Connection', '').lower())
     if is_websocket_upgrade:
         logger.info(f'WebSocket upgrade request detected for port {port}, forwarding to backend')
     
@@ -710,11 +712,6 @@ def proxy(port, path):
 
         # Set the correct Host header for the backend
         headers['Host'] = f'192.168.50.111:{port}'
-        
-        # For websocket upgrade, ensure Connection and Upgrade headers are set properly
-        if is_websocket_upgrade:
-            headers['Connection'] = 'Upgrade'
-            headers['Upgrade'] = 'websocket'
         
         # Add proxy headers that HA needs
         headers['X-Forwarded-For'] = request.remote_addr
