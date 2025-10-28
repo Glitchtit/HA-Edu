@@ -16,7 +16,7 @@ client = docker.from_env()
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
 BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
-MAX_INSTANCES = int(os.getenv('MAX_INSTANCES', '15'))
+# MAX_INSTANCES removed - no limit on instances, ports assigned dynamically
 HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 
@@ -34,21 +34,27 @@ def save_instances(instances):
         json.dump(instances, f, indent=2)
 
 def get_available_port():
-    """Get next available port for a new instance"""
-    instances = load_instances()
-    used_ports = [inst['port'] for inst in instances.values()]
+    """Get next available port for a new instance
     
-    for i in range(MAX_INSTANCES):
-        port = BASE_PORT + i
-        if port not in used_ports:
-            return port
-    return None
+    Dynamically assigns ports starting from BASE_PORT.
+    Reuses ports from deleted instances before assigning new ones.
+    """
+    instances = load_instances()
+    used_ports = set(inst['port'] for inst in instances.values())
+    
+    # Start from BASE_PORT and find the first available port
+    port = BASE_PORT
+    while port in used_ports:
+        port += 1
+    
+    return port
 
 @app.route('/')
 def index():
     """Main page with instance management UI"""
     instances = load_instances()
-    return render_template('index.html', instances=instances, max_instances=MAX_INSTANCES)
+    # No max_instances limit - show active count only
+    return render_template('index.html', instances=instances)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
@@ -72,19 +78,15 @@ def create_instance():
     if server_name in instances:
         return jsonify({'error': 'Server name already exists'}), 400
     
-    # Check if we've reached max instances
-    if len(instances) >= MAX_INSTANCES:
-        return jsonify({'error': f'Maximum number of instances ({MAX_INSTANCES}) reached'}), 400
-    
-    # Get available port
+    # Get available port (no limit check - dynamic port assignment)
     port = get_available_port()
-    if port is None:
-        return jsonify({'error': 'No available ports'}), 500
     
     try:
         # Create container
         container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
         
+        # Network configuration: Create container with bridge network for internet access
+        # but isolated from host LAN. This works with Cloudflare tunnel setup.
         container = client.containers.run(
             HA_IMAGE,
             name=container_name,
@@ -96,7 +98,9 @@ def create_instance():
             volumes={
                 container_name: {'bind': '/config', 'mode': 'rw'}
             },
-            restart_policy={'Name': 'unless-stopped'}
+            restart_policy={'Name': 'unless-stopped'},
+            # Use default bridge network for isolation from host LAN
+            network_mode='bridge'
         )
         
         # Save instance info
@@ -219,6 +223,7 @@ def reset_instance(server_name):
             pass  # Volume doesn't exist or already removed
         
         # Create a new container with the same configuration
+        # Network configuration: Use bridge network for isolation from host LAN
         new_container = client.containers.run(
             HA_IMAGE,
             name=container_name,
@@ -230,7 +235,8 @@ def reset_instance(server_name):
             volumes={
                 volume_name: {'bind': '/config', 'mode': 'rw'}
             },
-            restart_policy={'Name': 'unless-stopped'}
+            restart_policy={'Name': 'unless-stopped'},
+            network_mode='bridge'
         )
         
         # Update instance info with new container ID

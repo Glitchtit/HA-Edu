@@ -6,19 +6,31 @@ services:
     container_name: ha-edu-portal
     ports:
       - "5000:5000"
+      # Note: Individual HA instance ports are dynamically assigned and managed by the portal
+      # No need to pre-allocate port ranges
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/data
     environment:
       - BASE_PORT=8123
-      - MAX_INSTANCES=15
+      # MAX_INSTANCES removed - no limit, ports assigned dynamically
       - DATA_FILE=/data/instances.json
       - HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     restart: unless-stopped
     networks:
       - ha-edu-network
+    # Network isolation: Portal can access Docker socket to manage containers
+    # Created HA containers use bridge network (isolated from host LAN)
+    # Internet access via NAT, LAN devices not accessible
+    # Access via Cloudflare tunnel (edu.wredlund.fi) for external connectivity
 
 networks:
   ha-edu-network:
     driver: bridge
+    # Bridge network provides isolation from host LAN while allowing internet access
+    # Containers on this network cannot discover devices on the host's LAN
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.driver.mtu: "1500"

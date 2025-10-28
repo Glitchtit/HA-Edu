@@ -300,7 +300,7 @@
             <h2>Manage Instances</h2>
             <button id="addNewBtn" class="add-button" onclick="openModal()">+ Add New Instance</button>
             <div class="instance-count">
-                <span id="instanceCount">{{ instances|length }}</span> / {{ max_instances }} instances active
+                <span id="instanceCount">{{ instances|length }}</span> instances active
             </div>
         </div>
         
@@ -399,14 +399,6 @@
         }
         
         function openModal() {
-            const instanceCount = parseInt(document.getElementById('instanceCount').textContent);
-            const maxInstances = {{ max_instances }};
-            
-            if (instanceCount >= maxInstances) {
-                alert('Maximum number of instances reached!');
-                return;
-            }
-            
             document.getElementById('addModal').style.display = 'block';
             document.getElementById('modalMessage').innerHTML = '';
             document.getElementById('addInstanceForm').reset();
@@ -556,10 +548,6 @@
         function updateInstanceCount() {
             const instanceCount = document.querySelectorAll('.instance-card').length;
             document.getElementById('instanceCount').textContent = instanceCount;
-            
-            const maxInstances = {{ max_instances }};
-            const addBtn = document.getElementById('addNewBtn');
-            addBtn.disabled = instanceCount >= maxInstances;
         }
         
         // Initialize page

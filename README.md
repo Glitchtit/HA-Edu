@@ -9,10 +9,13 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 - 🔐 **Password Protected**: Each instance can have its own password
 - 🔑 **Admin Password**: Optional admin password for managing all instances
 - ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
-- 📊 **Instance Management**: View and manage up to 15 concurrent instances
+- 📊 **Instance Management**: View and manage unlimited instances
 - 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
-- 🔄 **Automatic Port Assignment**: Systematically assigns ports from 8123-8137
+- 🔄 **Automatic Port Assignment**: Dynamically assigns ports starting from BASE_PORT (default: 8123)
+- ♻️ **Port Reuse**: Automatically reuses ports from deleted instances
+- 🌐 **Network Isolation**: Instances have internet access but are isolated from host LAN
 - 📱 **Responsive UI**: Clean, modern interface that works on all devices
+- ☁️ **Cloudflare Tunnel Ready**: Designed to work with Cloudflare tunnel for secure external access
 
 ## Quick Start
 
@@ -42,15 +45,29 @@ docker-compose up -d
 2. Configure the following settings:
    - **Repository**: Build from this repository or use a pre-built image
    - **Port**: `5000` (WebUI)
-   - **Ports for HA instances**: `8123-8137` (15 instances)
+   - **Ports for HA instances**: Dynamic - no need to pre-allocate ports
    - **Volume Mappings**:
      - Container Path: `/var/run/docker.sock` → Host Path: `/var/run/docker.sock`
      - Container Path: `/data` → Host Path: `/mnt/user/appdata/ha-edu`
    - **Environment Variables**:
-     - `BASE_PORT`: `8123` (starting port for instances)
-     - `MAX_INSTANCES`: `15` (maximum number of instances)
+     - `BASE_PORT`: `8123` (starting port for instances, assigned dynamically)
      - `HA_IMAGE`: `ghcr.io/home-assistant/home-assistant:stable`
      - `ADMIN_PASSWORD`: (optional) Admin password for reset functionality
+   - **Network Mode**: `bridge` (for proper isolation)
+
+### Network Isolation & Cloudflare Tunnel
+
+The portal is designed to work with Cloudflare tunnel for secure external access:
+- **Internet Access**: ✅ Instances can access the internet (via NAT)
+- **LAN Access**: ❌ Instances are isolated from the host's LAN network
+- **Device Discovery**: ❌ Instances cannot discover devices on the main network
+- **External Access**: ✅ Via Cloudflare tunnel (e.g., edu.wredlund.fi)
+
+To set up Cloudflare tunnel:
+1. Install cloudflared on your Unraid server
+2. Create a tunnel and point it to the portal (port 5000)
+3. Configure authentication in Cloudflare dashboard
+4. Users access instances through the portal UI via the tunnel
 
 ### Manual Docker Build
 
@@ -62,11 +79,9 @@ docker build -t ha-edu-portal .
 docker run -d \
   --name ha-edu-portal \
   -p 5000:5000 \
-  -p 8123-8137:8123-8137 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v $(pwd)/data:/data \
   -e BASE_PORT=8123 \
-  -e MAX_INSTANCES=15 \
   ha-edu-portal
 ```
 
@@ -103,8 +118,7 @@ Environment variables can be configured to customize the portal:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_PORT` | `8123` | Starting port number for HA instances |
-| `MAX_INSTANCES` | `15` | Maximum number of concurrent instances |
+| `BASE_PORT` | `8123` | Starting port number for HA instances (dynamically assigned) |
 | `DATA_FILE` | `/data/instances.json` | Path to store instance data |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant Docker image to use |
 | `ADMIN_PASSWORD` | (empty) | Admin password for reset functionality. If not set, reset buttons are hidden |
@@ -119,38 +133,45 @@ The portal consists of:
 Each Home Assistant instance:
 - Runs in its own Docker container
 - Has a dedicated volume for configuration
-- Is accessible on a unique port (8123-8137)
+- Is accessible on a unique dynamically-assigned port
+- Uses bridge network mode for isolation from host LAN
+- Has internet access but cannot discover LAN devices
 - Runs in demo mode for educational purposes
 
 ## Port Assignment
 
-Ports are assigned sequentially:
+Ports are assigned dynamically:
 - Portal UI: `5000`
-- HA Instance 1: `8123`
-- HA Instance 2: `8124`
-- ...
-- HA Instance 15: `8137`
+- HA Instance 1: `8123` (BASE_PORT)
+- HA Instance 2: `8124` (BASE_PORT + 1)
+- HA Instance 3: `8125` (BASE_PORT + 2)
+- ... and so on
+
+When an instance is deleted, its port becomes available for reuse by new instances.
 
 ## Security Considerations
 
 - The portal requires access to the Docker socket (`/var/run/docker.sock`)
-- Consider running behind a reverse proxy with authentication
+- Consider running behind a reverse proxy with authentication (e.g., Cloudflare tunnel)
 - Password storage is simplified for educational use - enhance for production
 - Admin password provides elevated access - store securely (e.g., in Unraid environment variables)
 - Admin password enables reset of any instance, even after student passwords change
 - Limit network access to trusted networks only
+- **Network Isolation**: Instances are isolated from host LAN but have internet access
+- **Cloudflare Tunnel**: Recommended for secure external access with authentication
+- Instances cannot discover or access devices on the host's network
 
 ## Troubleshooting
 
 ### Container won't start
 - Check that Docker socket is accessible
-- Verify port range 8123-8137 is available
 - Check logs: `docker logs ha-edu-portal`
 
 ### Can't create instances
 - Ensure Docker socket permissions are correct
 - Check available disk space
 - Verify Docker can pull the Home Assistant image
+- Check if ports are available (firewall rules)
 
 ### Instance not accessible
 - Wait 1-2 minutes for Home Assistant to fully start
