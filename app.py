@@ -1009,8 +1009,6 @@ def proxy(port, path):
         headers['X-Forwarded-For'] = request.remote_addr
         headers['X-Forwarded-Proto'] = request.scheme
         headers['X-Forwarded-Host'] = request.host
-        headers['X-Forwarded-Prefix'] = f'/proxy/{port}'
-        headers['X-Ingress-Path'] = f'/proxy/{port}'
         
         # Make the request to the backend
         if request.method == 'GET':
