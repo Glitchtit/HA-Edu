@@ -573,6 +573,49 @@ def render_proxy_error(status_code, title, message, details=None, suggestions=No
                           details=details,
                           suggestions=suggestions), status_code
 
+@app.route('/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
+@app.route('/auth/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
+@app.route('/frontend_latest/<path:path>', methods=['GET'])
+@app.route('/static/<path:path>', methods=['GET'])
+@app.route('/local/<path:path>', methods=['GET'])
+@app.route('/service_worker.js', methods=['GET'])
+@app.route('/manifest.json', methods=['GET'])
+def proxy_fallback(path=''):
+    """Fallback proxy for requests that didn't include /proxy/{port}/ prefix
+    
+    This happens when Home Assistant's JavaScript makes API calls using relative URLs
+    or window.location.origin. We detect which instance by checking the Referer header.
+    """
+    # Get the referer to determine which instance this request is for
+    referer = request.headers.get('Referer', '')
+    
+    # Extract port from referer URL (e.g., http://domain/proxy/8123/)
+    port_match = re.search(r'/proxy/(\d+)/', referer)
+    
+    if not port_match:
+        logger.warning(f'API request to /{request.path} without valid referer: {referer}')
+        return jsonify({'error': 'Unable to determine target instance'}), 400
+    
+    port = int(port_match.group(1))
+    
+    # Verify the port belongs to a valid instance
+    instances = load_instances()
+    valid_port = False
+    for inst in instances.values():
+        if inst['port'] == port:
+            valid_port = True
+            break
+    
+    if not valid_port:
+        return jsonify({'error': 'Invalid instance port'}), 404
+    
+    # Build the full path from the request
+    full_path = request.path.lstrip('/')
+    
+    # Forward to the proxy function
+    logger.info(f'Fallback proxy: Redirecting /{full_path} to port {port}')
+    return proxy(port, full_path)
+
 @app.route('/proxy/<int:port>/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
 @app.route('/proxy/<int:port>/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'])
 def proxy(port, path):
@@ -609,6 +652,9 @@ def proxy(port, path):
     # Get query string if present
     if request.query_string:
         target_url += f'?{request.query_string.decode("utf-8")}'
+    
+    # Log the proxied request for debugging
+    logger.info(f'Proxying {request.method} request to: {target_url}')
     
     # Check if this is a WebSocket upgrade request
     if request.headers.get('Upgrade', '').lower() == 'websocket':
@@ -699,24 +745,53 @@ def proxy(port, path):
                 # This handles URLs like /frontend_latest/..., /static/..., etc.
                 proxy_prefix = f'/proxy/{port}'
                 
+                logger.debug(f'Rewriting {content_type} content (size: {len(text_content)} bytes)')
+                
                 # Replace common patterns in HTML and JavaScript
-                # Pattern 1: href="/..." and src="/..."
+                # Pattern 1: HTML attributes - href="/..." and src="/..."
                 text_content = re.sub(r'(href|src)="(/[^"]*)"', 
                                     rf'\1="{proxy_prefix}\2"', text_content)
-                # Pattern 2: action="/..."
+                
+                # Pattern 2: HTML attributes - action="/..."
                 text_content = re.sub(r'action="(/[^"]*)"', 
                                     rf'action="{proxy_prefix}\1"', text_content)
-                # Pattern 3: JavaScript fetch('/...') or similar
-                text_content = re.sub(r'(["\'])(/(?:api|frontend|static|local|auth|service_worker)[^"\']*)\1', 
+                
+                # Pattern 3: JavaScript string literals - "/"  or '/'
+                # Match any quoted string that starts with / followed by common HA paths
+                # This is more aggressive and catches fetch(), new URL(), etc.
+                text_content = re.sub(r'(["\'`])(/(?:api|frontend|static|local|auth|service_worker|hacsfiles|lovelace)[^"\'`]*)\1', 
                                     rf'\1{proxy_prefix}\2\1', text_content)
+                
+                # Pattern 4: Special case for route definitions and path checks
+                # Match patterns like: path:"/" or pathname==="/api" 
+                text_content = re.sub(r'(path\s*:\s*|pathname\s*===?\s*)(["\'`])(/[^"\'`]*)\2', 
+                                    rf'\1\2{proxy_prefix}\3\2', text_content)
+                
+                # Pattern 5: URL constructor and similar - new URL("/api/...", ...)
+                text_content = re.sub(r'(new\s+URL\s*\(\s*)(["\'`])(/[^"\'`]*)\2', 
+                                    rf'\1\2{proxy_prefix}\3\2', text_content)
+                
+                # Pattern 6: Standalone absolute paths in JavaScript - e.g., return "/api/..."
+                # Be careful not to match things that look like divisions or comments
+                text_content = re.sub(r'(\s|=|\(|,|return\s+)(["\'`])(/(?:api|frontend|static|local|auth)[^"\'`]*)\2', 
+                                    rf'\1\2{proxy_prefix}\3\2', text_content)
+                
+                # Pattern 7: Inject base tag for HTML documents to help with relative URLs
+                if 'text/html' in content_type and '<head>' in text_content:
+                    base_tag = f'<base href="{proxy_prefix}/">'
+                    text_content = text_content.replace('<head>', f'<head>{base_tag}', 1)
                 
                 # Update content-length header
                 response_headers = [(k, v) for k, v in response_headers if k.lower() != 'content-length']
                 response_headers.append(('Content-Length', str(len(text_content.encode('utf-8')))))
                 
                 return Response(text_content, status=resp.status_code, headers=response_headers)
+            except UnicodeDecodeError:
+                logger.debug(f'Content is not UTF-8 text, streaming as binary')
+                # Fall back to streaming original content
+                pass
             except Exception as e:
-                logger.warning(f'Failed to rewrite response content: {str(e)}')
+                logger.warning(f'Failed to rewrite response content: {str(e)}', exc_info=True)
                 # Fall back to streaming original content
                 pass
         
