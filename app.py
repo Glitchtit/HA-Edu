@@ -190,8 +190,20 @@ def index():
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
-    """API endpoint to get all instances"""
+    """API endpoint to get all instances with real-time status"""
     instances = load_instances()
+    
+    # Update status for each instance by checking actual container state
+    for server_name, instance in instances.items():
+        try:
+            container = client.containers.get(instance['container_id'])
+            instance['status'] = container.status
+        except docker.errors.NotFound:
+            instance['status'] = 'removed'
+        except Exception as e:
+            logger.warning(f'Failed to get status for {server_name}: {str(e)}')
+            instance['status'] = 'unknown'
+    
     return jsonify(instances)
 
 @app.route('/api/instances', methods=['POST'])
