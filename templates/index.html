@@ -629,7 +629,7 @@
                         <strong>Created:</strong> {{ instance.created_at.split('T')[0] }}
                     </div>
                     <div class="instance-actions">
-                        <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener noreferrer" class="btn-access">Access</a>
+                        <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Access</a>
                         <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
                                 {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
                             👨‍🏫 Teacher
