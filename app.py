@@ -5,6 +5,7 @@ import secrets
 import re
 import threading
 import bcrypt
+import urllib.parse
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 from flask_sock import Sock
 import docker
@@ -1502,11 +1503,31 @@ def proxy(port, path):
                 # Rewrite Location header for redirects to include proxy prefix
                 # This is crucial for Cloudflare tunnel compatibility
                 if key.lower() == 'location':
+                    original_value = value
                     # Check if this is a relative path (starts with /) and not already prefixed
                     if value.startswith('/') and not value.startswith(f'/proxy/{port}/'):
                         # Rewrite to include /proxy/{port}/ prefix
                         value = f'/proxy/{port}{value}'
                         logger.debug(f'Rewrote Location header to: {value}')
+                    # Handle absolute URLs that point to the backend instance
+                    # This prevents users from being kicked back to the app index after onboarding
+                    elif value.startswith('http://') or value.startswith('https://'):
+                        # Parse the URL to check if it's pointing to our backend
+                        # Backend URLs look like: http://192.168.50.111:{port}/path or http://localhost:{port}/path
+                        parsed = urllib.parse.urlparse(value)
+                        # Check if this is a redirect to the backend instance (same port)
+                        if parsed.port == port or (not parsed.port and port in [80, 443]):
+                            # Extract the path and rewrite it
+                            path_to_rewrite = parsed.path or '/'
+                            # Include query string if present
+                            if parsed.query:
+                                path_to_rewrite += f'?{parsed.query}'
+                            # Include fragment if present
+                            if parsed.fragment:
+                                path_to_rewrite += f'#{parsed.fragment}'
+                            # Rewrite to proxy path
+                            value = f'/proxy/{port}{path_to_rewrite}'
+                            logger.debug(f'Rewrote absolute URL Location header from {original_value} to: {value}')
                 response_headers.append((key, value))
         
         # Log response status for debugging
