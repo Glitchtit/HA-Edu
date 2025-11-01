@@ -198,6 +198,25 @@ def test_location_header_rewrite():
                 
                 print(f"✓ Absolute backend URL with query string correctly rewritten: {location_header}")
             
+            # Test with external URL on same port (should NOT be rewritten)
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://external-service.com:8123/api',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == 'http://external-service.com:8123/api', \
+                    f"External URL with same port should NOT be rewritten. Got: {location_header}"
+                
+                print(f"✓ External URL with same port not rewritten: {location_header}")
+            
             print("\n✓ All Location header rewrite tests passed!")
             return True
     
