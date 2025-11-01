@@ -5,6 +5,7 @@ import secrets
 import re
 import threading
 import bcrypt
+import urllib.parse
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 from flask_sock import Sock
 import docker
@@ -1502,11 +1503,48 @@ def proxy(port, path):
                 # Rewrite Location header for redirects to include proxy prefix
                 # This is crucial for Cloudflare tunnel compatibility
                 if key.lower() == 'location':
+                    original_value = value
                     # Check if this is a relative path (starts with /) and not already prefixed
                     if value.startswith('/') and not value.startswith(f'/proxy/{port}/'):
                         # Rewrite to include /proxy/{port}/ prefix
                         value = f'/proxy/{port}{value}'
                         logger.debug(f'Rewrote Location header to: {value}')
+                    # Handle absolute URLs that point to the backend instance
+                    # This prevents users from being kicked back to the app index after onboarding
+                    elif value.startswith('http://') or value.startswith('https://'):
+                        # Parse the URL to check if it's pointing to our backend
+                        # Backend URLs look like: http://192.168.50.111:{port}/path or http://localhost:{port}/path
+                        # or external domain: https://edu.wredlund.fi:{port}/path
+                        parsed = urllib.parse.urlparse(value)
+                        # Check if this is a redirect to the backend instance (matching both port and hostname)
+                        # We need to verify both to avoid false positives (e.g., external services on same port)
+                        # Note: The backend IP address (192.168.50.111) matches the hardcoded value used throughout this codebase
+                        is_backend_host = parsed.hostname in ['192.168.50.111', 'localhost', '127.0.0.1']
+                        
+                        # Also check if the hostname matches the request's Host header (for external domains)
+                        # This handles cases like https://edu.wredlund.fi:8123/ when accessed externally
+                        request_host = request.headers.get('Host', '')
+                        # Strip port from request Host header if present (format can be "host:port" or just "host")
+                        request_hostname = request_host.split(':')[0] if request_host else ''
+                        if not is_backend_host and request_hostname and parsed.hostname == request_hostname:
+                            is_backend_host = True
+                        
+                        # parsed.port is None if no port is specified in the URL (e.g., 'http://localhost/')
+                        # We intentionally exclude URLs without explicit ports to avoid false positives with standard web services
+                        is_backend_port = parsed.port is not None and parsed.port == port
+                        
+                        if is_backend_host and is_backend_port:
+                            # Extract the path and rewrite it
+                            path_to_rewrite = parsed.path or '/'
+                            # Include query string if present
+                            if parsed.query:
+                                path_to_rewrite += f'?{parsed.query}'
+                            # Include fragment if present
+                            if parsed.fragment:
+                                path_to_rewrite += f'#{parsed.fragment}'
+                            # Rewrite to proxy path
+                            value = f'/proxy/{port}{path_to_rewrite}'
+                            logger.debug(f'Rewrote absolute URL Location header from {original_value} to: {value}')
                 response_headers.append((key, value))
         
         # Log response status for debugging

@@ -103,6 +103,27 @@ def test_location_header_rewrite():
                 
                 print(f"✓ Absolute URL not rewritten: {location_header}")
             
+            # Test with absolute URL without explicit port (should not be rewritten)
+            # URLs without explicit ports have parsed.port = None, which are intentionally excluded
+            # from rewriting to avoid false positives with standard web services
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://localhost/',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == 'http://localhost/', \
+                    f"Absolute URL without port should not be rewritten. Got: {location_header}"
+                
+                print(f"✓ Absolute URL without port not rewritten: {location_header}")
+            
             # Test with already-prefixed path (should not be double-prefixed)
             with patch('app.requests.get') as mock_get:
                 mock_response = Mock()
@@ -121,6 +142,121 @@ def test_location_header_rewrite():
                     f"Already-prefixed path should not be double-prefixed. Got: {location_header}"
                 
                 print(f"✓ Already-prefixed path not double-prefixed: {location_header}")
+            
+            # Test with absolute URL to backend instance (should be rewritten)
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://192.168.50.111:8123/',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == '/proxy/8123/', \
+                    f"Absolute URL to backend should be rewritten. Got: {location_header}"
+                
+                print(f"✓ Absolute backend URL correctly rewritten: {location_header}")
+            
+            # Test with absolute URL to backend with path
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://192.168.50.111:8123/lovelace',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == '/proxy/8123/lovelace', \
+                    f"Absolute backend URL with path should be rewritten. Got: {location_header}"
+                
+                print(f"✓ Absolute backend URL with path correctly rewritten: {location_header}")
+            
+            # Test with absolute URL to localhost backend
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://localhost:8123/config',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == '/proxy/8123/config', \
+                    f"Absolute localhost URL should be rewritten. Got: {location_header}"
+                
+                print(f"✓ Absolute localhost URL correctly rewritten: {location_header}")
+            
+            # Test with absolute URL to backend with query string
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://192.168.50.111:8123/auth/authorize?client_id=test',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == '/proxy/8123/auth/authorize?client_id=test', \
+                    f"Absolute backend URL with query string should be rewritten. Got: {location_header}"
+                
+                print(f"✓ Absolute backend URL with query string correctly rewritten: {location_header}")
+            
+            # Test with external URL on same port (should NOT be rewritten)
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://external-service.com:8123/api',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == 'http://external-service.com:8123/api', \
+                    f"External URL with same port should NOT be rewritten. Got: {location_header}"
+                
+                print(f"✓ External URL with same port not rewritten: {location_header}")
+            
+            # Test with external domain URL matching Host header (should be rewritten)
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'https://edu.wredlund.fi:8123/lovelace',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                # Simulate request with external domain in Host header
+                response = client.get('/proxy/8123/', headers={'Host': 'edu.wredlund.fi'})
+                
+                location_header = response.headers.get('Location')
+                assert location_header == '/proxy/8123/lovelace', \
+                    f"External domain URL matching Host header should be rewritten. Got: {location_header}"
+                
+                print(f"✓ External domain URL matching Host header correctly rewritten: {location_header}")
             
             print("\n✓ All Location header rewrite tests passed!")
             return True
