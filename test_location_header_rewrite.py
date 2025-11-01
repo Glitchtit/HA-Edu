@@ -103,6 +103,25 @@ def test_location_header_rewrite():
                 
                 print(f"✓ Absolute URL not rewritten: {location_header}")
             
+            # Test with absolute URL without port (should not be rewritten)
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': 'http://localhost/',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == 'http://localhost/', \
+                    f"Absolute URL without port should not be rewritten. Got: {location_header}"
+                
+                print(f"✓ Absolute URL without port not rewritten: {location_header}")
+            
             # Test with already-prefixed path (should not be double-prefixed)
             with patch('app.requests.get') as mock_get:
                 mock_response = Mock()
