@@ -623,6 +623,7 @@
                 <button id="addNewBtn" class="add-button" onclick="openModal()">+ Add New Instance</button>
                 <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Unlock Admin Features">🔑</button>
                 <button id="deleteAllBtn" class="btn-delete-all hidden" onclick="openDeleteAllModal()">Delete All</button>
+                <button id="addAdminAccountsBtn" class="btn-teacher-access hidden" onclick="openAddAdminAccountsModal()">👨‍🏫 Add Admin Accounts</button>
                 <label class="toggle-container hidden" id="toggleContainer">
                     <span class="toggle-label">Instance Creation:</span>
                     <input type="checkbox" id="instanceCreationToggle" checked>
@@ -656,8 +657,7 @@
                     <div class="instance-actions">
                         <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Access</a>
                         <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">🔄 Restart</button>
-                        <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
-                                {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
+                        <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}">
                             👨‍🏫 Teacher
                         </button>
                         <button class="btn-reset hidden" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Reset</button>
@@ -860,6 +860,35 @@
         </div>
     </div>
     
+    <!-- Add Admin Accounts Modal -->
+    <div id="addAdminAccountsModal" class="modal">
+        <div class="modal-content">
+            <h2>👨‍🏫 Add Admin Accounts to All Instances</h2>
+            <p>Enter admin password to add teacher admin accounts to all instances.</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ What does this do?</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Creates teacher admin account (<strong id="bulkTeacherUsernameDisplay"></strong>) on all instances</li>
+                    <li>Skips instances that haven't completed onboarding</li>
+                    <li>Resets the password if the account already exists</li>
+                    <li>Restarts each instance after adding/resetting the account</li>
+                </ul>
+            </div>
+            <form id="addAdminAccountsForm">
+                <div class="form-group">
+                    <label for="addAdminAccountsPassword">Admin Password:</label>
+                    <input type="password" id="addAdminAccountsPassword" name="addAdminAccountsPassword" required 
+                           placeholder="Enter admin password">
+                </div>
+                <div id="addAdminAccountsMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeAddAdminAccountsModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="addAdminAccountsSubmitBtn">Add Admin Accounts</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         let currentResetServer = null;
         let currentDeleteServer = null;
@@ -916,6 +945,8 @@
                 document.querySelectorAll('.btn-teacher-access').forEach(btn => {
                     btn.classList.remove('hidden');
                 });
+                // Show the bulk add admin accounts button
+                document.getElementById('addAdminAccountsBtn').classList.remove('hidden');
             }
         }
         
@@ -1053,6 +1084,17 @@
             currentRestartServer = null;
         }
         
+        function openAddAdminAccountsModal() {
+            document.getElementById('bulkTeacherUsernameDisplay').textContent = window.teacherUsername || 'teacher';
+            document.getElementById('addAdminAccountsModal').style.display = 'block';
+            document.getElementById('addAdminAccountsMessage').innerHTML = '';
+            document.getElementById('addAdminAccountsForm').reset();
+        }
+        
+        function closeAddAdminAccountsModal() {
+            document.getElementById('addAdminAccountsModal').style.display = 'none';
+        }
+        
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
@@ -1063,6 +1105,7 @@
             const toggleModal = document.getElementById('toggleModal');
             const teacherAccessModal = document.getElementById('teacherAccessModal');
             const restartModal = document.getElementById('restartModal');
+            const addAdminAccountsModal = document.getElementById('addAdminAccountsModal');
             if (event.target === addModal) {
                 closeModal();
             } else if (event.target === unlockModal) {
@@ -1079,6 +1122,8 @@
                 closeTeacherAccessModal();
             } else if (event.target === restartModal) {
                 closeRestartModal();
+            } else if (event.target === addAdminAccountsModal) {
+                closeAddAdminAccountsModal();
             }
         }
         
@@ -1429,6 +1474,59 @@
                 messageDiv.innerHTML = `<div class="error-message">Failed to restart instance: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Restart';
+            }
+        });
+        
+        document.getElementById('addAdminAccountsForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('addAdminAccountsSubmitBtn');
+            const messageDiv = document.getElementById('addAdminAccountsMessage');
+            
+            const adminPassword = document.getElementById('addAdminAccountsPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/instances/add-teacher-access-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let resultHtml = `<div class="success-message">${data.message}</div>`;
+                    if (data.results && data.results.length > 0) {
+                        resultHtml += '<div style="margin-top: 10px; max-height: 200px; overflow-y: auto; background: var(--card); padding: 10px; border-radius: 5px; border: 1px solid var(--border);">';
+                        data.results.forEach(result => {
+                            const icon = result.status === 'success' ? '✓' : result.status === 'skipped' ? '⊘' : '✗';
+                            const color = result.status === 'success' ? '#48bb78' : result.status === 'skipped' ? '#ed8936' : '#f56565';
+                            resultHtml += `<div style="margin: 5px 0; color: ${color};"><strong>${icon} ${result.server_name}</strong>: ${result.message}</div>`;
+                        });
+                        resultHtml += '</div>';
+                    }
+                    messageDiv.innerHTML = resultHtml;
+                    submitBtn.textContent = 'Done';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Add Admin Accounts';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Failed to add admin accounts: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Admin Accounts';
             }
         });
         
