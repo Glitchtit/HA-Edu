@@ -622,6 +622,28 @@ def create_instance():
         container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
         volume_name = container_name
         
+        # Clean up any leftover container with the same name
+        # This can happen if a previous instance with the same name failed to delete properly
+        try:
+            existing_container = client.containers.get(container_name)
+            logger.warning(f'Found existing container {container_name}, removing it')
+            try:
+                existing_container.stop(timeout=5)
+            except:
+                pass  # Container might already be stopped
+            existing_container.remove(force=True)
+        except docker.errors.NotFound:
+            pass  # No existing container, which is expected
+        
+        # Clean up any leftover volume with the same name
+        # This can happen if a previous instance deletion failed to remove the volume
+        try:
+            existing_volume = client.volumes.get(volume_name)
+            logger.warning(f'Found existing volume {volume_name}, removing it')
+            existing_volume.remove(force=True)
+        except docker.errors.NotFound:
+            pass  # No existing volume, which is expected
+        
         # Copy master configuration to the volume before starting the container
         copy_master_config_to_volume(volume_name)
         
@@ -692,6 +714,17 @@ def delete_instance(server_name):
             container.remove()
         except docker.errors.NotFound:
             pass  # Container already removed
+        
+        # Remove the volume to free up storage
+        volume_name = instance['container_name']
+        try:
+            volume = client.volumes.get(volume_name)
+            volume.remove()
+            logger.info(f'Successfully removed volume {volume_name}')
+        except docker.errors.NotFound:
+            pass  # Volume doesn't exist or already removed
+        except Exception as e:
+            logger.warning(f'Failed to remove volume {volume_name}: {str(e)}')
         
         # Remove from instances
         del instances[server_name]
@@ -857,6 +890,17 @@ def delete_all_instances():
                     container.remove()
                 except docker.errors.NotFound:
                     pass  # Container already removed
+                
+                # Remove the volume to free up storage
+                volume_name = instance['container_name']
+                try:
+                    volume = client.volumes.get(volume_name)
+                    volume.remove()
+                    logger.info(f'Successfully removed volume {volume_name}')
+                except docker.errors.NotFound:
+                    pass  # Volume doesn't exist or already removed
+                except Exception as e:
+                    logger.warning(f'Failed to remove volume {volume_name}: {str(e)}')
                 
                 deleted_count += 1
             except Exception as e:
