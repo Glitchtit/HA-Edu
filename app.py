@@ -1222,10 +1222,8 @@ def add_teacher_access_all():
                 })
                 continue
             
-            # Determine if we should reset existing account
-            reset_if_exists = instance.get('teacher_access_added', False)
-            
             # Create teacher account (or reset password if already exists)
+            # Always use reset_if_exists=True for bulk operation to handle both creation and reset
             success, message = create_teacher_account(volume_name, TEACHER_USERNAME, TEACHER_PASSWORD, reset_if_exists=True)
             
             if success:
