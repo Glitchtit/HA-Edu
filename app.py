@@ -622,6 +622,28 @@ def create_instance():
         container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
         volume_name = container_name
         
+        # Clean up any leftover container with the same name
+        # This can happen if a previous instance with the same name failed to delete properly
+        try:
+            existing_container = client.containers.get(container_name)
+            logger.warning(f'Found existing container {container_name}, removing it')
+            try:
+                existing_container.stop(timeout=5)
+            except:
+                pass  # Container might already be stopped
+            existing_container.remove(force=True)
+        except docker.errors.NotFound:
+            pass  # No existing container, which is expected
+        
+        # Clean up any leftover volume with the same name
+        # This can happen if a previous instance deletion failed to remove the volume
+        try:
+            existing_volume = client.volumes.get(volume_name)
+            logger.warning(f'Found existing volume {volume_name}, removing it')
+            existing_volume.remove(force=True)
+        except docker.errors.NotFound:
+            pass  # No existing volume, which is expected
+        
         # Copy master configuration to the volume before starting the container
         copy_master_config_to_volume(volume_name)
         
