@@ -661,7 +661,7 @@
                             👨‍🏫 Lärare
                         </button>
                         <button class="btn-reset hidden" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
-                        <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
+                        <button class="btn-delete hidden" onclick="deleteInstance('{{ name }}')">Ta bort</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -887,6 +887,10 @@
         function showAdminButtons() {
             // Show all reset buttons
             document.querySelectorAll('.btn-reset').forEach(btn => {
+                btn.classList.remove('hidden');
+            });
+            // Show all delete buttons
+            document.querySelectorAll('.btn-delete').forEach(btn => {
                 btn.classList.remove('hidden');
             });
             // Show delete all button and toggle container
