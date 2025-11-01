@@ -226,7 +226,10 @@ def test_teacher_account_contains_required_fields(monkeypatch, sample_storage):
     assert provider_entry['user_id'] == new_user['id']
     assert provider_entry['id']
     assert provider_entry['is_active'] is True
-    assert provider_entry['password'].startswith('$2')
+    # Password should be base64-encoded bcrypt hash
+    import base64
+    decoded_password = base64.b64decode(provider_entry['password'])
+    assert decoded_password.startswith(b'$2')
     assert provider_entry.get('last_used_version') is None
 
     assert len(updated_person['data']['items']) == 2

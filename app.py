@@ -335,6 +335,7 @@ import bcrypt
 import json
 import uuid
 import os
+import base64
 from datetime import datetime, timezone
 
 TEACHER_USERNAME = {teacher_username!r}
@@ -399,10 +400,12 @@ user_id = uuid.uuid4().hex
 credential_id = uuid.uuid4().hex
 provider_user_id = uuid.uuid4().hex
 
-password_hash = bcrypt.hashpw(
+# Generate bcrypt hash and base64-encode it (required by Home Assistant)
+password_hash_bytes = bcrypt.hashpw(
     TEACHER_PASSWORD.encode('utf-8'),
     bcrypt.gensalt(rounds=12)
-).decode('utf-8')
+)
+password_hash = base64.b64encode(password_hash_bytes).decode('utf-8')
 
 user_template = auth_users[0] if auth_users else dict()
 credential_template = auth_credentials[0] if auth_credentials else dict()
