@@ -60,9 +60,14 @@ def test_delete_all_instances_removes_volumes():
         
         # Find delete_all_instances function
         delete_all_start = content.find('def delete_all_instances(')
-        delete_all_end = content.find('\n@app.route', delete_all_start + 1)
-        if delete_all_end == -1:
-            delete_all_end = content.find('\ndef proxy', delete_all_start + 1)
+        # Find next function or route decorator
+        next_route = content.find('\n@app.route', delete_all_start + 1)
+        next_sock_route = content.find('\n@sock.route', delete_all_start + 1)
+        next_func = content.find('\ndef ', delete_all_start + 1)
+        
+        # Use the earliest endpoint found
+        endpoints = [e for e in [next_route, next_sock_route, next_func] if e != -1]
+        delete_all_end = min(endpoints) if endpoints else len(content)
         
         delete_all_func = content[delete_all_start:delete_all_end]
         
@@ -101,9 +106,13 @@ def test_volume_removal_pattern_matches_reset():
         
         # Find reset_instance volume removal pattern
         reset_start = content.find('def reset_instance(')
-        reset_end = content.find('\n@app.route', reset_start + 1)
-        if reset_end == -1:
-            reset_end = content.find('\ndef check_admin', reset_start + 1)
+        # Find next function or route decorator
+        next_route = content.find('\n@app.route', reset_start + 1)
+        next_func = content.find('\ndef ', reset_start + 1)
+        
+        # Use the earliest endpoint found
+        endpoints = [e for e in [next_route, next_func] if e != -1]
+        reset_end = min(endpoints) if endpoints else len(content)
         reset_func = content[reset_start:reset_end]
         
         # Extract the volume removal pattern from reset_instance
