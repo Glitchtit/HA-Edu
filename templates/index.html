@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HA-Edu - Home Assistant Educational Portal</title>
+    <title>HA-Edu - Utbildningsportal för Home Assistant</title>
     <style>
         :root {
             /* Brand Colors - Orange to Pink Gradient Palette */
@@ -614,24 +614,23 @@
     <div class="container">
         <header>
             <h1>🏠 HA-Edu</h1>
-            <p>Home Assistant Utbildningsportal</p>
+            <p>Utbildningsportal för Home Assistant</p>
         </header>
         
         <div class="controls">
-            <h2>Hantera Instanser</h2>
+            <h2>Hantera instanser</h2>
             <div class="controls-row">
-                <button id="addNewBtn" class="add-button" onclick="openModal()">+ Lägg till Ny Instans</button>
-                <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp Adminfunktioner">🔑</button>
-                <button id="deleteAllBtn" class="btn-delete-all hidden" onclick="openDeleteAllModal()">Ta bort Alla</button>
-                <button id="addAdminAccountsBtn" class="btn-teacher-access hidden" onclick="openAddAdminAccountsModal()">👨‍🏫 Add Admin Accounts</button>
+                <button id="addNewBtn" class="add-button" onclick="openModal()">+ Skapa ny instans</button>
+                <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
+                <button id="deleteAllBtn" class="btn-delete-all hidden" onclick="openDeleteAllModal()">Ta bort alla</button>
                 <label class="toggle-container hidden" id="toggleContainer">
-                    <span class="toggle-label">Skapande av Instanser:</span>
+                    <span class="toggle-label">Skapa instanser:</span>
                     <input type="checkbox" id="instanceCreationToggle" checked>
                     <span class="toggle-slider"></span>
                 </label>
             </div>
             <div class="instance-count">
-                <span id="instanceCount">{{ instances|length }}</span> instanser aktiva
+                <span id="instanceCount">{{ instances|length }}</span> aktiva instanser
             </div>
         </div>
         
@@ -660,10 +659,6 @@
                         <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
                                 {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
                             👨‍🏫 Lärare
-                        <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Access</a>
-                        <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">🔄 Restart</button>
-                        <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}">
-                            👨‍🏫 Teacher
                         </button>
                         <button class="btn-reset hidden" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
                         <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
@@ -672,7 +667,7 @@
                 {% endfor %}
             {% else %}
                 <div class="no-instances">
-                    Inga instanser skapade ännu. Klicka på "Lägg till Ny Instans" för att komma igång!
+                    Inga instanser skapade än. Klicka på "Skapa ny instans" för att komma igång!
                 </div>
             {% endif %}
         </div>
@@ -681,19 +676,19 @@
     <!-- Add Instance Modal -->
     <div id="addModal" class="modal">
         <div class="modal-content">
-            <h2>Skapa Ny Instans</h2>
+            <h2>Skapa ny instans</h2>
             <form id="addInstanceForm">
                 <div class="form-group">
                     <label for="serverName">Servernamn:</label>
                     <input type="text" id="serverName" name="serverName" required 
-                           placeholder="t.ex., Student-Lab-01">
+                           placeholder="t.ex. Student-Lab-01">
                 </div>
                 <div class="form-group">
                     <label for="instancePassword">Instanslösenord (valfritt):</label>
                     <input type="password" id="instancePassword" name="instancePassword" 
-                           placeholder="Ange ett lösenord för omstart">
+                           placeholder="Ange ett lösenord för att tillåta omstart">
                     <small style="color: var(--color-gray-700); display: block; margin-top: 5px;">
-                        Om angivet kan detta lösenord användas för att starta om instansen. Adminlösenordet fungerar också.
+                        Om du anger det kan detta lösenord användas för att starta om instansen. Adminlösenordet fungerar också.
                     </small>
                 </div>
                 <div id="modalMessage"></div>
@@ -708,8 +703,8 @@
     <!-- Unlock Admin Features Modal -->
     <div id="unlockModal" class="modal">
         <div class="modal-content">
-            <h2>🔑 Lås upp Adminfunktioner</h2>
-            <p>Ange adminlösenordet för att visa adminkontroller.</p>
+            <h2>🔑 Lås upp adminfunktioner</h2>
+            <p>Ange adminlösenordet för att visa administrationskontroller.</p>
             <form id="unlockAdminForm">
                 <div class="form-group">
                     <label for="unlockAdminPassword">Adminlösenord:</label>
@@ -728,9 +723,9 @@
     <!-- Reset Instance Modal -->
     <div id="resetModal" class="modal">
         <div class="modal-content">
-            <h2>Återställ Instans</h2>
-            <p>Ange adminlösenord för att återställa <strong id="resetServerName"></strong> till standard HA-image.</p>
-            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att radera all data och konfigurationer för denna instans!</p>
+            <h2>Återställ instans</h2>
+            <p>Ange adminlösenord för att återställa <strong id="resetServerName"></strong> till standard HA-avbildning.</p>
+            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att radera all data och alla konfigurationer för denna instans!</p>
             <form id="resetInstanceForm">
                 <div class="form-group">
                     <label for="adminPassword">Adminlösenord:</label>
@@ -749,7 +744,7 @@
     <!-- Delete Instance Modal -->
     <div id="deleteModal" class="modal">
         <div class="modal-content">
-            <h2>Ta bort Instans</h2>
+            <h2>Ta bort instans</h2>
             <p>Ange adminlösenord för att ta bort <strong id="deleteServerName"></strong>.</p>
             <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort instansen och all dess data!</p>
             <form id="deleteInstanceForm">
@@ -770,7 +765,7 @@
     <!-- Delete All Instances Modal -->
     <div id="deleteAllModal" class="modal">
         <div class="modal-content">
-            <h2>Ta bort Alla Instanser</h2>
+            <h2>Ta bort alla instanser</h2>
             <p>Ange adminlösenord för att ta bort <strong>alla instanser</strong>.</p>
             <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort ALLA instanser och all deras data!</p>
             <form id="deleteAllInstancesForm">
@@ -782,7 +777,7 @@
                 <div id="deleteAllModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeDeleteAllModal()">Avbryt</button>
-                    <button type="submit" class="btn-submit" id="deleteAllSubmitBtn">Ta bort Alla</button>
+                    <button type="submit" class="btn-submit" id="deleteAllSubmitBtn">Ta bort alla</button>
                 </div>
             </form>
         </div>
@@ -791,8 +786,8 @@
     <!-- Toggle Instance Creation Modal -->
     <div id="toggleModal" class="modal">
         <div class="modal-content">
-            <h2>Växla Skapande av Instanser</h2>
-            <p>Ange adminlösenord för att <strong id="toggleAction"></strong> skapande av instanser.</p>
+            <h2>Växla instansskapande</h2>
+            <p>Ange adminlösenord för att <strong id="toggleAction"></strong> instansskapande.</p>
             <form id="toggleInstanceCreationForm">
                 <div class="form-group">
                     <label for="toggleAdminPassword">Adminlösenord:</label>
@@ -811,15 +806,15 @@
     <!-- Add Teacher Access Modal -->
     <div id="teacherAccessModal" class="modal">
         <div class="modal-content">
-            <h2>👨‍🏫 Lägg till Läraråtkomst</h2>
+            <h2>👨‍🏫 Lägg till läraråtkomst</h2>
             <p>Ange adminlösenord för att lägga till läraråtkomst till <strong id="teacherAccessServerName"></strong>.</p>
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>ℹ️ Vad gör detta?</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
                     <li>Skapar ett sekundärt adminkonto för läraren (<strong id="teacherUsernameDisplay"></strong>)</li>
-                    <li>Elevens konto och data förblir oförändrade</li>
-                    <li>Tillåter läraren att övervaka elevens framsteg</li>
-                    <li>Kan endast användas efter att eleven slutfört introduktionen</li>
+                    <li>Studentens konto och data förblir oförändrade</li>
+                    <li>Låter läraren övervaka studentens framsteg</li>
+                    <li>Kan endast användas efter att studenten slutfört onboarding</li>
                 </ul>
             </div>
             <div id="teacherAccessStatus" style="margin: 10px 0;"></div>
@@ -832,7 +827,7 @@
                 <div id="teacherAccessModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeTeacherAccessModal()">Avbryt</button>
-                    <button type="submit" class="btn-submit" id="teacherAccessSubmitBtn">Lägg till Läraråtkomst</button>
+                    <button type="submit" class="btn-submit" id="teacherAccessSubmitBtn">Lägg till läraråtkomst</button>
                 </div>
             </form>
         </div>
@@ -841,13 +836,13 @@
     <!-- Restart Instance Modal -->
     <div id="restartModal" class="modal">
         <div class="modal-content">
-            <h2>Starta om Instans</h2>
+            <h2>Starta om instans</h2>
             <p>Ange lösenord för att starta om <strong id="restartServerName"></strong>.</p>
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>ℹ️ Lösenordsalternativ:</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
-                    <li>Använd <strong>instanslösenordet</strong> (om angivet vid skapande av instansen)</li>
-                    <li>Eller använd <strong>adminlösenordet</strong> (om konfigurerat)</li>
+                    <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
+                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
                 </ul>
             </div>
             <form id="restartInstanceForm">
@@ -858,37 +853,8 @@
                 </div>
                 <div id="restartModalMessage"></div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-cancel" onclick="closeRestartModal()">Cancel</button>
-                    <button type="submit" class="btn-submit" id="restartSubmitBtn">Restart</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <!-- Add Admin Accounts Modal -->
-    <div id="addAdminAccountsModal" class="modal">
-        <div class="modal-content">
-            <h2>👨‍🏫 Add Admin Accounts to All Instances</h2>
-            <p>Enter admin password to add teacher admin accounts to all instances.</p>
-            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                <strong>ℹ️ What does this do?</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
-                    <li>Creates teacher admin account (<strong id="bulkTeacherUsernameDisplay"></strong>) on all instances</li>
-                    <li>Skips instances that haven't completed onboarding</li>
-                    <li>Resets the password if the account already exists</li>
-                    <li>Restarts each instance after adding/resetting the account</li>
-                </ul>
-            </div>
-            <form id="addAdminAccountsForm">
-                <div class="form-group">
-                    <label for="addAdminAccountsPassword">Admin Password:</label>
-                    <input type="password" id="addAdminAccountsPassword" name="addAdminAccountsPassword" required 
-                           placeholder="Enter admin password">
-                </div>
-                <div id="addAdminAccountsMessage"></div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-cancel" onclick="closeAddAdminAccountsModal()">Cancel</button>
-                    <button type="submit" class="btn-submit" id="addAdminAccountsSubmitBtn">Add Admin Accounts</button>
+                    <button type="button" class="btn-cancel" onclick="closeRestartModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="restartSubmitBtn">Starta om</button>
                 </div>
             </form>
         </div>
@@ -950,8 +916,6 @@
                 document.querySelectorAll('.btn-teacher-access').forEach(btn => {
                     btn.classList.remove('hidden');
                 });
-                // Show the bulk add admin accounts button
-                document.getElementById('addAdminAccountsBtn').classList.remove('hidden');
             }
         }
         
@@ -1089,17 +1053,6 @@
             currentRestartServer = null;
         }
         
-        function openAddAdminAccountsModal() {
-            document.getElementById('bulkTeacherUsernameDisplay').textContent = window.teacherUsername || 'teacher';
-            document.getElementById('addAdminAccountsModal').style.display = 'block';
-            document.getElementById('addAdminAccountsMessage').innerHTML = '';
-            document.getElementById('addAdminAccountsForm').reset();
-        }
-        
-        function closeAddAdminAccountsModal() {
-            document.getElementById('addAdminAccountsModal').style.display = 'none';
-        }
-        
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
@@ -1110,7 +1063,6 @@
             const toggleModal = document.getElementById('toggleModal');
             const teacherAccessModal = document.getElementById('teacherAccessModal');
             const restartModal = document.getElementById('restartModal');
-            const addAdminAccountsModal = document.getElementById('addAdminAccountsModal');
             if (event.target === addModal) {
                 closeModal();
             } else if (event.target === unlockModal) {
@@ -1127,8 +1079,6 @@
                 closeTeacherAccessModal();
             } else if (event.target === restartModal) {
                 closeRestartModal();
-            } else if (event.target === addAdminAccountsModal) {
-                closeAddAdminAccountsModal();
             }
         }
         
@@ -1166,7 +1116,7 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    messageDiv.innerHTML = `<div class="success-message">Instans skapad! Laddar om...</div>`;
+                    messageDiv.innerHTML = `<div class="success-message">Instansen skapades! Laddar om...</div>`;
                     setTimeout(() => {
                         location.reload();
                     }, 1500);
@@ -1176,7 +1126,7 @@
                     submitBtn.textContent = 'Skapa';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades skapa instans: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte skapa instans: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Skapa';
             }
@@ -1223,7 +1173,7 @@
                     submitBtn.textContent = 'Lås upp';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades låsa upp: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte låsa upp: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Lås upp';
             }
@@ -1255,7 +1205,7 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    messageDiv.innerHTML = `<div class="success-message">Instans återställd! Laddar om...</div>`;
+                    messageDiv.innerHTML = `<div class="success-message">Instansen återställdes! Laddar om...</div>`;
                     setTimeout(() => {
                         location.reload();
                     }, 1500);
@@ -1265,7 +1215,7 @@
                     submitBtn.textContent = 'Återställ';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades återställa instans: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte återställa instans: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Återställ';
             }
@@ -1280,7 +1230,7 @@
             const adminPassword = document.getElementById('deleteAdminPassword').value;
             
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Deleting...';
+            submitBtn.textContent = 'Tar bort...';
             messageDiv.innerHTML = '';
             
             try {
@@ -1297,7 +1247,7 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    messageDiv.innerHTML = `<div class="success-message">Instans borttagen! Laddar om...</div>`;
+                    messageDiv.innerHTML = `<div class="success-message">Instansen togs bort! Laddar om...</div>`;
                     setTimeout(() => {
                         location.reload();
                     }, 1500);
@@ -1307,7 +1257,7 @@
                     submitBtn.textContent = 'Ta bort';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades ta bort instans: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte ta bort instans: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Ta bort';
             }
@@ -1346,12 +1296,12 @@
                 } else {
                     messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Ta bort Alla';
+                    submitBtn.textContent = 'Ta bort alla';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades ta bort alla instanser: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte ta bort alla instanser: ${error.message}</div>`;
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Ta bort Alla';
+                submitBtn.textContent = 'Ta bort alla';
             }
         });
         
@@ -1392,7 +1342,7 @@
                     submitBtn.textContent = 'Bekräfta';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades uppdatera inställning: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte uppdatera inställning: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Bekräfta';
             }
@@ -1431,12 +1381,12 @@
                 } else {
                     messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Lägg till Läraråtkomst';
+                    submitBtn.textContent = 'Lägg till läraråtkomst';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades lägga till läraråtkomst: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte lägga till läraråtkomst: ${error.message}</div>`;
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Lägg till Läraråtkomst';
+                submitBtn.textContent = 'Lägg till läraråtkomst';
             }
         });
         
@@ -1466,7 +1416,7 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    messageDiv.innerHTML = `<div class="success-message">Instans omstartad! Laddar om...</div>`;
+                    messageDiv.innerHTML = `<div class="success-message">Instansen startades om! Laddar om...</div>`;
                     setTimeout(() => {
                         location.reload();
                     }, 1500);
@@ -1476,62 +1426,9 @@
                     submitBtn.textContent = 'Starta om';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Misslyckades starta om instans: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte starta om instans: ${error.message}</div>`;
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Restart';
-            }
-        });
-        
-        document.getElementById('addAdminAccountsForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('addAdminAccountsSubmitBtn');
-            const messageDiv = document.getElementById('addAdminAccountsMessage');
-            
-            const adminPassword = document.getElementById('addAdminAccountsPassword').value;
-            
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Processing...';
-            messageDiv.innerHTML = '';
-            
-            try {
-                const response = await fetch('/api/instances/add-teacher-access-all', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        admin_password: adminPassword
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    let resultHtml = `<div class="success-message">${data.message}</div>`;
-                    if (data.results && data.results.length > 0) {
-                        resultHtml += '<div style="margin-top: 10px; max-height: 200px; overflow-y: auto; background: var(--card); padding: 10px; border-radius: 5px; border: 1px solid var(--border);">';
-                        data.results.forEach(result => {
-                            const icon = result.status === 'success' ? '✓' : result.status === 'skipped' ? '⊘' : '✗';
-                            const color = result.status === 'success' ? '#48bb78' : result.status === 'skipped' ? '#ed8936' : '#f56565';
-                            resultHtml += `<div style="margin: 5px 0; color: ${color};"><strong>${icon} ${result.server_name}</strong>: ${result.message}</div>`;
-                        });
-                        resultHtml += '</div>';
-                    }
-                    messageDiv.innerHTML = resultHtml;
-                    submitBtn.textContent = 'Done';
-                    setTimeout(() => {
-                        location.reload();
-                    }, 3000);
-                } else {
-                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Add Admin Accounts';
-                }
-            } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Failed to add admin accounts: ${error.message}</div>`;
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Add Admin Accounts';
+                submitBtn.textContent = 'Starta om';
             }
         });
         
@@ -1571,7 +1468,7 @@
     
     <footer style="text-align: center; padding: 30px 20px 20px; color: rgba(255, 255, 255, 0.9); font-size: 0.9em;">
         <div style="border-top: 1px solid rgba(255, 255, 255, 0.3); padding-top: 20px; max-width: 1200px; margin: 0 auto;">
-            © 2025 Thomas Wredlund. All rights reserved.
+            © 2025 Thomas Wredlund. Alla rättigheter förbehållna.
         </div>
     </footer>
 </body>
