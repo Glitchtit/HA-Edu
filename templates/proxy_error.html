@@ -5,6 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Error - HA-Edu</title>
     <style>
+        :root {
+            /* Brand Colors - Orange to Pink Gradient Palette */
+            --color-primary: oklch(0.65 0.22 35);        /* Vibrant orange */
+            --color-secondary: oklch(0.58 0.24 340);     /* Pink/Magenta */
+            --color-tertiary: oklch(0.70 0.18 25);       /* Lighter orange accent */
+            
+            /* Neutral Palette */
+            --color-black: oklch(0.20 0.02 265);
+            --color-gray-900: oklch(0.25 0.02 265);
+            --color-gray-800: oklch(0.35 0.01 265);
+            --color-gray-700: oklch(0.45 0.01 265);
+            --color-gray-300: oklch(0.90 0.01 265);
+            --color-gray-100: oklch(0.96 0.01 265);
+            
+            /* Semantic Colors */
+            --background: oklch(0.98 0.01 265);
+            --foreground: oklch(0.20 0.02 265);
+            --card: oklch(1.00 0 0);
+            --card-foreground: oklch(0.20 0.02 265);
+            
+            --border: oklch(0.90 0.01 265);
+            --shadow-color: oklch(0.65 0.22 35 / 0.15);
+            
+            --radius: 1rem;
+            --radius-sm: 0.5rem;
+            --radius-lg: 1.5rem;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background: oklch(0.20 0.02 265);
+                --foreground: oklch(0.98 0.01 265);
+                --card: oklch(0.25 0.02 265);
+                --card-foreground: oklch(0.98 0.01 265);
+                --border: oklch(0.35 0.01 265);
+            }
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -12,8 +50,12 @@
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, 
+                var(--color-black) 0%, 
+                var(--color-gray-900) 50%, 
+                var(--color-black) 100%
+            );
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -22,11 +64,13 @@
         }
         
         .error-container {
-            background: white;
-            border-radius: 10px;
+            background: var(--card);
+            color: var(--card-foreground);
+            border-radius: var(--radius-lg);
             padding: 40px;
             max-width: 600px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border);
             text-align: center;
         }
         
@@ -37,48 +81,50 @@
         
         .error-title {
             font-size: 28px;
-            color: #333;
+            color: var(--foreground);
             margin-bottom: 15px;
+            font-weight: 700;
         }
         
         .error-message {
             font-size: 16px;
-            color: #666;
+            color: var(--color-gray-700);
             line-height: 1.6;
             margin-bottom: 25px;
         }
         
         .error-details {
-            background: #f7fafc;
-            border-left: 4px solid #667eea;
+            background: oklch(0.96 0.05 35);
+            border-left: 4px solid var(--color-primary);
             padding: 15px;
             text-align: left;
             margin-bottom: 25px;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
         }
         
         .error-details strong {
-            color: #333;
+            color: var(--foreground);
         }
         
         .error-suggestions {
-            background: #fff5e6;
-            border-left: 4px solid #ed8936;
+            background: oklch(0.94 0.08 40);
+            border-left: 4px solid var(--color-tertiary);
             padding: 15px;
             text-align: left;
             margin-bottom: 25px;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
         }
         
         .error-suggestions h3 {
-            color: #333;
+            color: var(--foreground);
             margin-bottom: 10px;
             font-size: 16px;
+            font-weight: 600;
         }
         
         .error-suggestions ul {
             margin-left: 20px;
-            color: #666;
+            color: var(--color-gray-700);
         }
         
         .error-suggestions li {
@@ -95,38 +141,48 @@
         .btn {
             padding: 12px 24px;
             border: none;
-            border-radius: 5px;
+            border-radius: var(--radius);
             font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
             text-decoration: none;
             display: inline-block;
-            transition: all 0.3s;
+            transition: all 0.3s ease;
         }
         
         .btn-primary {
-            background: #667eea;
+            background: linear-gradient(90deg, 
+                var(--color-primary) 0%, 
+                var(--color-secondary) 50%, 
+                var(--color-primary) 100%
+            );
+            background-size: 200% 100%;
+            background-position: 0% 0%;
             color: white;
         }
         
         .btn-primary:hover {
-            background: #5568d3;
+            background-position: 100% 0%;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px var(--shadow-color);
         }
         
         .btn-secondary {
-            background: #e2e8f0;
-            color: #333;
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
         }
         
         .btn-secondary:hover {
-            background: #cbd5e0;
+            background: var(--color-gray-300);
         }
         
         .status-code {
             display: inline-block;
-            background: #fed7d7;
-            color: #742a2a;
+            background: oklch(0.90 0.10 25);
+            color: oklch(0.35 0.20 25);
             padding: 4px 12px;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
             font-weight: bold;
             font-size: 14px;
             margin-bottom: 15px;

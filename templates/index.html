@@ -5,6 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HA-Edu - Home Assistant Educational Portal</title>
     <style>
+        :root {
+            /* Brand Colors - Orange to Pink Gradient Palette */
+            --color-primary: oklch(0.65 0.22 35);        /* Vibrant orange */
+            --color-secondary: oklch(0.58 0.24 340);     /* Pink/Magenta */
+            --color-tertiary: oklch(0.70 0.18 25);       /* Lighter orange accent */
+            
+            /* Neutral Palette */
+            --color-black: oklch(0.20 0.02 265);
+            --color-gray-900: oklch(0.25 0.02 265);
+            --color-gray-800: oklch(0.35 0.01 265);
+            --color-gray-700: oklch(0.45 0.01 265);
+            --color-gray-300: oklch(0.90 0.01 265);
+            --color-gray-100: oklch(0.96 0.01 265);
+            
+            /* Semantic Colors */
+            --background: oklch(0.98 0.01 265);          /* Light neutral background */
+            --foreground: oklch(0.20 0.02 265);          /* Dark text */
+            --card: oklch(1.00 0 0);                     /* White cards */
+            --card-foreground: oklch(0.20 0.02 265);
+            
+            --border: oklch(0.90 0.01 265);
+            --input: oklch(0.90 0.01 265);
+            --ring: oklch(0.65 0.22 35);                 /* Orange focus ring */
+            
+            /* Sidebar */
+            --sidebar: oklch(0.98 0.01 265);
+            --sidebar-foreground: oklch(0.20 0.02 265);
+            --sidebar-primary: oklch(0.65 0.22 35);
+            --sidebar-accent: oklch(0.96 0.01 265);
+            --sidebar-border: oklch(0.90 0.01 265);
+            
+            /* Shadows with orange tint */
+            --shadow-color: oklch(0.65 0.22 35 / 0.15);
+            
+            /* Border Radius */
+            --radius: 1rem;
+            --radius-sm: 0.5rem;
+            --radius-lg: 1.5rem;
+        }
+        
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background: oklch(0.20 0.02 265);
+                --foreground: oklch(0.98 0.01 265);
+                --card: oklch(0.25 0.02 265);
+                --card-foreground: oklch(0.98 0.01 265);
+                --border: oklch(0.35 0.01 265);
+                --sidebar: oklch(0.25 0.02 265);
+                --sidebar-foreground: oklch(0.98 0.01 265);
+                --sidebar-accent: oklch(0.30 0.02 265);
+                --sidebar-border: oklch(0.35 0.01 265);
+            }
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -12,8 +67,9 @@
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
             min-height: 100vh;
             padding: 20px;
         }
@@ -23,33 +79,52 @@
             margin: 0 auto;
         }
         
+        /* Gradient Header */
         header {
             text-align: center;
-            color: white;
             margin-bottom: 40px;
+            background: linear-gradient(135deg, 
+                var(--color-black) 0%, 
+                var(--color-gray-900) 50%, 
+                var(--color-black) 100%
+            );
+            padding: 40px 20px;
+            border-radius: var(--radius-lg);
         }
         
         header h1 {
             font-size: 2.5em;
             margin-bottom: 10px;
+            background: linear-gradient(135deg, 
+                var(--color-primary) 0%, 
+                var(--color-secondary) 100%
+            );
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
         }
         
         header p {
             font-size: 1.2em;
+            color: var(--color-gray-100);
             opacity: 0.9;
         }
         
+        /* Cards */
         .controls {
-            background: white;
+            background: var(--card);
+            color: var(--card-foreground);
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
             margin-bottom: 30px;
         }
         
         .controls h2 {
             margin-bottom: 15px;
-            color: #333;
+            color: var(--foreground);
         }
         
         .controls-row {
@@ -59,54 +134,69 @@
             flex-wrap: wrap;
         }
         
+        /* Buttons with Gradient Animation */
         .add-button {
-            background: #667eea;
+            background: linear-gradient(90deg, 
+                var(--color-primary) 0%, 
+                var(--color-secondary) 50%, 
+                var(--color-primary) 100%
+            );
+            background-size: 200% 100%;
+            background-position: 0% 0%;
             color: white;
             border: none;
             padding: 12px 30px;
             font-size: 16px;
-            border-radius: 5px;
+            border-radius: var(--radius);
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
         }
         
         .add-button:hover {
-            background: #5568d3;
+            background-position: 100% 0%;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px var(--shadow-color);
         }
         
         .add-button:disabled {
-            background: #ccc;
+            background: var(--color-gray-300);
             cursor: not-allowed;
+            transform: none;
         }
         
         .btn-unlock {
-            background: #f6ad55;
+            background: var(--color-tertiary);
             color: white;
             border: none;
             padding: 12px 20px;
             font-size: 20px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
         }
         
         .btn-unlock:hover {
-            background: #ed8936;
+            background: var(--color-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px var(--shadow-color);
         }
         
         .btn-delete-all {
-            background: #e53e3e;
+            background: oklch(0.55 0.22 25);  /* Darker red-orange for danger */
             color: white;
             border: none;
             padding: 12px 30px;
             font-size: 16px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
         }
         
         .btn-delete-all:hover {
-            background: #c53030;
+            background: oklch(0.45 0.25 20);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px oklch(0.55 0.22 25 / 0.3);
         }
         
         .toggle-container {
@@ -117,7 +207,7 @@
         }
         
         .toggle-label {
-            color: #333;
+            color: var(--foreground);
             font-weight: 500;
             font-size: 14px;
         }
@@ -130,7 +220,7 @@
             position: relative;
             width: 50px;
             height: 24px;
-            background: #ccc;
+            background: var(--color-gray-300);
             border-radius: 24px;
             transition: background 0.3s;
         }
@@ -148,7 +238,7 @@
         }
         
         .toggle-container input[type="checkbox"]:checked + .toggle-slider {
-            background: #48bb78;
+            background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
         }
         
         .toggle-container input[type="checkbox"]:checked + .toggle-slider::before {
@@ -157,7 +247,7 @@
         
         .instance-count {
             margin-top: 10px;
-            color: #666;
+            color: var(--color-gray-700);
             font-size: 14px;
         }
         
@@ -169,31 +259,34 @@
         }
         
         .instance-card {
-            background: white;
-            border-radius: 10px;
+            background: var(--card);
+            color: var(--card-foreground);
+            border-radius: var(--radius-lg);
             padding: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
         }
         
         .instance-card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 25px 70px var(--shadow-color);
         }
         
         .instance-card h3 {
-            color: #333;
+            color: var(--foreground);
             margin-bottom: 10px;
             font-size: 1.3em;
         }
         
         .instance-info {
-            color: #666;
+            color: var(--color-gray-700);
             font-size: 14px;
             margin-bottom: 8px;
         }
         
         .instance-info strong {
-            color: #333;
+            color: var(--foreground);
         }
         
         .instance-actions {
@@ -203,79 +296,100 @@
         }
         
         .btn-access {
-            background: #48bb78;
+            background: linear-gradient(90deg, 
+                oklch(0.60 0.20 145) 0%,
+                oklch(0.55 0.22 160) 100%
+            );
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
             text-decoration: none;
             display: inline-block;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
+            font-weight: 600;
         }
         
         .btn-access:hover {
-            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px oklch(0.60 0.20 145 / 0.3);
         }
         
         .btn-delete {
-            background: #f56565;
+            background: oklch(0.55 0.22 25);
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
+            font-weight: 600;
         }
         
         .btn-delete:hover {
-            background: #e53e3e;
+            background: oklch(0.45 0.25 20);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px oklch(0.55 0.22 25 / 0.3);
         }
         
         .btn-reset {
-            background: #ed8936;
+            background: var(--color-tertiary);
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
+            font-weight: 600;
         }
         
         .btn-reset:hover {
-            background: #dd6b20;
+            background: var(--color-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px var(--shadow-color);
         }
         
         .btn-reset:disabled {
-            background: #ccc;
+            background: var(--color-gray-300);
             cursor: not-allowed;
+            transform: none;
         }
         
         .btn-teacher-access {
-            background: #9f7aea;
+            background: linear-gradient(90deg, 
+                var(--color-secondary) 0%,
+                oklch(0.62 0.26 350) 100%
+            );
             color: white;
             border: none;
             padding: 8px 16px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
+            font-weight: 600;
         }
         
         .btn-teacher-access:hover {
-            background: #805ad5;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px oklch(0.58 0.24 340 / 0.3);
         }
         
         .btn-teacher-access:disabled {
-            background: #ccc;
+            background: var(--color-gray-300);
             cursor: not-allowed;
+            transform: none;
         }
         
         .teacher-access-badge {
             display: inline-block;
-            background: #d6bcfa;
-            color: #553c9a;
+            background: linear-gradient(135deg, 
+                var(--color-secondary) 0%,
+                oklch(0.62 0.26 350) 100%
+            );
+            color: white;
             padding: 4px 8px;
-            border-radius: 3px;
+            border-radius: var(--radius-sm);
             font-size: 12px;
             font-weight: bold;
             margin-left: 5px;
@@ -284,54 +398,54 @@
         .status-badge {
             display: inline-block;
             padding: 4px 8px;
-            border-radius: 3px;
+            border-radius: var(--radius-sm);
             font-size: 12px;
             font-weight: bold;
         }
         
         .status-running {
-            background: #c6f6d5;
-            color: #22543d;
+            background: oklch(0.85 0.15 145);
+            color: oklch(0.30 0.20 145);
         }
         
         .status-stopped {
-            background: #fed7d7;
-            color: #742a2a;
+            background: oklch(0.85 0.15 25);
+            color: oklch(0.35 0.20 25);
         }
         
         .status-exited {
-            background: #fed7d7;
-            color: #742a2a;
+            background: oklch(0.85 0.15 25);
+            color: oklch(0.35 0.20 25);
         }
         
         .status-restarting {
-            background: #feebc8;
-            color: #7c2d12;
+            background: oklch(0.88 0.12 50);
+            color: oklch(0.40 0.18 40);
         }
         
         .status-paused {
-            background: #e2e8f0;
-            color: #2d3748;
+            background: oklch(0.88 0.05 265);
+            color: oklch(0.35 0.05 265);
         }
         
         .status-created {
-            background: #bee3f8;
-            color: #2c5282;
+            background: oklch(0.85 0.12 230);
+            color: oklch(0.35 0.18 230);
         }
         
         .status-removing {
-            background: #fbb6ce;
-            color: #702459;
+            background: oklch(0.82 0.18 340);
+            color: oklch(0.35 0.22 340);
         }
         
         .status-removed {
-            background: #e2e8f0;
-            color: #4a5568;
+            background: oklch(0.88 0.02 265);
+            color: oklch(0.40 0.02 265);
         }
         
         .status-unknown {
-            background: #e2e8f0;
-            color: #4a5568;
+            background: oklch(0.88 0.02 265);
+            color: oklch(0.40 0.02 265);
         }
         
         /* Modal Styles */
@@ -347,17 +461,19 @@
         }
         
         .modal-content {
-            background: white;
+            background: var(--card);
+            color: var(--card-foreground);
             margin: 10% auto;
             padding: 30px;
-            border-radius: 10px;
+            border-radius: var(--radius-lg);
             max-width: 500px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
         }
         
         .modal h2 {
             margin-bottom: 20px;
-            color: #333;
+            color: var(--foreground);
         }
         
         .form-group {
@@ -367,21 +483,25 @@
         .form-group label {
             display: block;
             margin-bottom: 5px;
-            color: #333;
+            color: var(--foreground);
             font-weight: 500;
         }
         
         .form-group input {
             width: 100%;
             padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
             font-size: 14px;
+            background: var(--card);
+            color: var(--foreground);
         }
         
+        /* Focus States */
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px var(--shadow-color);
         }
         
         .modal-actions {
@@ -391,49 +511,73 @@
         }
         
         .btn-cancel {
-            background: #e2e8f0;
-            color: #333;
-            border: none;
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
             padding: 10px 20px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .btn-cancel:hover {
+            background: var(--color-gray-300);
         }
         
         .btn-submit {
-            background: #667eea;
+            background: linear-gradient(90deg, 
+                var(--color-primary) 0%, 
+                var(--color-secondary) 50%, 
+                var(--color-primary) 100%
+            );
+            background-size: 200% 100%;
+            background-position: 0% 0%;
             color: white;
             border: none;
             padding: 10px 20px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .btn-submit:hover {
+            background-position: 100% 0%;
+            box-shadow: 0 8px 16px var(--shadow-color);
         }
         
         .btn-submit:disabled {
-            background: #ccc;
+            background: var(--color-gray-300);
             cursor: not-allowed;
         }
         
         .error-message {
-            background: #fed7d7;
-            color: #742a2a;
+            background: oklch(0.90 0.10 25);
+            color: oklch(0.35 0.20 25);
             padding: 10px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             margin-top: 10px;
+            border-left: 4px solid oklch(0.55 0.22 25);
         }
         
         .success-message {
-            background: #c6f6d5;
-            color: #22543d;
+            background: oklch(0.90 0.12 145);
+            color: oklch(0.30 0.20 145);
             padding: 10px;
-            border-radius: 5px;
+            border-radius: var(--radius);
             margin-top: 10px;
+            border-left: 4px solid oklch(0.60 0.20 145);
         }
         
         .no-instances {
             text-align: center;
-            color: white;
+            color: var(--color-gray-700);
             font-size: 18px;
             padding: 40px;
+            background: var(--card);
+            border-radius: var(--radius-lg);
+            border: 2px dashed var(--border);
         }
         
         .hidden {
