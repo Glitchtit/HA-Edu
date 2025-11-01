@@ -6,6 +6,7 @@ Test script for instance password and restart functionality
 import sys
 import os
 import unittest
+import docker
 from unittest.mock import Mock, patch, MagicMock
 
 # Add current directory to path
@@ -67,7 +68,6 @@ class TestRestartInstanceContainer(unittest.TestCase):
     @patch('app.client')
     def test_restart_instance_container_not_found(self, mock_client):
         """Test restart fails when container not found"""
-        import docker
         mock_client.containers.get.side_effect = docker.errors.NotFound("Container not found")
         
         container_id = "nonexistent_container"
