@@ -4,6 +4,7 @@ import logging
 import secrets
 import re
 import threading
+import bcrypt
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 from flask_sock import Sock
 import docker
@@ -577,6 +578,53 @@ print('success')
             pass
         return False, 'An error occurred while creating teacher account'
 
+def hash_password(password):
+    """Hash a password using bcrypt
+    
+    Args:
+        password: Plain text password to hash
+        
+    Returns:
+        str: Hashed password
+    """
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+
+def verify_password(password, hashed):
+    """Verify a password against a bcrypt hash
+    
+    Args:
+        password: Plain text password to verify
+        hashed: Bcrypt hash to compare against
+        
+    Returns:
+        bool: True if password matches, False otherwise
+    """
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def restart_instance_container(container_id):
+    """Restart a Docker container
+    
+    Args:
+        container_id: Docker container ID to restart
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        container = client.containers.get(container_id)
+        container.restart(timeout=10)
+        logger.info(f'Successfully restarted container {container_id[:12]}')
+        return True, 'Instance restarted successfully'
+    except docker.errors.NotFound:
+        logger.error(f'Container {container_id} not found')
+        return False, 'Instance not found'
+    except docker.errors.APIError as e:
+        logger.error(f'Docker API error restarting container {container_id}: {str(e)}')
+        return False, 'Failed to restart instance'
+    except Exception as e:
+        logger.error(f'Unexpected error restarting container {container_id}: {str(e)}', exc_info=True)
+        return False, 'An error occurred while restarting instance'
+
 @app.route('/')
 def index():
     """Main page with instance management UI"""
@@ -604,6 +652,7 @@ def create_instance():
     
     data = request.json
     server_name = data.get('server_name', '').strip()
+    instance_password = data.get('instance_password', '').strip()
     
     if not server_name:
         return jsonify({'error': 'Server name is required'}), 400
@@ -666,13 +715,19 @@ def create_instance():
         )
         
         # Save instance info
-        instances[server_name] = {
+        instance_info = {
             'container_id': container.id,
             'container_name': container_name,
             'port': port,
             'created_at': datetime.now().isoformat(),
             'status': 'running'
         }
+        
+        # Hash and store instance password if provided
+        if instance_password:
+            instance_info['instance_password_hash'] = hash_password(instance_password)
+        
+        instances[server_name] = instance_info
         save_instances(instances)
         
         return jsonify({
@@ -837,6 +892,61 @@ def reset_instance(server_name):
     except Exception as e:
         logger.error(f'Failed to reset instance: {str(e)}', exc_info=True)
         return jsonify({'error': 'Failed to reset instance. Please try again or contact support.'}), 500
+
+@app.route('/api/instances/<server_name>/restart', methods=['POST'])
+def restart_instance(server_name):
+    """API endpoint to restart an instance (requires instance password or admin password)"""
+    data = request.json or {}
+    password = data.get('password', '')
+    
+    if not password:
+        return jsonify({'error': 'Password is required'}), 400
+    
+    instances = load_instances()
+    
+    if server_name not in instances:
+        return jsonify({'error': 'Instance not found'}), 404
+    
+    instance = instances[server_name]
+    
+    # Check if password is valid (either instance password or admin password)
+    password_valid = False
+    
+    # First check admin password if configured
+    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
+        password_valid = True
+        logger.info(f'Instance {server_name} restart authorized with admin password')
+    # Then check instance password if set
+    elif instance.get('instance_password_hash'):
+        if verify_password(password, instance['instance_password_hash']):
+            password_valid = True
+            logger.info(f'Instance {server_name} restart authorized with instance password')
+    
+    if not password_valid:
+        logger.warning(f'Failed restart attempt for instance {server_name} - invalid password')
+        return jsonify({'error': 'Invalid password'}), 401
+    
+    try:
+        # Restart the container
+        success, message = restart_instance_container(instance['container_id'])
+        
+        if not success:
+            return jsonify({'error': message}), 500
+        
+        # Update status
+        instance['status'] = 'restarting'
+        instance['last_restarted_at'] = datetime.now().isoformat()
+        instances[server_name] = instance
+        save_instances(instances)
+        
+        return jsonify({
+            'message': 'Instance restarted successfully',
+            'server_name': server_name
+        }), 200
+        
+    except Exception as e:
+        logger.error(f'Failed to restart instance: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to restart instance. Please try again or contact support.'}), 500
 
 @app.route('/api/admin/check', methods=['GET'])
 def check_admin():
@@ -1011,8 +1121,21 @@ def add_teacher_access(server_name):
         # Log for audit trail
         logger.info(f'Teacher access added to instance {server_name} by admin. Teacher username: {TEACHER_USERNAME}')
         
+        # Automatically restart the instance to apply the teacher account changes
+        restart_success, restart_message = restart_instance_container(instance['container_id'])
+        
+        if not restart_success:
+            logger.warning(f'Teacher access added but failed to restart instance {server_name}: {restart_message}')
+            return jsonify({
+                'message': 'Teacher access added successfully, but instance restart failed. Please restart manually.',
+                'teacher_username': TEACHER_USERNAME,
+                'restart_warning': restart_message
+            }), 200
+        
+        logger.info(f'Instance {server_name} automatically restarted after teacher access creation')
+        
         return jsonify({
-            'message': 'Teacher access added successfully',
+            'message': 'Teacher access added successfully and instance restarted',
             'teacher_username': TEACHER_USERNAME
         }), 200
         

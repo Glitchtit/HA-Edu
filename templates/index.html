@@ -356,6 +356,31 @@
             transform: none;
         }
         
+        .btn-restart {
+            background: linear-gradient(90deg, 
+                oklch(0.55 0.18 200) 0%,
+                oklch(0.60 0.20 210) 100%
+            );
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .btn-restart:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px oklch(0.55 0.18 200 / 0.3);
+        }
+        
+        .btn-restart:disabled {
+            background: var(--color-gray-300);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
         .btn-teacher-access {
             background: linear-gradient(90deg, 
                 var(--color-secondary) 0%,
@@ -630,6 +655,7 @@
                     </div>
                     <div class="instance-actions">
                         <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Access</a>
+                        <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">🔄 Restart</button>
                         <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
                                 {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
                             👨‍🏫 Teacher
@@ -656,6 +682,14 @@
                     <label for="serverName">Server Name:</label>
                     <input type="text" id="serverName" name="serverName" required 
                            placeholder="e.g., Student-Lab-01">
+                </div>
+                <div class="form-group">
+                    <label for="instancePassword">Instance Password (optional):</label>
+                    <input type="password" id="instancePassword" name="instancePassword" 
+                           placeholder="Set a password to allow restart">
+                    <small style="color: var(--color-gray-700); display: block; margin-top: 5px;">
+                        If set, this password can be used to restart the instance. Admin password also works.
+                    </small>
                 </div>
                 <div id="modalMessage"></div>
                 <div class="modal-actions">
@@ -799,10 +833,38 @@
         </div>
     </div>
     
+    <!-- Restart Instance Modal -->
+    <div id="restartModal" class="modal">
+        <div class="modal-content">
+            <h2>Restart Instance</h2>
+            <p>Enter password to restart <strong id="restartServerName"></strong>.</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Password Options:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Use the <strong>instance password</strong> (if set when creating the instance)</li>
+                    <li>Or use the <strong>admin password</strong> (if configured)</li>
+                </ul>
+            </div>
+            <form id="restartInstanceForm">
+                <div class="form-group">
+                    <label for="restartPassword">Password:</label>
+                    <input type="password" id="restartPassword" name="restartPassword" required 
+                           placeholder="Enter instance or admin password">
+                </div>
+                <div id="restartModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeRestartModal()">Cancel</button>
+                    <button type="submit" class="btn-submit" id="restartSubmitBtn">Restart</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         let currentResetServer = null;
         let currentDeleteServer = null;
         let currentTeacherAccessServer = null;
+        let currentRestartServer = null;
         let pendingToggleState = null;
         let adminUnlocked = false;
         
@@ -978,6 +1040,19 @@
             currentTeacherAccessServer = null;
         }
         
+        function openRestartModal(serverName) {
+            currentRestartServer = serverName;
+            document.getElementById('restartServerName').textContent = serverName;
+            document.getElementById('restartModal').style.display = 'block';
+            document.getElementById('restartModalMessage').innerHTML = '';
+            document.getElementById('restartInstanceForm').reset();
+        }
+        
+        function closeRestartModal() {
+            document.getElementById('restartModal').style.display = 'none';
+            currentRestartServer = null;
+        }
+        
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
@@ -987,6 +1062,7 @@
             const deleteAllModal = document.getElementById('deleteAllModal');
             const toggleModal = document.getElementById('toggleModal');
             const teacherAccessModal = document.getElementById('teacherAccessModal');
+            const restartModal = document.getElementById('restartModal');
             if (event.target === addModal) {
                 closeModal();
             } else if (event.target === unlockModal) {
@@ -1001,6 +1077,8 @@
                 closeToggleModal();
             } else if (event.target === teacherAccessModal) {
                 closeTeacherAccessModal();
+            } else if (event.target === restartModal) {
+                closeRestartModal();
             }
         }
         
@@ -1011,20 +1089,28 @@
             const messageDiv = document.getElementById('modalMessage');
             
             const serverName = document.getElementById('serverName').value;
+            const instancePassword = document.getElementById('instancePassword').value;
             
             submitBtn.disabled = true;
             submitBtn.textContent = 'Creating...';
             messageDiv.innerHTML = '';
             
             try {
+                const requestBody = {
+                    server_name: serverName
+                };
+                
+                // Only include password if provided
+                if (instancePassword) {
+                    requestBody.instance_password = instancePassword;
+                }
+                
                 const response = await fetch('/api/instances', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        server_name: serverName
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const data = await response.json();
@@ -1304,6 +1390,48 @@
             }
         });
         
+        document.getElementById('restartInstanceForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('restartSubmitBtn');
+            const messageDiv = document.getElementById('restartModalMessage');
+            
+            const password = document.getElementById('restartPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Restarting...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentRestartServer)}/restart`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Instance restarted successfully! Reloading...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Restart';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Failed to restart instance: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Restart';
+            }
+        });
+        
         // Handle toggle change
         document.getElementById('instanceCreationToggle').addEventListener('change', function(e) {
             openToggleModal(e.target.checked);
@@ -1319,6 +1447,10 @@
         
         async function addTeacherAccess(serverName) {
             openTeacherAccessModal(serverName);
+        }
+        
+        async function restartInstance(serverName) {
+            openRestartModal(serverName);
         }
         
         // Update instance count
