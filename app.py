@@ -282,7 +282,7 @@ def check_instance_onboarding_complete(volume_name):
         logger.error(f'Failed to check onboarding status for volume {volume_name}: {str(e)}', exc_info=True)
         return False
 
-def create_teacher_account(volume_name, teacher_username, teacher_password):
+def create_teacher_account(volume_name, teacher_username, teacher_password, reset_if_exists=False):
     """Create a teacher admin account in a Home Assistant instance
     
     Directly manipulates .storage/auth and .storage/auth_provider.homeassistant
@@ -292,6 +292,7 @@ def create_teacher_account(volume_name, teacher_username, teacher_password):
         volume_name: Name of the Docker volume
         teacher_username: Username for the teacher account
         teacher_password: Password for the teacher account
+        reset_if_exists: If True, reset the password if the account already exists
         
     Returns:
         tuple: (success: bool, message: str)
@@ -341,6 +342,7 @@ from datetime import datetime, timezone
 
 TEACHER_USERNAME = {teacher_username!r}
 TEACHER_PASSWORD = {teacher_password!r}
+RESET_IF_EXISTS = {reset_if_exists!r}
 
 now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
@@ -388,13 +390,47 @@ provider_users_list = provider_root.setdefault('users', [])
 person_root = person_data.setdefault('data', dict())
 person_items = person_root.setdefault('items', [])
 
-# Ensure teacher user does not already exist
+# Check if teacher user already exists
 existing_users = [
     u for u in auth_users
     if u.get('username') == TEACHER_USERNAME
 ]
 if existing_users:
-    print('exists')
+    if not RESET_IF_EXISTS:
+        print('exists')
+        exit(0)
+    # Reset existing account - update password in provider
+    existing_user = existing_users[0]
+    user_id = existing_user['id']
+    
+    # Generate new password hash
+    password_hash_bytes = bcrypt.hashpw(
+        TEACHER_PASSWORD.encode('utf-8'),
+        bcrypt.gensalt(rounds=12)
+    )
+    password_hash = base64.b64encode(password_hash_bytes).decode('utf-8')
+    
+    # Update password in provider
+    for provider_entry in provider_users_list:
+        if provider_entry.get('user_id') == user_id or provider_entry.get('username') == TEACHER_USERNAME:
+            # Update all possible password fields
+            password_keys = ['password', 'password_hash', 'hashed_password']
+            for key in password_keys:
+                if key in provider_entry:
+                    provider_entry[key] = password_hash
+            break
+    
+    # Save updated files
+    with open('/config/.storage/auth', 'w') as f:
+        json.dump(auth_data, f, indent=2)
+    
+    with open('/config/.storage/auth_provider.homeassistant', 'w') as f:
+        json.dump(provider_data, f, indent=2)
+    
+    with open(person_path, 'w') as f:
+        json.dump(person_data, f, indent=2)
+    
+    print('reset')
     exit(0)
 
 user_id = uuid.uuid4().hex
@@ -561,6 +597,9 @@ print('success')
             if output == 'exists':
                 logger.info(f'Teacher account already exists in volume {volume_name}')
                 return False, 'Teacher account already exists'
+            elif output == 'reset':
+                logger.info(f'Successfully reset teacher account password in volume {volume_name}')
+                return True, 'Teacher account password reset successfully'
             elif output == 'success':
                 logger.info(f'Successfully created teacher account in volume {volume_name}')
                 return True, 'Teacher account created successfully'
@@ -1093,9 +1132,8 @@ def add_teacher_access(server_name):
     
     instance = instances[server_name]
     
-    # Check if teacher access has already been added
-    if instance.get('teacher_access_added', False):
-        return jsonify({'error': 'Teacher access has already been added to this instance'}), 400
+    # Determine if we should reset existing account
+    reset_if_exists = instance.get('teacher_access_added', False)
     
     try:
         # Check if instance has completed onboarding
@@ -1106,8 +1144,8 @@ def add_teacher_access(server_name):
                 'error': 'Instance has not completed onboarding yet. Students must complete the onboarding process before teacher access can be added.'
             }), 400
         
-        # Create teacher account
-        success, message = create_teacher_account(volume_name, TEACHER_USERNAME, TEACHER_PASSWORD)
+        # Create teacher account (or reset password if already exists)
+        success, message = create_teacher_account(volume_name, TEACHER_USERNAME, TEACHER_PASSWORD, reset_if_exists=reset_if_exists)
         
         if not success:
             return jsonify({'error': message}), 400
@@ -1142,6 +1180,105 @@ def add_teacher_access(server_name):
     except Exception as e:
         logger.error(f'Failed to add teacher access to instance {server_name}: {str(e)}', exc_info=True)
         return jsonify({'error': 'Failed to add teacher access. Please try again or contact support.'}), 500
+
+@app.route('/api/instances/add-teacher-access-all', methods=['POST'])
+def add_teacher_access_all():
+    """API endpoint to add teacher access to all instances (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    if not TEACHER_USERNAME or not TEACHER_PASSWORD:
+        return jsonify({'error': 'Teacher access not configured. Please set TEACHER_USERNAME and TEACHER_PASSWORD environment variables.'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    instances = load_instances()
+    
+    if not instances:
+        return jsonify({'error': 'No instances found'}), 404
+    
+    success_count = 0
+    failed_count = 0
+    skipped_count = 0
+    results = []
+    
+    for server_name, instance in instances.items():
+        try:
+            # Check if instance has completed onboarding
+            volume_name = instance['container_name']
+            
+            if not check_instance_onboarding_complete(volume_name):
+                logger.info(f'Skipping instance {server_name} - onboarding not complete')
+                skipped_count += 1
+                results.append({
+                    'server_name': server_name,
+                    'status': 'skipped',
+                    'message': 'Onboarding not complete'
+                })
+                continue
+            
+            # Determine if we should reset existing account
+            reset_if_exists = instance.get('teacher_access_added', False)
+            
+            # Create teacher account (or reset password if already exists)
+            success, message = create_teacher_account(volume_name, TEACHER_USERNAME, TEACHER_PASSWORD, reset_if_exists=True)
+            
+            if success:
+                # Update instance metadata
+                instance['teacher_access_added'] = True
+                instance['teacher_access_added_at'] = datetime.now().isoformat()
+                instances[server_name] = instance
+                
+                # Restart the instance to apply changes
+                restart_success, restart_message = restart_instance_container(instance['container_id'])
+                
+                success_count += 1
+                results.append({
+                    'server_name': server_name,
+                    'status': 'success',
+                    'message': message,
+                    'restarted': restart_success
+                })
+                
+                logger.info(f'Teacher access added to instance {server_name}. Restart: {restart_success}')
+            else:
+                failed_count += 1
+                results.append({
+                    'server_name': server_name,
+                    'status': 'failed',
+                    'message': message
+                })
+                logger.error(f'Failed to add teacher access to instance {server_name}: {message}')
+                
+        except Exception as e:
+            failed_count += 1
+            results.append({
+                'server_name': server_name,
+                'status': 'error',
+                'message': str(e)
+            })
+            logger.error(f'Exception while adding teacher access to instance {server_name}: {str(e)}', exc_info=True)
+    
+    # Save all instance updates
+    save_instances(instances)
+    
+    # Log for audit trail
+    logger.info(f'Bulk teacher access operation completed. Success: {success_count}, Failed: {failed_count}, Skipped: {skipped_count}')
+    
+    return jsonify({
+        'message': f'Teacher access operation completed. {success_count} succeeded, {failed_count} failed, {skipped_count} skipped.',
+        'teacher_username': TEACHER_USERNAME,
+        'success_count': success_count,
+        'failed_count': failed_count,
+        'skipped_count': skipped_count,
+        'results': results
+    }), 200
+
 
 def render_proxy_error(status_code, title, message, details=None, suggestions=None) -> tuple:
     """Render a user-friendly HTML error page for proxy errors
