@@ -1499,6 +1499,14 @@ def proxy(port, path):
             if key.lower() not in skip_response_headers:
                 if key.lower() == 'content-type':
                     content_type = value.lower()
+                # Rewrite Location header for redirects to include proxy prefix
+                # This is crucial for Cloudflare tunnel compatibility
+                if key.lower() == 'location':
+                    # Check if this is a relative path (starts with /) and not already prefixed
+                    if value.startswith('/') and not value.startswith(f'/proxy/{port}/'):
+                        # Rewrite to include /proxy/{port}/ prefix
+                        value = f'/proxy/{port}{value}'
+                        logger.debug(f'Rewrote Location header to: {value}')
                 response_headers.append((key, value))
         
         # Log response status for debugging
