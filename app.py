@@ -1367,8 +1367,8 @@ def proxy(port, path):
                 # Rewrite Location header for redirects to include proxy prefix
                 # This is crucial for Cloudflare tunnel compatibility
                 if key.lower() == 'location':
-                    # Check if this is a relative path (starts with /)
-                    if value.startswith('/'):
+                    # Check if this is a relative path (starts with /) and not already prefixed
+                    if value.startswith('/') and not value.startswith(f'/proxy/{port}/'):
                         # Rewrite to include /proxy/{port}/ prefix
                         value = f'/proxy/{port}{value}'
                         logger.debug(f'Rewrote Location header to: {value}')

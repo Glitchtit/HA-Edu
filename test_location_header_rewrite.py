@@ -15,23 +15,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_location_header_rewrite():
     """Test that Location headers in redirects are rewritten to include proxy prefix"""
     
-    # Create a temporary data file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        temp_data_file = f.name
-        json.dump({
-            'instances': {
-                'test-instance': {
-                    'container_id': 'abc123',
-                    'container_name': 'ha-edu-test-instance',
-                    'port': 8123,
-                    'created_at': '2025-01-01T00:00:00',
-                    'status': 'running'
-                }
-            },
-            'settings': {'instance_creation_enabled': True}
-        }, f)
+    # Create a temporary data file using mkstemp for better cleanup
+    fd, temp_data_file = tempfile.mkstemp(suffix='.json', text=True)
     
     try:
+        # Write the test data
+        with os.fdopen(fd, 'w') as f:
+            json.dump({
+                'instances': {
+                    'test-instance': {
+                        'container_id': 'abc123',
+                        'container_name': 'ha-edu-test-instance',
+                        'port': 8123,
+                        'created_at': '2025-01-01T00:00:00',
+                        'status': 'running'
+                    }
+                },
+                'settings': {'instance_creation_enabled': True}
+            }, f)
+        
         # Set environment variable for data file
         os.environ['DATA_FILE'] = temp_data_file
         
@@ -100,6 +102,25 @@ def test_location_header_rewrite():
                     f"Absolute URL should not be rewritten. Got: {location_header}"
                 
                 print(f"✓ Absolute URL not rewritten: {location_header}")
+            
+            # Test with already-prefixed path (should not be double-prefixed)
+            with patch('app.requests.get') as mock_get:
+                mock_response = Mock()
+                mock_response.status_code = 302
+                mock_response.headers = {
+                    'Location': '/proxy/8123/lovelace',
+                    'Content-Type': 'text/html'
+                }
+                mock_response.iter_content = Mock(return_value=iter([]))
+                mock_get.return_value = mock_response
+                
+                response = client.get('/proxy/8123/')
+                
+                location_header = response.headers.get('Location')
+                assert location_header == '/proxy/8123/lovelace', \
+                    f"Already-prefixed path should not be double-prefixed. Got: {location_header}"
+                
+                print(f"✓ Already-prefixed path not double-prefixed: {location_header}")
             
             print("\n✓ All Location header rewrite tests passed!")
             return True
