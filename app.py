@@ -693,6 +693,17 @@ def delete_instance(server_name):
         except docker.errors.NotFound:
             pass  # Container already removed
         
+        # Remove the volume to free up storage
+        volume_name = instance['container_name']
+        try:
+            volume = client.volumes.get(volume_name)
+            volume.remove()
+            logger.info(f'Successfully removed volume {volume_name}')
+        except docker.errors.NotFound:
+            pass  # Volume doesn't exist or already removed
+        except Exception as e:
+            logger.warning(f'Failed to remove volume {volume_name}: {str(e)}')
+        
         # Remove from instances
         del instances[server_name]
         save_instances(instances)
@@ -857,6 +868,17 @@ def delete_all_instances():
                     container.remove()
                 except docker.errors.NotFound:
                     pass  # Container already removed
+                
+                # Remove the volume to free up storage
+                volume_name = instance['container_name']
+                try:
+                    volume = client.volumes.get(volume_name)
+                    volume.remove()
+                    logger.info(f'Successfully removed volume {volume_name}')
+                except docker.errors.NotFound:
+                    pass  # Volume doesn't exist or already removed
+                except Exception as e:
+                    logger.warning(f'Failed to remove volume {volume_name}: {str(e)}')
                 
                 deleted_count += 1
             except Exception as e:
