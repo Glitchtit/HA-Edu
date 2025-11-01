@@ -1517,8 +1517,10 @@ def proxy(port, path):
                         parsed = urllib.parse.urlparse(value)
                         # Check if this is a redirect to the backend instance (matching both port and hostname)
                         # We need to verify both to avoid false positives (e.g., external services on same port)
+                        # Note: The backend IP address (192.168.50.111) matches the hardcoded value used throughout this codebase
                         is_backend_host = parsed.hostname in ['192.168.50.111', 'localhost', '127.0.0.1']
-                        # parsed.port is None if no port is specified in the URL
+                        # parsed.port is None if no port is specified in the URL (e.g., 'http://localhost/')
+                        # We intentionally exclude URLs without explicit ports to avoid false positives with standard web services
                         is_backend_port = parsed.port is not None and parsed.port == port
                         
                         if is_backend_host and is_backend_port:

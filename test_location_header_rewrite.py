@@ -103,7 +103,9 @@ def test_location_header_rewrite():
                 
                 print(f"✓ Absolute URL not rewritten: {location_header}")
             
-            # Test with absolute URL without port (should not be rewritten)
+            # Test with absolute URL without explicit port (should not be rewritten)
+            # URLs without explicit ports have parsed.port = None, which are intentionally excluded
+            # from rewriting to avoid false positives with standard web services
             with patch('app.requests.get') as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 302
