@@ -22,4 +22,6 @@ ENV FLASK_APP=app.py
 ENV PYTHONUNBUFFERED=1
 
 # Run the application with Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "gevent", "--timeout", "120", "app:app"]
+# --preload ensures app is loaded before forking workers (cleanup runs once)
+# --worker-class gevent enables WebSocket support via gevent
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "gevent", "--timeout", "120", "--preload", "app:app"]
