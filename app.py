@@ -785,9 +785,11 @@ def create_instance():
         if instance_password:
             instance_info['instance_password_hash'] = hash_password(instance_password)
         
-        instances = load_instances()
-        instances[server_name] = instance_info
-        save_instances(instances)
+        # Update the instance with final info (use lock to prevent race conditions)
+        with _port_allocation_lock:
+            instances = load_instances()
+            instances[server_name] = instance_info
+            save_instances(instances)
         
         return jsonify({
             'message': 'Instance created successfully',
@@ -798,12 +800,13 @@ def create_instance():
         
     except Exception as e:
         logger.error(f'Failed to create instance: {str(e)}', exc_info=True)
-        # Clean up the placeholder entry on failure
+        # Clean up the placeholder entry on failure (use lock to prevent race conditions)
         try:
-            instances = load_instances()
-            if server_name in instances and instances[server_name].get('container_id') == 'pending':
-                del instances[server_name]
-                save_instances(instances)
+            with _port_allocation_lock:
+                instances = load_instances()
+                if server_name in instances and instances[server_name].get('container_id') == 'pending':
+                    del instances[server_name]
+                    save_instances(instances)
         except Exception as cleanup_error:
             logger.error(f'Failed to clean up placeholder entry: {str(cleanup_error)}')
         return jsonify({'error': 'Failed to create instance. Please try again or contact support.'}), 500

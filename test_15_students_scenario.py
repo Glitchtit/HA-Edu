@@ -80,7 +80,7 @@ def test_15_students_simultaneous_creation():
                             'container_name': container_name,
                             'port': port,
                             'status': 'running',
-                            'created_at': time.time()
+                            'created_at': time.strftime('%Y-%m-%dT%H:%M:%S')
                         }
                         app.save_instances(instances)
                         
