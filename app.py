@@ -36,7 +36,6 @@ _port_allocation_lock = threading.Lock()
 # Key: volume_name, Value: (timestamp, onboarded_status)
 _onboarding_cache = {}
 _onboarding_cache_lock = threading.Lock()
-_onboarding_cache_ttl = 60  # Cache TTL in seconds
 
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
@@ -51,6 +50,8 @@ ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresse
 MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
 MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
+# Onboarding cache TTL in seconds - how long to cache onboarding status checks
+ONBOARDING_CACHE_TTL = int(os.getenv('ONBOARDING_CACHE_TTL', '60'))
 
 def is_admin_user(request):
     """Check if the current user has admin access
@@ -379,7 +380,7 @@ def check_instance_onboarding_complete_cached(volume_name):
         if volume_name in _onboarding_cache:
             cached_time, cached_status = _onboarding_cache[volume_name]
             # Return cached value if still valid
-            if current_time - cached_time < _onboarding_cache_ttl:
+            if current_time - cached_time < ONBOARDING_CACHE_TTL:
                 return cached_status
     
     # Cache miss or expired - perform actual check
