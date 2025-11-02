@@ -633,7 +633,6 @@
                     <input type="checkbox" id="instanceCreationToggle" checked>
                     <span class="toggle-slider"></span>
                 </label>
-                {% endif %}
             </div>
             <div class="instance-count">
                 <span id="instanceCount">{{ instances|length }}</span> aktiva instanser
@@ -681,6 +680,7 @@
                         </button>
                         <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Nollställ</button>
                         <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
+                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}
