@@ -40,6 +40,9 @@ ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
 TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
 ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresses
+# Maximum instances for non-admin users (0 or None means unlimited)
+MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
+MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 
 def is_admin_user(request):
@@ -759,25 +762,18 @@ def restart_instance_container(container_id):
 def get_user_identifier(request):
     """Get a unique identifier for the current user
     
-    Returns either the Cloudflare authenticated email or the IP address
+    Returns the Cloudflare authenticated email. In classroom settings,
+    all students share the same IP address, so email-based tracking is required.
     
     Args:
         request: Flask request object
         
     Returns:
-        str: User identifier (email or IP address)
+        str: User email identifier, or None if not authenticated
     """
-    # First try to get Cloudflare authenticated email
+    # Get Cloudflare authenticated email (required for user tracking)
     user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
-    if user_email:
-        return user_email
-    
-    # Fall back to IP address
-    client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-    if not client_ip:
-        client_ip = request.remote_addr
-    
-    return f"IP: {client_ip}"
+    return user_email if user_email else None
 
 def can_view_instance(request, instance):
     """Check if the current user can view a specific instance
@@ -800,10 +796,50 @@ def can_view_instance(request, instance):
     # Get current user identifier
     current_user = get_user_identifier(request)
     
+    # Unauthenticated users cannot view instances
+    if current_user is None:
+        return False
+    
     # Check if this user created the instance
     created_by = instance.get('created_by', '')
     
     return current_user == created_by
+
+def can_create_instance(request, instances):
+    """Check if the current user can create a new instance
+    
+    Users can create instances if:
+    1. They have admin access (always allowed), OR
+    2. MAX_INSTANCES is 0/unset (unlimited for all users), OR
+    3. They have fewer instances than MAX_INSTANCES
+    
+    Args:
+        request: Flask request object
+        instances: Dictionary of all instances
+        
+    Returns:
+        tuple: (bool: can_create, int: current_count, int: max_allowed)
+    """
+    # Admins can always create instances regardless of MAX_INSTANCES
+    if is_admin_user(request):
+        return True, 0, 0
+    
+    # Get user identifier - required for non-admin users
+    user_id = get_user_identifier(request)
+    if user_id is None:
+        # Unauthenticated users cannot create instances
+        return False, 0, 0
+    
+    # If MAX_INSTANCES is 0 or not set, unlimited instances for all users
+    if MAX_INSTANCES == 0:
+        return True, 0, 0
+    
+    # Count instances created by this user
+    user_instance_count = sum(1 for inst in instances.values() if inst.get('created_by', '') == user_id)
+    
+    # Check if user has reached the limit
+    can_create = user_instance_count < MAX_INSTANCES
+    return can_create, user_instance_count, MAX_INSTANCES
 
 @app.route('/')
 def index():
@@ -816,20 +852,38 @@ def index():
     is_admin = is_admin_user(request)
     user_id = get_user_identifier(request)
     
-    if not is_admin:
-        # Non-admin users only see their own instances
+    if not is_admin and user_id is not None:
+        # Non-admin authenticated users only see their own instances
         instances = {
             name: inst for name, inst in instances.items()
             if inst.get('created_by', '') == user_id
         }
+    elif not is_admin and user_id is None:
+        # Unauthenticated non-admin users see no instances
+        instances = {}
     
-    # Check if user already has an instance (to disable create button for non-admins)
-    # Admins can always create instances, but non-admins are limited to one instance
-    # to prevent resource exhaustion and ensure fair usage
-    user_has_instance = len(instances) > 0 if not is_admin else False
+    # Check if user can create more instances
+    can_create, user_count, max_allowed = can_create_instance(request, load_instances())
+    user_has_instance = not can_create
     
-    # Pass admin status and user_has_instance to template
-    return render_template('index.html', instances=instances, is_admin=is_admin, user_has_instance=user_has_instance)
+    # Generate tooltip message for create button
+    create_button_tooltip = ""
+    if user_has_instance:
+        if user_id is None:
+            create_button_tooltip = "Du måste vara autentiserad via Cloudflare för att skapa instanser."
+        elif max_allowed > 0:
+            create_button_tooltip = f"Du har nått gränsen på {max_allowed} instans(er). Ta bort en befintlig instans för att skapa en ny."
+        else:
+            create_button_tooltip = "Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."
+    
+    # Pass admin status, user_has_instance, and max instances info to template
+    return render_template('index.html', 
+                         instances=instances, 
+                         is_admin=is_admin, 
+                         user_has_instance=user_has_instance,
+                         max_instances=max_allowed,
+                         user_instance_count=user_count,
+                         create_button_tooltip=create_button_tooltip)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
@@ -846,10 +900,14 @@ def get_instances():
     if not is_admin:
         # Non-admin users only see their own instances
         user_id = get_user_identifier(request)
-        instances = {
-            name: inst for name, inst in instances.items()
-            if inst.get('created_by', '') == user_id
-        }
+        if user_id is None:
+            # Unauthenticated users see no instances
+            instances = {}
+        else:
+            instances = {
+                name: inst for name, inst in instances.items()
+                if inst.get('created_by', '') == user_id
+            }
     
     return jsonify(instances)
 
@@ -860,6 +918,21 @@ def create_instance():
     settings = load_settings()
     if not settings.get('instance_creation_enabled', True):
         return jsonify({'error': 'Instance creation is currently disabled'}), 403
+    
+    # Check if user can create more instances (server-side validation)
+    instances = load_instances()
+    can_create, user_count, max_allowed = can_create_instance(request, instances)
+    
+    if not can_create:
+        # Get user identifier to determine error message
+        user_id = get_user_identifier(request)
+        if user_id is None:
+            return jsonify({
+                'error': 'You must be authenticated via Cloudflare to create instances.'
+            }), 403
+        return jsonify({
+            'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
+        }), 403
     
     data = request.json
     server_name = data.get('server_name', '').strip()
@@ -873,6 +946,19 @@ def create_instance():
     with _port_allocation_lock:
         instances = load_instances()
         
+        # Re-check limit inside lock to prevent race condition
+        can_create, user_count, max_allowed = can_create_instance(request, instances)
+        if not can_create:
+            # Get user identifier to determine error message
+            user_id = get_user_identifier(request)
+            if user_id is None:
+                return jsonify({
+                    'error': 'You must be authenticated via Cloudflare to create instances.'
+                }), 403
+            return jsonify({
+                'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
+            }), 403
+        
         # Check if server name already exists
         if server_name in instances:
             return jsonify({'error': 'Server name already exists'}), 400
@@ -880,7 +966,7 @@ def create_instance():
         # Get available port (no limit check - dynamic port assignment)
         port = get_available_port()
         
-        # Get user identifier (email or IP)
+        # Get user identifier (email only)
         created_by = get_user_identifier(request)
         
         # Reserve the port immediately by adding a placeholder entry

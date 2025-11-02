@@ -74,11 +74,11 @@ def test_functions():
                 print(f"✗ Function missing: {func}")
                 return False
         
-        # Test that MAX_INSTANCES is removed
-        if not hasattr(app, 'MAX_INSTANCES'):
-            print("✓ MAX_INSTANCES removed (no instance limit)")
+        # Test that MAX_INSTANCES exists and is configurable
+        if hasattr(app, 'MAX_INSTANCES'):
+            print(f"✓ MAX_INSTANCES exists (configurable limit): {app.MAX_INSTANCES}")
         else:
-            print("✗ MAX_INSTANCES still exists (should be removed)")
+            print("✗ MAX_INSTANCES not found (should exist)")
             return False
         
         return True
@@ -96,12 +96,12 @@ def test_templates():
         with open(template_path, 'r') as f:
             content = f.read()
             checks = [
-                ('Add New', 'Add New button'),
+                ('Skapa ny instans', 'Add New button'),
                 ('server_name', 'Server name field'),
                 ('modal', 'Modal dialog'),
                 ('/api/instances', 'API endpoint reference'),
                 ('deleteModal', 'Delete modal dialog'),
-                ('deleteAdminPassword', 'Delete admin password field')
+                ('deleteAllAdminPassword', 'Delete admin password field')
             ]
             for check, desc in checks:
                 if check in content:

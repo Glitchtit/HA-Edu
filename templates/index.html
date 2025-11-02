@@ -655,7 +655,7 @@
             <h2>Hantera instanser</h2>
             <div class="controls-row">
                 <button id="addNewBtn" class="add-button" onclick="openModal()" 
-                        {% if user_has_instance %}disabled title="Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."{% endif %}>+ Skapa ny instans</button>
+                        {% if user_has_instance %}disabled title="{{ create_button_tooltip }}"{% endif %}>+ Skapa ny instans</button>
                 <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
                 <button id="deleteAllBtn" class="btn-delete-all {% if not is_admin %}hidden{% endif %}" onclick="openDeleteAllModal()">Ta bort alla</button>
                 <button id="teacherAccessAllBtn" class="btn-teacher-access {% if not is_admin %}hidden{% endif %}" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
@@ -667,6 +667,9 @@
             </div>
             <div class="instance-count">
                 <span id="instanceCount">{{ instances|length }}</span> aktiva instanser
+                {% if not is_admin and max_instances > 0 %}
+                <span style="margin-left: 10px; color: var(--color-gray-700);">(Gräns: {{ user_instance_count }}/{{ max_instances }})</span>
+                {% endif %}
             </div>
         </div>
         
