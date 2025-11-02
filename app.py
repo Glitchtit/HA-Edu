@@ -908,6 +908,11 @@ def get_instances():
                 name: inst for name, inst in instances.items()
                 if inst.get('created_by', '') == user_id
             }
+    else:
+        # For admins, add onboarding status to each instance
+        for server_name, instance in instances.items():
+            volume_name = instance.get('container_name', f'ha-edu-{server_name.lower().replace(" ", "-")}')
+            instance['onboarded'] = check_instance_onboarding_complete(volume_name)
     
     return jsonify(instances)
 
