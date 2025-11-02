@@ -256,6 +256,7 @@
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
             margin-bottom: 20px;
+            align-items: start;
         }
         
         .instance-card {
@@ -292,7 +293,14 @@
         .instance-actions {
             margin-top: 15px;
             display: flex;
+            flex-direction: column;
             gap: 10px;
+        }
+        
+        .instance-actions-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
         }
         
         .btn-access {
@@ -309,6 +317,9 @@
             display: inline-block;
             transition: all 0.3s ease;
             font-weight: 600;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
         }
         
         .btn-access:hover {
@@ -328,6 +339,9 @@
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: 600;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
         }
         
         .btn-delete:hover {
@@ -347,6 +361,9 @@
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: 600;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
         }
         
         .btn-reset:hover {
@@ -372,6 +389,9 @@
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: 600;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
         }
         
         .btn-restart:hover {
@@ -397,6 +417,9 @@
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: 600;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
         }
         
         .btn-teacher-access:hover {
@@ -646,7 +669,7 @@
                     <h3>
                         {{ name }}
                         {% if instance.get('teacher_access_added', False) %}
-                        <span class="teacher-access-badge">👨‍🏫 Läraråtkomst</span>
+                        <span class="teacher-access-badge">Läraråtkomst</span>
                         {% endif %}
                     </h3>
                     <div class="instance-info">
@@ -664,23 +687,29 @@
                     </div>
                     {% endif %}
                     <div class="instance-actions">
-                        <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
-                        <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">🔄 Starta om</button>
-                        {% if is_admin %}
-                        <button class="btn-teacher-access" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
-                                {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
-                            👨‍🏫 Lärare
-                        </button>
-                        <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
-                        <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
-                        {% else %}
-                        <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
-                                {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
-                            👨‍🏫 Lärare
-                        </button>
-                        <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Nollställ</button>
-                        <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
-                        {% endif %}
+                        <div class="instance-actions-row">
+                            <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                            <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">Starta om</button>
+                            {% if is_admin %}
+                            <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
+                            {% else %}
+                            <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Nollställ</button>
+                            {% endif %}
+                        </div>
+                        <div class="instance-actions-row">
+                            {% if is_admin %}
+                            <button class="btn-teacher-access" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
+                                    {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
+                                Lärare
+                            </button>
+                            {% else %}
+                            <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
+                                    {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
+                                Lärare
+                            </button>
+                            {% endif %}
+                            <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -722,7 +751,7 @@
     <!-- Unlock Admin Features Modal -->
     <div id="unlockModal" class="modal">
         <div class="modal-content">
-            <h2>🔑 Lås upp adminfunktioner</h2>
+            <h2>Lås upp adminfunktioner</h2>
             <p>Ange adminlösenordet för att visa administrationskontroller.</p>
             <form id="unlockAdminForm">
                 <div class="form-group">
@@ -839,10 +868,10 @@
     <!-- Add Teacher Access Modal -->
     <div id="teacherAccessModal" class="modal">
         <div class="modal-content">
-            <h2>👨‍🏫 Lägg till läraråtkomst</h2>
+            <h2>Lägg till läraråtkomst</h2>
             <p>Ange adminlösenord för att lägga till läraråtkomst till <strong id="teacherAccessServerName"></strong>.</p>
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                <strong>ℹ️ Vad gör detta?</strong>
+                <strong>Vad gör detta?</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
                     <li>Skapar ett sekundärt adminkonto för läraren (<strong id="teacherUsernameDisplay"></strong>)</li>
                     <li>Studentens konto och data förblir oförändrade</li>
