@@ -650,8 +650,8 @@
                 <button id="addNewBtn" class="add-button" onclick="openModal()" 
                         {% if user_has_instance %}disabled title="Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."{% endif %}>+ Skapa ny instans</button>
                 <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
-                <button id="deleteAllBtn" class="btn-delete-all hidden" onclick="openDeleteAllModal()">Ta bort alla</button>
-                <label class="toggle-container hidden" id="toggleContainer">
+                <button id="deleteAllBtn" class="btn-delete-all {% if not is_admin %}hidden{% endif %}" onclick="openDeleteAllModal()">Ta bort alla</button>
+                <label class="toggle-container {% if not is_admin %}hidden{% endif %}" id="toggleContainer">
                     <span class="toggle-label">Skapa instanser:</span>
                     <input type="checkbox" id="instanceCreationToggle" checked>
                     <span class="toggle-slider"></span>
