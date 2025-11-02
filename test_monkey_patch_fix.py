@@ -77,8 +77,7 @@ def test_wsgi_import_order():
             
         # Check that --preload is removed (important for per-worker monkey-patching)
         # Only check in CMD lines, not in comments
-        cmd_lines = [line for line in content.split('\n') if line.strip().startswith('CMD')]
-        has_preload_in_cmd = any('--preload' in line for line in cmd_lines)
+        has_preload_in_cmd = any('--preload' in line for line in content.split('\n') if line.strip().startswith('CMD'))
         
         if not has_preload_in_cmd:
             print("   ✅ PASS: --preload flag is not in CMD (correct for gevent)")
@@ -99,12 +98,19 @@ def test_wsgi_import_order():
             lines = f.readlines()
             
         # Check for imports that need to be monkey-patched
+        # Support various import patterns: import X, from X import Y, import X as Y
+        import re
         imports_to_check = ['requests', 'docker', 'urllib']
         found_imports = []
         
         for line in lines[:30]:  # Check first 30 lines (import section)
+            # Skip comments
+            if line.strip().startswith('#'):
+                continue
+            # Match: import requests, from requests import ..., import requests as ...
             for imp in imports_to_check:
-                if f'import {imp}' in line and not line.strip().startswith('#'):
+                pattern = rf'\b(import\s+{imp}|from\s+{imp}\s+import)'
+                if re.search(pattern, line):
                     found_imports.append(imp)
                     
         if found_imports:
