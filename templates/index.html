@@ -651,6 +651,7 @@
                         {% if user_has_instance %}disabled title="Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."{% endif %}>+ Skapa ny instans</button>
                 <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
                 <button id="deleteAllBtn" class="btn-delete-all {% if not is_admin %}hidden{% endif %}" onclick="openDeleteAllModal()">Ta bort alla</button>
+                <button id="teacherAccessAllBtn" class="btn-teacher-access {% if not is_admin %}hidden{% endif %}" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
                 <label class="toggle-container {% if not is_admin %}hidden{% endif %}" id="toggleContainer">
                     <span class="toggle-label">Skapa instanser:</span>
                     <input type="checkbox" id="instanceCreationToggle" checked>
@@ -922,6 +923,35 @@
         </div>
     </div>
     
+    <!-- Add Teacher Access to All Instances Modal -->
+    <div id="teacherAccessAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Lägg till läraråtkomst på alla instanser</h2>
+            <p>Ange adminlösenord för att lägga till läraråtkomst till <strong>alla instanser</strong>.</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>Vad gör detta?</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Skapar ett läraradminkonto (<strong id="teacherUsernameDisplayAll"></strong>) på varje instans</li>
+                    <li>Hoppar över instanser som inte slutfört onboarding</li>
+                    <li>Studentkonton och data förblir oförändrade</li>
+                    <li>Instanser startas om automatiskt för att tillämpa ändringarna</li>
+                </ul>
+            </div>
+            <form id="teacherAccessAllForm">
+                <div class="form-group">
+                    <label for="teacherAccessAllAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="teacherAccessAllAdminPassword" name="teacherAccessAllAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="teacherAccessAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeTeacherAccessAllModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="teacherAccessAllSubmitBtn">Lägg till på alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         let currentResetServer = null;
         let currentDeleteServer = null;
@@ -967,8 +997,10 @@
             // Show delete all button and toggle container
             const deleteAllBtn = document.getElementById('deleteAllBtn');
             const toggleContainer = document.getElementById('toggleContainer');
+            const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
             if (deleteAllBtn) deleteAllBtn.classList.remove('hidden');
             if (toggleContainer) toggleContainer.classList.remove('hidden');
+            if (teacherAccessAllBtn && window.teacherAccessEnabled) teacherAccessAllBtn.classList.remove('hidden');
         }
         
         // Check if teacher access feature is enabled
@@ -987,6 +1019,9 @@
                     if (isAdmin) {
                         // Teacher access buttons are already visible for admin users
                         console.log('Teacher access enabled for admin user');
+                        // Show the teacher access all button for admins
+                        const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
+                        if (teacherAccessAllBtn) teacherAccessAllBtn.classList.remove('hidden');
                     }
                 }
             } catch (error) {
@@ -1000,6 +1035,9 @@
                 document.querySelectorAll('.btn-teacher-access').forEach(btn => {
                     btn.classList.remove('hidden');
                 });
+                // Also show the teacher access all button
+                const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
+                if (teacherAccessAllBtn) teacherAccessAllBtn.classList.remove('hidden');
             }
         }
         
@@ -1122,6 +1160,17 @@
         function closeTeacherAccessModal() {
             document.getElementById('teacherAccessModal').style.display = 'none';
             currentTeacherAccessServer = null;
+        }
+        
+        function openTeacherAccessAllModal() {
+            document.getElementById('teacherUsernameDisplayAll').textContent = window.teacherUsername || 'teacher';
+            document.getElementById('teacherAccessAllModal').style.display = 'block';
+            document.getElementById('teacherAccessAllModalMessage').innerHTML = '';
+            document.getElementById('teacherAccessAllForm').reset();
+        }
+        
+        function closeTeacherAccessAllModal() {
+            document.getElementById('teacherAccessAllModal').style.display = 'none';
         }
         
         function openRestartModal(serverName) {
@@ -1471,6 +1520,60 @@
                 messageDiv.innerHTML = `<div class="error-message">Kunde inte lägga till läraråtkomst: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Lägg till läraråtkomst';
+            }
+        });
+        
+        document.getElementById('teacherAccessAllForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('teacherAccessAllSubmitBtn');
+            const messageDiv = document.getElementById('teacherAccessAllModalMessage');
+            
+            const adminPassword = document.getElementById('teacherAccessAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Bearbetar...';
+            messageDiv.innerHTML = '<div style="color: #2563eb;">Lägger till läraråtkomst på alla instanser...</div>';
+            
+            try {
+                const response = await fetch('/api/instances/add-teacher-access-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let message = '<div class="success-message">';
+                    message += `<strong>Resultat:</strong><br>`;
+                    message += `✓ Lyckades: ${data.success_count}<br>`;
+                    if (data.failed_count > 0) {
+                        message += `✗ Misslyckades: ${data.failed_count}<br>`;
+                    }
+                    if (data.skipped_count > 0) {
+                        message += `⊘ Hoppade över: ${data.skipped_count} (onboarding ej slutförd)<br>`;
+                    }
+                    message += '<br>Laddar om sidan...';
+                    message += '</div>';
+                    
+                    messageDiv.innerHTML = message;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Lägg till på alla';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte lägga till läraråtkomst: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Lägg till på alla';
             }
         });
         
