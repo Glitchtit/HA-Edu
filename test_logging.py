@@ -193,8 +193,19 @@ def test_log_filtering():
             
             # Log different event types
             logger.log_instance_creation('test-1', 'user@example.com', 'user', 8123, 'abc123')
-            logger.log_instance_access('test-1', 'user@example.com', 'user')
-            logger.log_instance_access('test-1', 'admin@example.com', 'admin')
+            logger.log_instance_access(
+                server_name='test-1',
+                user_id='user@example.com',
+                user_type='user',
+                access_type='proxy'
+            )
+            
+            logger.log_instance_access(
+                server_name='test-1',
+                user_id='admin@example.com',
+                user_type='admin',
+                access_type='proxy'
+            )
             logger.log_instance_deletion('test-1', 'user@example.com', 'user', 'abc123')
             
             # Filter by event type

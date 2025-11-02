@@ -46,6 +46,9 @@ MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
 MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 
+# Paths that trigger access logging (to avoid logging every asset request)
+ACCESS_LOG_PATHS = ['', 'index.html', 'lovelace']
+
 def is_admin_user(request):
     """Check if the current user has admin access
     
@@ -1794,8 +1797,8 @@ def proxy(port, path):
         )
     
     # Log instance access (only log on initial access, not every request)
-    # We'll log on the root path or index.html to avoid excessive logging
-    if path in ['', 'index.html', 'lovelace']:
+    # We'll log on specific paths to avoid excessive logging of assets
+    if path in ACCESS_LOG_PATHS:
         user_id, user_type = get_user_info_for_logging(request)
         interaction_logger.log_instance_access(
             server_name=server_name,

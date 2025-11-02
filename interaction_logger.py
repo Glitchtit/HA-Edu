@@ -20,7 +20,14 @@ import threading
 _log_write_lock = threading.Lock()
 
 # Configure log directory - use /logs in production, ./logs in development
-LOG_DIR = os.getenv('LOG_DIR', '/logs' if os.path.exists('/logs') or os.getuid() == 0 else './logs')
+# Check if running as root or if /logs exists (production)
+try:
+    is_root = os.getuid() == 0
+except AttributeError:
+    # Windows doesn't have getuid, assume not root
+    is_root = False
+
+LOG_DIR = os.getenv('LOG_DIR', '/logs' if (os.path.exists('/logs') or is_root) else './logs')
 INTERACTION_LOG_FILE = os.path.join(LOG_DIR, 'interactions.log')
 MAX_LOG_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_LOG_FILES = 10
