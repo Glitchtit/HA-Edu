@@ -41,7 +41,8 @@ TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
 TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
 ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresses
 # Maximum instances for non-admin users (0 or None means unlimited)
-MAX_INSTANCES = int(os.getenv('MAX_INSTANCES', '0')) if os.getenv('MAX_INSTANCES', '').strip() else 0
+MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
+MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 
 def is_admin_user(request):
@@ -860,13 +861,22 @@ def index():
     can_create, user_count, max_allowed = can_create_instance(request, load_instances())
     user_has_instance = not can_create
     
+    # Generate tooltip message for create button
+    create_button_tooltip = ""
+    if user_has_instance:
+        if max_allowed > 0:
+            create_button_tooltip = f"Du har nått gränsen på {max_allowed} instans(er). Ta bort en befintlig instans för att skapa en ny."
+        else:
+            create_button_tooltip = "Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."
+    
     # Pass admin status, user_has_instance, and max instances info to template
     return render_template('index.html', 
                          instances=instances, 
                          is_admin=is_admin, 
                          user_has_instance=user_has_instance,
                          max_instances=max_allowed,
-                         user_instance_count=user_count)
+                         user_instance_count=user_count,
+                         create_button_tooltip=create_button_tooltip)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
