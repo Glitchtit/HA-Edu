@@ -308,8 +308,9 @@ def copy_master_config_to_volume(volume_name):
 def check_instance_onboarding_complete(volume_name):
     """Check if a Home Assistant instance has completed onboarding
     
-    Checks for the existence of .storage/auth file in the volume,
-    which indicates that at least one user has been created.
+    Checks for the existence of required .storage files in the volume,
+    which indicates that at least one user has been created and the
+    authentication provider is configured.
     
     Args:
         volume_name: Name of the Docker volume to check
@@ -325,10 +326,11 @@ def check_instance_onboarding_complete(volume_name):
             logger.info('Pulling alpine:latest image...')
             client.images.pull('alpine:latest')
         
-        # Create a temporary container to check the file
+        # Create a temporary container to check both required files
+        # Both files are needed for create_teacher_account to work
         temp_container = client.containers.create(
             'alpine:latest',
-            command=['sh', '-c', 'test -f /config/.storage/auth && echo "exists" || echo "missing"'],
+            command=['sh', '-c', 'test -f /config/.storage/auth && test -f /config/.storage/auth_provider.homeassistant && echo "exists" || echo "missing"'],
             volumes={volume_name: {'bind': '/config', 'mode': 'ro'}}
         )
         
