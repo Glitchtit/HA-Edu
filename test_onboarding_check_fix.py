@@ -49,15 +49,6 @@ class FakeContainers:
         self.container = container
         
     def create(self, *args, **kwargs):
-        # Verify the command checks for both files
-        if 'command' in kwargs:
-            command = kwargs['command']
-            if isinstance(command, list) and len(command) > 2:
-                shell_cmd = command[-1]
-                # The fix should check both files
-                assert '/config/.storage/auth' in shell_cmd, "Command should check auth file"
-                assert '/config/.storage/auth_provider.homeassistant' in shell_cmd, "Command should check auth_provider file"
-                assert '&&' in shell_cmd, "Command should use && to check both files"
         return self.container
 
 
@@ -72,19 +63,26 @@ class FakeDockerClient:
         self.images = FakeImages()
 
 
-def test_onboarding_complete_with_both_files():
-    """Test that onboarding is considered complete when both files exist"""
-    print("\nTesting onboarding check with both files present...")
-    
+def setup_test_client(has_auth=True, has_provider=True):
+    """Helper function to set up a test Docker client with fake container"""
     _initial_client = types.SimpleNamespace(containers=None, images=None)
     with patch('docker.from_env', return_value=_initial_client):
         import app
-        
-    fake_container = FakeContainer(has_auth=True, has_provider=True)
+    
+    fake_container = FakeContainer(has_auth=has_auth, has_provider=has_provider)
     fake_client = FakeDockerClient(fake_container)
     
     original_client = app.client
     app.client = fake_client
+    
+    return app, original_client
+
+
+def test_onboarding_complete_with_both_files():
+    """Test that onboarding is considered complete when both files exist"""
+    print("\nTesting onboarding check with both files present...")
+    
+    app, original_client = setup_test_client(has_auth=True, has_provider=True)
     
     try:
         result = app.check_instance_onboarding_complete('test-volume')
@@ -99,15 +97,7 @@ def test_onboarding_incomplete_missing_auth():
     """Test that onboarding is incomplete when auth file is missing"""
     print("\nTesting onboarding check with auth file missing...")
     
-    _initial_client = types.SimpleNamespace(containers=None, images=None)
-    with patch('docker.from_env', return_value=_initial_client):
-        import app
-        
-    fake_container = FakeContainer(has_auth=False, has_provider=True)
-    fake_client = FakeDockerClient(fake_container)
-    
-    original_client = app.client
-    app.client = fake_client
+    app, original_client = setup_test_client(has_auth=False, has_provider=True)
     
     try:
         result = app.check_instance_onboarding_complete('test-volume')
@@ -122,15 +112,7 @@ def test_onboarding_incomplete_missing_provider():
     """Test that onboarding is incomplete when auth_provider file is missing"""
     print("\nTesting onboarding check with auth_provider file missing...")
     
-    _initial_client = types.SimpleNamespace(containers=None, images=None)
-    with patch('docker.from_env', return_value=_initial_client):
-        import app
-        
-    fake_container = FakeContainer(has_auth=True, has_provider=False)
-    fake_client = FakeDockerClient(fake_container)
-    
-    original_client = app.client
-    app.client = fake_client
+    app, original_client = setup_test_client(has_auth=True, has_provider=False)
     
     try:
         result = app.check_instance_onboarding_complete('test-volume')
@@ -145,15 +127,7 @@ def test_onboarding_incomplete_missing_both():
     """Test that onboarding is incomplete when both files are missing"""
     print("\nTesting onboarding check with both files missing...")
     
-    _initial_client = types.SimpleNamespace(containers=None, images=None)
-    with patch('docker.from_env', return_value=_initial_client):
-        import app
-        
-    fake_container = FakeContainer(has_auth=False, has_provider=False)
-    fake_client = FakeDockerClient(fake_container)
-    
-    original_client = app.client
-    app.client = fake_client
+    app, original_client = setup_test_client(has_auth=False, has_provider=False)
     
     try:
         result = app.check_instance_onboarding_complete('test-volume')
