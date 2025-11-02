@@ -317,7 +317,10 @@
         }
         
         .btn-delete {
-            background: oklch(0.55 0.22 25);
+            background: linear-gradient(90deg, 
+                oklch(0.55 0.22 25) 0%,
+                oklch(0.50 0.24 15) 100%
+            );
             color: white;
             border: none;
             padding: 8px 16px;
@@ -328,13 +331,15 @@
         }
         
         .btn-delete:hover {
-            background: oklch(0.45 0.25 20);
             transform: translateY(-2px);
             box-shadow: 0 8px 16px oklch(0.55 0.22 25 / 0.3);
         }
         
         .btn-reset {
-            background: var(--color-tertiary);
+            background: linear-gradient(90deg, 
+                var(--color-tertiary) 0%,
+                var(--color-primary) 100%
+            );
             color: white;
             border: none;
             padding: 8px 16px;
@@ -345,7 +350,6 @@
         }
         
         .btn-reset:hover {
-            background: var(--color-primary);
             transform: translateY(-2px);
             box-shadow: 0 8px 16px var(--shadow-color);
         }
@@ -358,8 +362,8 @@
         
         .btn-restart {
             background: linear-gradient(90deg, 
-                oklch(0.55 0.18 200) 0%,
-                oklch(0.60 0.20 210) 100%
+                oklch(0.60 0.20 220) 0%,
+                oklch(0.58 0.22 240) 100%
             );
             color: white;
             border: none;
@@ -372,7 +376,7 @@
         
         .btn-restart:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 16px oklch(0.55 0.18 200 / 0.3);
+            box-shadow: 0 8px 16px oklch(0.60 0.20 220 / 0.3);
         }
         
         .btn-restart:disabled {
@@ -620,15 +624,8 @@
         <div class="controls">
             <h2>Hantera instanser</h2>
             <div class="controls-row">
-                <button id="addNewBtn" class="add-button" onclick="openModal()">+ Skapa ny instans</button>
-                {% if is_admin %}
-                <button id="deleteAllBtn" class="btn-delete-all" onclick="openDeleteAllModal()">Ta bort alla</button>
-                <label class="toggle-container" id="toggleContainer">
-                    <span class="toggle-label">Skapa instanser:</span>
-                    <input type="checkbox" id="instanceCreationToggle" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-                {% else %}
+                <button id="addNewBtn" class="add-button" onclick="openModal()" 
+                        {% if user_has_instance %}disabled title="Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."{% endif %}>+ Skapa ny instans</button>
                 <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
                 <button id="deleteAllBtn" class="btn-delete-all hidden" onclick="openDeleteAllModal()">Ta bort alla</button>
                 <label class="toggle-container hidden" id="toggleContainer">
@@ -682,9 +679,8 @@
                                 {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
                             👨‍🏫 Lärare
                         </button>
-                        <button class="btn-reset hidden" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
-                        <button class="btn-delete hidden" onclick="deleteInstance('{{ name }}')">Ta bort</button>
-                        {% endif %}
+                        <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Nollställ</button>
+                        <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -746,19 +742,26 @@
     <!-- Reset Instance Modal -->
     <div id="resetModal" class="modal">
         <div class="modal-content">
-            <h2>Återställ instans</h2>
-            <p>Ange adminlösenord för att återställa <strong id="resetServerName"></strong> till standard HA-avbildning.</p>
+            <h2>Nollställ instans</h2>
+            <p>Ange lösenord för att nollställa <strong id="resetServerName"></strong> till standard HA-avbildning.</p>
             <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att radera all data och alla konfigurationer för denna instans!</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Lösenordsalternativ:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
+                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
+                </ul>
+            </div>
             <form id="resetInstanceForm">
                 <div class="form-group">
-                    <label for="adminPassword">Adminlösenord:</label>
-                    <input type="password" id="adminPassword" name="adminPassword" required 
-                           placeholder="Ange adminlösenord">
+                    <label for="resetPassword">Lösenord:</label>
+                    <input type="password" id="resetPassword" name="resetPassword" required 
+                           placeholder="Ange instans- eller adminlösenord">
                 </div>
                 <div id="resetModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeResetModal()">Avbryt</button>
-                    <button type="submit" class="btn-submit" id="resetSubmitBtn">Återställ</button>
+                    <button type="submit" class="btn-submit" id="resetSubmitBtn">Nollställ</button>
                 </div>
             </form>
         </div>
@@ -768,13 +771,20 @@
     <div id="deleteModal" class="modal">
         <div class="modal-content">
             <h2>Ta bort instans</h2>
-            <p>Ange adminlösenord för att ta bort <strong id="deleteServerName"></strong>.</p>
+            <p>Ange lösenord för att ta bort <strong id="deleteServerName"></strong>.</p>
             <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort instansen och all dess data!</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Lösenordsalternativ:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
+                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
+                </ul>
+            </div>
             <form id="deleteInstanceForm">
                 <div class="form-group">
-                    <label for="deleteAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="deleteAdminPassword" name="deleteAdminPassword" required 
-                           placeholder="Ange adminlösenord">
+                    <label for="deletePassword">Lösenord:</label>
+                    <input type="password" id="deletePassword" name="deletePassword" required 
+                           placeholder="Ange instans- eller adminlösenord">
                 </div>
                 <div id="deleteModalMessage"></div>
                 <div class="modal-actions">
@@ -925,19 +935,6 @@
         
         // Show all admin buttons (only for non-admin users after unlock)
         function showAdminButtons() {
-            if (isAdmin) {
-                // Admin users already have buttons visible
-                return;
-            }
-            
-            // Show all reset buttons
-            document.querySelectorAll('.btn-reset').forEach(btn => {
-                btn.classList.remove('hidden');
-            });
-            // Show all delete buttons
-            document.querySelectorAll('.btn-delete').forEach(btn => {
-                btn.classList.remove('hidden');
-            });
             // Show delete all button and toggle container
             const deleteAllBtn = document.getElementById('deleteAllBtn');
             const toggleContainer = document.getElementById('toggleContainer');
@@ -1243,10 +1240,10 @@
             const submitBtn = document.getElementById('resetSubmitBtn');
             const messageDiv = document.getElementById('resetModalMessage');
             
-            const adminPassword = document.getElementById('adminPassword').value;
+            const password = document.getElementById('resetPassword').value;
             
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Återställer...';
+            submitBtn.textContent = 'Nollställer...';
             messageDiv.innerHTML = '';
             
             try {
@@ -1256,26 +1253,26 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        admin_password: adminPassword
+                        password: password
                     })
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    messageDiv.innerHTML = `<div class="success-message">Instansen återställdes! Laddar om...</div>`;
+                    messageDiv.innerHTML = `<div class="success-message">Instansen nollställdes! Laddar om...</div>`;
                     setTimeout(() => {
                         location.reload();
                     }, 1500);
                 } else {
                     messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Återställ';
+                    submitBtn.textContent = 'Nollställ';
                 }
             } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Kunde inte återställa instans: ${error.message}</div>`;
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte nollställa instans: ${error.message}</div>`;
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Återställ';
+                submitBtn.textContent = 'Nollställ';
             }
         });
         
@@ -1285,7 +1282,7 @@
             const submitBtn = document.getElementById('deleteSubmitBtn');
             const messageDiv = document.getElementById('deleteModalMessage');
             
-            const adminPassword = document.getElementById('deleteAdminPassword').value;
+            const password = document.getElementById('deletePassword').value;
             
             submitBtn.disabled = true;
             submitBtn.textContent = 'Tar bort...';
@@ -1298,7 +1295,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        admin_password: adminPassword
+                        password: password
                     })
                 });
                 

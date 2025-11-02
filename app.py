@@ -706,6 +706,30 @@ def verify_password(password, hashed):
     """
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
+def validate_instance_password(password, instance):
+    """Validate password for instance operations (delete/reset)
+    
+    Checks if the provided password matches either:
+    1. The admin password (if configured), OR
+    2. The instance password (if set when instance was created)
+    
+    Args:
+        password: Password to validate
+        instance: Instance dictionary containing metadata
+        
+    Returns:
+        bool: True if password is valid, False otherwise
+    """
+    # Check admin password first (if configured)
+    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
+        return True
+    
+    # Then check instance password (if set)
+    if instance.get('instance_password_hash'):
+        return verify_password(password, instance['instance_password_hash'])
+    
+    return False
+
 def restart_instance_container(container_id):
     """Restart a Docker container
     
@@ -788,16 +812,22 @@ def index():
     
     # Filter instances based on user access
     is_admin = is_admin_user(request)
+    user_id = get_user_identifier(request)
+    
     if not is_admin:
         # Non-admin users only see their own instances
-        user_id = get_user_identifier(request)
         instances = {
             name: inst for name, inst in instances.items()
             if inst.get('created_by', '') == user_id
         }
     
-    # Pass admin status to template
-    return render_template('index.html', instances=instances, is_admin=is_admin)
+    # Check if user already has an instance (to disable create button for non-admins)
+    # Admins can always create instances, but non-admins are limited to one instance
+    # to prevent resource exhaustion and ensure fair usage
+    user_has_instance = len(instances) > 0 if not is_admin else False
+    
+    # Pass admin status and user_has_instance to template
+    return render_template('index.html', instances=instances, is_admin=is_admin, user_has_instance=user_has_instance)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
@@ -953,25 +983,28 @@ def create_instance():
 
 @app.route('/api/instances/<server_name>', methods=['DELETE'])
 def delete_instance(server_name):
-    """API endpoint to delete an instance (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
-    
+    """API endpoint to delete an instance (requires instance password or admin password)"""
     data = request.json or {}
-    admin_password = data.get('admin_password', '')
+    password = data.get('password', '')
     
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
+    if not password:
+        return jsonify({'error': 'Password is required'}), 400
     
     instances = load_instances()
     
     if server_name not in instances:
         return jsonify({'error': 'Instance not found'}), 404
     
+    instance = instances[server_name]
+    
+    # Validate password (accepts either admin password or instance password)
+    if not validate_instance_password(password, instance):
+        logger.warning(f'Failed deletion attempt for instance {server_name} - invalid password')
+        return jsonify({'error': 'Invalid password'}), 401
+    
+    logger.info(f'Instance {server_name} deletion authorized')
+    
     try:
-        instance = instances[server_name]
-        
         # Stop and remove container
         try:
             container = client.containers.get(instance['container_id'])
@@ -1030,24 +1063,28 @@ def get_instance_status(server_name):
 
 @app.route('/api/instances/<server_name>/reset', methods=['POST'])
 def reset_instance(server_name):
-    """API endpoint to reset an instance to default HA image (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
+    """API endpoint to reset an instance to default HA image (requires instance password or admin password)"""
+    data = request.json or {}
+    password = data.get('password', '')
     
-    data = request.json
-    admin_password = data.get('admin_password', '')
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
+    if not password:
+        return jsonify({'error': 'Password is required'}), 400
     
     instances = load_instances()
     
     if server_name not in instances:
         return jsonify({'error': 'Instance not found'}), 404
     
+    instance = instances[server_name]
+    
+    # Validate password (accepts either admin password or instance password)
+    if not validate_instance_password(password, instance):
+        logger.warning(f'Failed reset attempt for instance {server_name} - invalid password')
+        return jsonify({'error': 'Invalid password'}), 401
+    
+    logger.info(f'Instance {server_name} reset authorized')
+    
     try:
-        instance = instances[server_name]
         container_name = instance['container_name']
         port = instance['port']
         
