@@ -1884,8 +1884,11 @@ def websocket_proxy_with_port(ws, port):
     """WebSocket proxy endpoint for /proxy/{port}/api/websocket path"""
     _websocket_proxy_handler(ws, port=port)
 
+# Clean up orphaned containers on startup (runs when module is imported)
+logger.info('Starting HA-Edu Portal...')
+cleanup_orphaned_containers()
+
 if __name__ == '__main__':
-    # Clean up orphaned containers on startup
-    logger.info('Starting HA-Edu Portal...')
-    cleanup_orphaned_containers()
+    # This block is used when running directly with Python (development mode)
+    # In production, Gunicorn will import the app object directly
     app.run(host='0.0.0.0', port=5000, debug=False)
