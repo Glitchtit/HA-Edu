@@ -6,6 +6,7 @@ import re
 import threading
 import bcrypt
 import urllib.parse
+import ipaddress
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 from flask_sock import Sock
 import docker
@@ -54,8 +55,13 @@ def is_admin_user(request):
     Returns:
         bool: True if user has admin access, False otherwise
     """
+    # Define the allowed local network subnet
+    ALLOWED_SUBNET = ipaddress.ip_network('192.168.50.0/24')
+    
     # Check if the request is from the local network (192.168.50.0/24)
     # First check X-Forwarded-For header (set by reverse proxies)
+    # Note: In production, you should validate the proxy is trusted before using this header
+    # For this application, we assume the Cloudflare tunnel is the only proxy
     client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
     if not client_ip:
         # Fall back to direct remote_addr
@@ -64,15 +70,14 @@ def is_admin_user(request):
     # Check if IP is in 192.168.50.0/24 subnet
     if client_ip:
         try:
-            # Parse IP address
-            ip_parts = client_ip.split('.')
-            if len(ip_parts) == 4:
-                # Check if it matches 192.168.50.x
-                if ip_parts[0] == '192' and ip_parts[1] == '168' and ip_parts[2] == '50':
-                    logger.debug(f'Admin access granted for local IP: {client_ip}')
-                    return True
-        except Exception as e:
-            logger.warning(f'Failed to parse IP address {client_ip}: {e}')
+            # Parse IP address and check if it's in the allowed subnet
+            ip_obj = ipaddress.ip_address(client_ip)
+            if ip_obj in ALLOWED_SUBNET:
+                logger.debug(f'Admin access granted for local IP: {client_ip}')
+                return True
+        except ValueError:
+            # Invalid IP address format
+            logger.warning(f'Invalid IP address format: {client_ip}')
     
     # Check if user is authenticated via Cloudflare Zero Trust
     # Cloudflare Access sets the Cf-Access-Authenticated-User-Email header
