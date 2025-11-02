@@ -38,7 +38,58 @@ HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
 TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
+ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresses
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
+
+def is_admin_user(request):
+    """Check if the current user has admin access
+    
+    Admin access is granted if:
+    1. The request comes from the local network (192.168.50.0/24), OR
+    2. The user is authenticated via Cloudflare Zero Trust with an email in the ADMINS list
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        bool: True if user has admin access, False otherwise
+    """
+    # Check if the request is from the local network (192.168.50.0/24)
+    # First check X-Forwarded-For header (set by reverse proxies)
+    client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+    if not client_ip:
+        # Fall back to direct remote_addr
+        client_ip = request.remote_addr
+    
+    # Check if IP is in 192.168.50.0/24 subnet
+    if client_ip:
+        try:
+            # Parse IP address
+            ip_parts = client_ip.split('.')
+            if len(ip_parts) == 4:
+                # Check if it matches 192.168.50.x
+                if ip_parts[0] == '192' and ip_parts[1] == '168' and ip_parts[2] == '50':
+                    logger.debug(f'Admin access granted for local IP: {client_ip}')
+                    return True
+        except Exception as e:
+            logger.warning(f'Failed to parse IP address {client_ip}: {e}')
+    
+    # Check if user is authenticated via Cloudflare Zero Trust
+    # Cloudflare Access sets the Cf-Access-Authenticated-User-Email header
+    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
+    
+    if user_email and ADMINS:
+        # Parse the ADMINS environment variable (comma-separated list)
+        admin_emails = [email.strip().lower() for email in ADMINS.split(',') if email.strip()]
+        
+        # Check if the user's email is in the admin list (case-insensitive)
+        if user_email.lower() in admin_emails:
+            logger.debug(f'Admin access granted for Cloudflare user: {user_email}')
+            return True
+    
+    logger.debug(f'Admin access denied for IP: {client_ip}, Email: {user_email}')
+    return False
+
 
 def load_data():
     """Load all data from JSON file"""
@@ -1022,6 +1073,19 @@ def restart_instance(server_name):
 def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
+
+@app.route('/api/admin/check-access', methods=['GET'])
+def check_admin_access():
+    """API endpoint to check if the current user has admin access
+    
+    Returns:
+        JSON response with has_admin_access boolean
+    """
+    has_access = is_admin_user(request)
+    return jsonify({
+        'has_admin_access': has_access,
+        'admin_password_enabled': bool(ADMIN_PASSWORD)
+    }), 200
 
 @app.route('/api/admin/unlock', methods=['POST'])
 def unlock_admin():
