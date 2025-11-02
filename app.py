@@ -13,6 +13,7 @@ import docker
 from datetime import datetime
 import requests
 import simple_websocket
+from interaction_logger import interaction_logger
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -775,6 +776,24 @@ def get_user_identifier(request):
     user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
     return user_email if user_email else None
 
+def get_user_info_for_logging(request):
+    """Get user information for logging purposes
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        tuple: (user_id, user_type) where user_type is 'admin' or 'user'
+    """
+    user_id = get_user_identifier(request)
+    user_type = 'admin' if is_admin_user(request) else 'user'
+    
+    # If no authenticated user, use IP address as fallback
+    if not user_id:
+        user_id = request.remote_addr or 'unknown'
+    
+    return user_id, user_type
+
 def can_view_instance(request, instance):
     """Check if the current user can view a specific instance
     
@@ -1049,6 +1068,16 @@ def create_instance():
             instances[server_name] = instance_info
             save_instances(instances)
         
+        # Log instance creation
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_instance_creation(
+            server_name=server_name,
+            user_id=user_id,
+            user_type=user_type,
+            port=port,
+            container_id=container.id
+        )
+        
         return jsonify({
             'message': 'Instance created successfully',
             'server_name': server_name,
@@ -1111,6 +1140,15 @@ def delete_instance(server_name):
             pass  # Volume doesn't exist or already removed
         except Exception as e:
             logger.warning(f'Failed to remove volume {volume_name}: {str(e)}')
+        
+        # Log instance deletion
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_instance_deletion(
+            server_name=server_name,
+            user_id=user_id,
+            user_type=user_type,
+            container_id=instance['container_id']
+        )
         
         # Remove from instances
         del instances[server_name]
@@ -1175,10 +1213,11 @@ def reset_instance(server_name):
     try:
         container_name = instance['container_name']
         port = instance['port']
+        old_container_id = instance['container_id']
         
         # Stop and remove existing container
         try:
-            container = client.containers.get(instance['container_id'])
+            container = client.containers.get(old_container_id)
             container.stop()
             container.remove()
         except docker.errors.NotFound:
@@ -1218,6 +1257,16 @@ def reset_instance(server_name):
         instance['reset_at'] = datetime.now().isoformat()
         instances[server_name] = instance
         save_instances(instances)
+        
+        # Log instance reset
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_instance_reset(
+            server_name=server_name,
+            user_id=user_id,
+            user_type=user_type,
+            old_container_id=old_container_id,
+            new_container_id=new_container.id
+        )
         
         return jsonify({
             'message': 'Instance reset successfully',
@@ -1273,6 +1322,15 @@ def restart_instance(server_name):
         instance['last_restarted_at'] = datetime.now().isoformat()
         instances[server_name] = instance
         save_instances(instances)
+        
+        # Log instance restart
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_instance_restart(
+            server_name=server_name,
+            user_id=user_id,
+            user_type=user_type,
+            container_id=instance['container_id']
+        )
         
         return jsonify({
             'message': 'Instance restarted successfully',
@@ -1367,6 +1425,14 @@ def delete_all_instances():
         
         # Clear all instances
         save_instances({})
+        
+        # Log admin operation
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_admin_operation(
+            operation='delete_all_instances',
+            user_id=user_id,
+            details={'deleted_count': deleted_count, 'failed_count': failed_count}
+        )
         
         return jsonify({
             'message': f'Successfully deleted {deleted_count} instance(s)',
@@ -1464,6 +1530,14 @@ def add_teacher_access(server_name):
         instance['teacher_access_added_at'] = datetime.now().isoformat()
         instances[server_name] = instance
         save_instances(instances)
+        
+        # Log teacher access addition
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_teacher_access_added(
+            server_name=server_name,
+            user_id=user_id,
+            teacher_username=TEACHER_USERNAME
+        )
         
         # Log for audit trail
         logger.info(f'Teacher access added to instance {server_name} by admin. Teacher username: {TEACHER_USERNAME}')
@@ -1696,12 +1770,14 @@ def proxy(port, path):
     # Store the port in session for fallback requests
     session['proxy_port'] = port
     
-    # Verify that the port belongs to a valid instance
+    # Verify that the port belongs to a valid instance and log access
     instances = load_instances()
     valid_port = False
-    for inst in instances.values():
+    server_name = None
+    for name, inst in instances.items():
         if inst['port'] == port:
             valid_port = True
+            server_name = name
             break
     
     if not valid_port:
@@ -1715,6 +1791,17 @@ def proxy(port, path):
                 'Check that you are using the correct access link',
                 'If the instance was recently deleted, this is expected'
             ]
+        )
+    
+    # Log instance access (only log on initial access, not every request)
+    # We'll log on the root path or index.html to avoid excessive logging
+    if path in ['', 'index.html', 'lovelace']:
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_instance_access(
+            server_name=server_name,
+            user_id=user_id,
+            user_type=user_type,
+            access_type='proxy'
         )
     
     # Build the target URL
@@ -2161,6 +2248,36 @@ def websocket_proxy_direct(ws):
 def websocket_proxy_with_port(ws, port):
     """WebSocket proxy endpoint for /proxy/{port}/api/websocket path"""
     _websocket_proxy_handler(ws, port=port)
+
+@app.route('/api/logs', methods=['GET'])
+def get_interaction_logs():
+    """API endpoint to retrieve interaction logs (admin only)
+    
+    Query parameters:
+        limit: Maximum number of log entries to return (default: 100)
+        event_type: Filter by event type (optional)
+    
+    Returns:
+        JSON array of log entries
+    """
+    # Check admin access
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    # Get query parameters
+    limit = request.args.get('limit', 100, type=int)
+    event_type = request.args.get('event_type', None)
+    
+    # Limit to reasonable range
+    limit = min(max(limit, 1), 1000)
+    
+    # Retrieve logs
+    logs = interaction_logger.get_logs(limit=limit, event_type=event_type)
+    
+    return jsonify({
+        'logs': logs,
+        'count': len(logs)
+    }), 200
 
 # Clean up orphaned containers on startup (runs when module is imported)
 logger.info('Starting HA-Edu Portal...')

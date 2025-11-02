@@ -11,10 +11,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/data
+      - ./logs:/logs
     environment:
       - BASE_PORT=8123
       # MAX_INSTANCES removed - no limit, ports assigned dynamically
       - DATA_FILE=/data/instances.json
+      - LOG_DIR=/logs
       - HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     restart: unless-stopped
