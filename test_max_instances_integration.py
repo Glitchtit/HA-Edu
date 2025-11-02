@@ -50,10 +50,11 @@ def test_integration():
         print("✓ Homepage loads successfully")
         
         # Test 2: Non-admin user can create first instance
-        print("\nTest 2: Non-admin user can create first instance")
+        print("\nTest 2: Authenticated user can create first instance")
         response = client.post('/api/instances', 
                              json={'server_name': 'Test-Instance-1'},
-                             environ_base={'REMOTE_ADDR': '1.2.3.4'})
+                             environ_base={'REMOTE_ADDR': '1.2.3.4'},
+                             headers={'Cf-Access-Authenticated-User-Email': 'student1@school.edu'})
         print(f"Response status: {response.status_code}")
         print(f"Response data: {response.get_json()}")
         # Note: This will fail if Docker is not available, but we check the logic
@@ -63,17 +64,17 @@ def test_integration():
         elif response.status_code == 500:
             # Docker not available, but no limit error
             data = response.get_json()
-            if 'maximum limit' not in data.get('error', '').lower():
+            if 'maximum limit' not in data.get('error', '').lower() and 'authenticated' not in data.get('error', '').lower():
                 print("✓ No limit error (Docker not available in test environment)")
             else:
-                print(f"✗ Unexpected limit error: {data}")
+                print(f"✗ Unexpected error: {data}")
                 return False
         else:
             data = response.get_json()
-            if 'maximum limit' not in data.get('error', '').lower():
+            if 'maximum limit' not in data.get('error', '').lower() and 'authenticated' not in data.get('error', '').lower():
                 print(f"✓ No limit error (status: {response.status_code})")
             else:
-                print(f"✗ Unexpected limit error: {data}")
+                print(f"✗ Unexpected error: {data}")
                 return False
         
         # Test 3: Check that limit validation is in place
@@ -82,8 +83,8 @@ def test_integration():
         with open(temp_file, 'r') as f:
             data = json.load(f)
         data['instances'] = {
-            'test1': {'created_by': 'IP: 1.2.3.4', 'port': 8123, 'container_id': 'abc123', 'container_name': 'test1'},
-            'test2': {'created_by': 'IP: 1.2.3.4', 'port': 8124, 'container_id': 'def456', 'container_name': 'test2'}
+            'test1': {'created_by': 'student1@school.edu', 'port': 8123, 'container_id': 'abc123', 'container_name': 'test1'},
+            'test2': {'created_by': 'student1@school.edu', 'port': 8124, 'container_id': 'def456', 'container_name': 'test2'}
         }
         with open(temp_file, 'w') as f:
             json.dump(data, f)
@@ -91,7 +92,8 @@ def test_integration():
         # Try to create third instance (should be blocked)
         response = client.post('/api/instances',
                              json={'server_name': 'Test-Instance-3'},
-                             environ_base={'REMOTE_ADDR': '1.2.3.4'})
+                             environ_base={'REMOTE_ADDR': '1.2.3.4'},
+                             headers={'Cf-Access-Authenticated-User-Email': 'student1@school.edu'})
         print(f"Response status: {response.status_code}")
         response_data = response.get_json()
         print(f"Response data: {response_data}")
@@ -102,26 +104,28 @@ def test_integration():
             print(f"✗ Expected 403 with limit error, got {response.status_code}: {response_data}")
             return False
         
-        # Test 4: Different user can still create instances
-        print("\nTest 4: Different user can create instances")
+        # Test 4: Different authenticated user can still create instances (same IP, different email)
+        print("\nTest 4: Different authenticated user can create instances (email-based)")
         response = client.post('/api/instances',
                              json={'server_name': 'Test-Instance-Other-User'},
-                             environ_base={'REMOTE_ADDR': '5.6.7.8'})
+                             environ_base={'REMOTE_ADDR': '1.2.3.4'},  # Same IP as student1
+                             headers={'Cf-Access-Authenticated-User-Email': 'student2@school.edu'})
         print(f"Response status: {response.status_code}")
         response_data = response.get_json()
         
-        # Should not be blocked by limit (different user)
+        # Should not be blocked by limit (different email/user)
         if response.status_code == 403 and 'maximum limit' in response_data.get('error', '').lower():
             print(f"✗ Different user blocked by limit: {response_data}")
             return False
         else:
-            print("✓ Different user not blocked by limit")
+            print("✓ Different user not blocked by limit (email-based tracking works)")
         
         # Test 5: Admin user (local IP) is not limited
         print("\nTest 5: Admin user can bypass limits")
         response = client.post('/api/instances',
                              json={'server_name': 'Test-Instance-Admin'},
-                             environ_base={'REMOTE_ADDR': '192.168.50.10'})
+                             environ_base={'REMOTE_ADDR': '192.168.50.10'},
+                             headers={'Cf-Access-Authenticated-User-Email': 'admin@school.edu'})
         print(f"Response status: {response.status_code}")
         response_data = response.get_json()
         
@@ -132,8 +136,22 @@ def test_integration():
         else:
             print("✓ Admin not blocked by limit")
         
-        # Test 6: Unlimited mode (MAX_INSTANCES = 0)
-        print("\nTest 6: Unlimited mode (MAX_INSTANCES = 0)")
+        # Test 6: Unauthenticated user cannot create instances
+        print("\nTest 6: Unauthenticated user cannot create instances")
+        response = client.post('/api/instances',
+                             json={'server_name': 'Test-Instance-Unauth'},
+                             environ_base={'REMOTE_ADDR': '1.2.3.4'})
+        print(f"Response status: {response.status_code}")
+        response_data = response.get_json()
+        
+        # Should be blocked (no authentication)
+        if response.status_code == 403 and 'authenticated' in response_data.get('error', '').lower():
+            print("✓ Unauthenticated user blocked from creating instances")
+        else:
+            print(f"⚠ Unexpected response for unauthenticated user: {response.status_code}: {response_data}")
+        
+        # Test 7: Unlimited mode (MAX_INSTANCES = 0)
+        print("\nTest 7: Unlimited mode (MAX_INSTANCES = 0)")
         os.environ['MAX_INSTANCES'] = '0'
         if 'app' in sys.modules:
             del sys.modules['app']
@@ -145,7 +163,8 @@ def test_integration():
         
         response = client_unlimited.post('/api/instances',
                                        json={'server_name': 'Test-Unlimited'},
-                                       environ_base={'REMOTE_ADDR': '1.2.3.4'})
+                                       environ_base={'REMOTE_ADDR': '1.2.3.4'},
+                                       headers={'Cf-Access-Authenticated-User-Email': 'student3@school.edu'})
         response_data = response.get_json()
         
         # Should not be blocked by limit (unlimited mode)
@@ -153,7 +172,7 @@ def test_integration():
             print(f"✗ User blocked by limit in unlimited mode: {response_data}")
             return False
         else:
-            print("✓ Unlimited mode allows all users to create instances")
+            print("✓ Unlimited mode allows authenticated users to create instances")
         
         print("\n" + "=" * 60)
         print("All Integration Tests Passed!")

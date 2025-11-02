@@ -17,7 +17,9 @@ MAX_INSTANCES=   # Empty also means unlimited
 - **Default**: Unlimited instances (MAX_INSTANCES=0)
 - **Admin users**: Always unlimited, regardless of MAX_INSTANCES setting
 - **Non-admin users**: Limited by MAX_INSTANCES value
-- **Per-user limit**: Each user (identified by email or IP) has their own separate limit
+- **Per-user limit**: Each user (identified by Cloudflare email) has their own separate limit
+- **Authentication required**: Users must be authenticated via Cloudflare Zero Trust to create instances
+- **Classroom-friendly**: Email-based tracking works correctly when all students share the same IP address
 
 ## Security Features
 
@@ -44,10 +46,12 @@ MAX_INSTANCES=   # Empty also means unlimited
 ## User Experience
 
 ### For Non-Admin Users
+- Must be authenticated via Cloudflare Zero Trust
 - Clear feedback when limit is reached
 - Can see their current count vs. limit
 - Cannot bypass via HTML editing (server-side validation)
-- Each user has separate quota
+- Each user has separate quota (tracked by email)
+- Works correctly in classroom settings where all students share the same IP
 
 ### For Admin Users
 - No limits apply
@@ -68,18 +72,32 @@ MAX_INSTANCES=   # Empty also means unlimited
 
 2. **Helper Function**:
    ```python
+   def get_user_identifier(request):
+       """Get unique identifier for current user
+       
+       Returns Cloudflare authenticated email. In classroom settings,
+       all students share the same IP, so email-based tracking is required.
+       """
+       user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
+       return user_email if user_email else None
+   
    def can_create_instance(request, instances):
        """Check if user can create a new instance"""
        # Admins always allowed
        if is_admin_user(request):
            return True, 0, 0
        
+       # Get user identifier - required for non-admin users
+       user_id = get_user_identifier(request)
+       if user_id is None:
+           # Unauthenticated users cannot create instances
+           return False, 0, 0
+       
        # Unlimited if MAX_INSTANCES is 0
        if MAX_INSTANCES == 0:
            return True, 0, 0
        
        # Count user's instances and check limit
-       user_id = get_user_identifier(request)
        user_instance_count = sum(1 for inst in instances.values() 
                                  if inst.get('created_by', '') == user_id)
        

@@ -94,59 +94,70 @@ def test_can_create_instance_function():
         
         # Create a mock request object
         class MockRequest:
-            def __init__(self, remote_addr='1.2.3.4', headers=None):
-                self.remote_addr = remote_addr
-                self.headers = headers or {}
+            def __init__(self, email=None, headers=None):
+                self.remote_addr = '1.2.3.4'  # Shared classroom IP
+                if headers is None:
+                    headers = {}
+                if email:
+                    headers['Cf-Access-Authenticated-User-Email'] = email
+                self.headers = headers
         
-        # Test 1: User with no instances (should be allowed)
-        request = MockRequest()
+        # Test 1: Authenticated user with no instances (should be allowed)
+        request = MockRequest(email='student1@school.edu')
         instances = {}
         can_create, user_count, max_allowed = app.can_create_instance(request, instances)
         assert can_create == True, "User with 0 instances should be able to create"
         assert user_count == 0, f"Expected count 0, got {user_count}"
         assert max_allowed == 2, f"Expected max 2, got {max_allowed}"
-        print("✓ User with 0 instances can create (limit: 2)")
+        print("✓ Authenticated user with 0 instances can create (limit: 2)")
         
-        # Test 2: User with 1 instance (should be allowed)
+        # Test 2: Authenticated user with 1 instance (should be allowed)
         instances = {
-            'test1': {'created_by': 'IP: 1.2.3.4', 'port': 8123}
+            'test1': {'created_by': 'student1@school.edu', 'port': 8123}
         }
         can_create, user_count, max_allowed = app.can_create_instance(request, instances)
         assert can_create == True, "User with 1 instance should be able to create"
         assert user_count == 1, f"Expected count 1, got {user_count}"
         assert max_allowed == 2, f"Expected max 2, got {max_allowed}"
-        print("✓ User with 1 instance can create (limit: 2)")
+        print("✓ Authenticated user with 1 instance can create (limit: 2)")
         
-        # Test 3: User with 2 instances (should NOT be allowed)
+        # Test 3: Authenticated user with 2 instances (should NOT be allowed)
         instances = {
-            'test1': {'created_by': 'IP: 1.2.3.4', 'port': 8123},
-            'test2': {'created_by': 'IP: 1.2.3.4', 'port': 8124}
+            'test1': {'created_by': 'student1@school.edu', 'port': 8123},
+            'test2': {'created_by': 'student1@school.edu', 'port': 8124}
         }
         can_create, user_count, max_allowed = app.can_create_instance(request, instances)
         assert can_create == False, "User with 2 instances should NOT be able to create"
         assert user_count == 2, f"Expected count 2, got {user_count}"
         assert max_allowed == 2, f"Expected max 2, got {max_allowed}"
-        print("✓ User with 2 instances cannot create (limit: 2)")
+        print("✓ Authenticated user with 2 instances cannot create (limit: 2)")
         
-        # Test 4: Different user should be allowed
-        request2 = MockRequest(remote_addr='5.6.7.8')
+        # Test 4: Different authenticated user should be allowed (same IP, different email)
+        request2 = MockRequest(email='student2@school.edu')  # Same IP, different email
         can_create, user_count, max_allowed = app.can_create_instance(request2, instances)
         assert can_create == True, "Different user should be able to create"
         assert user_count == 0, f"Expected count 0, got {user_count}"
-        print("✓ Different user can create their own instances")
+        print("✓ Different authenticated user can create their own instances (email-based tracking)")
         
         # Test 5: Admin user should always be allowed
-        request_admin = MockRequest(remote_addr='192.168.50.10')  # Local network IP
+        request_admin = MockRequest(email='admin@school.edu')
+        request_admin.remote_addr = '192.168.50.10'  # Local network IP
         instances_full = {
-            'test1': {'created_by': 'IP: 192.168.50.10', 'port': 8123},
-            'test2': {'created_by': 'IP: 192.168.50.10', 'port': 8124},
-            'test3': {'created_by': 'IP: 192.168.50.10', 'port': 8125}
+            'test1': {'created_by': 'admin@school.edu', 'port': 8123},
+            'test2': {'created_by': 'admin@school.edu', 'port': 8124},
+            'test3': {'created_by': 'admin@school.edu', 'port': 8125}
         }
         can_create, user_count, max_allowed = app.can_create_instance(request_admin, instances_full)
         assert can_create == True, "Admin should always be able to create"
         print("✓ Admin user can create unlimited instances")
         
-        # Test 6: Unlimited mode (MAX_INSTANCES = 0)
+        # Test 6: Unauthenticated user should NOT be allowed
+        request_unauth = MockRequest(email=None)  # No email
+        can_create, user_count, max_allowed = app.can_create_instance(request_unauth, instances)
+        assert can_create == False, "Unauthenticated user should NOT be able to create"
+        print("✓ Unauthenticated user cannot create instances")
+        
+        # Test 7: Unlimited mode (MAX_INSTANCES = 0)
         os.environ['MAX_INSTANCES'] = '0'
         if 'app' in sys.modules:
             del sys.modules['app']
