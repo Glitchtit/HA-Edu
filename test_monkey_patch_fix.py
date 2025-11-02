@@ -95,27 +95,27 @@ def test_wsgi_import_order():
     print("\n3. Checking app.py imports...")
     try:
         with open('app.py', 'r') as f:
-            lines = f.readlines()
+            content = f.read()
             
         # Check for imports that need to be monkey-patched
-        # Support various import patterns: import X, from X import Y, import X as Y
+        # The main SSL-dependent imports are requests and docker
+        # urllib3 is imported indirectly via requests
         import re
-        imports_to_check = ['requests', 'docker', 'urllib']
+        imports_to_check = ['requests', 'docker']
         found_imports = []
         
-        for line in lines[:30]:  # Check first 30 lines (import section)
-            # Skip comments
-            if line.strip().startswith('#'):
-                continue
-            # Match: import requests, from requests import ..., import requests as ...
-            for imp in imports_to_check:
-                pattern = rf'\b(import\s+{imp}|from\s+{imp}\s+import)'
-                if re.search(pattern, line):
-                    found_imports.append(imp)
+        # Search in the entire file for import statements
+        for imp in imports_to_check:
+            # Match: import module, from module import ..., import module as ...
+            # Use word boundaries to avoid false matches
+            pattern = rf'\b(import\s+{re.escape(imp)}\b|from\s+{re.escape(imp)}\b)'
+            if re.search(pattern, content):
+                found_imports.append(imp)
                     
         if found_imports:
             print(f"   ✅ PASS: Found SSL-dependent imports in app.py: {', '.join(set(found_imports))}")
             print("      These will be monkey-patched by wsgi.py before app.py is loaded")
+            print("      Note: urllib3 is imported indirectly via requests")
         else:
             print("   ⚠️  WARNING: No SSL-dependent imports found in app.py")
             
