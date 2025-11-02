@@ -155,7 +155,7 @@ def test_env_example_updated():
     if os.path.exists(env_example_path):
         print(f"✓ .env.example exists at {env_example_path}")
         
-        with open(env_example_path, 'r') as f:
+        with open(env_example_path, 'r', encoding='utf-8') as f:
             content = f.read()
             
             if 'ADMINS=' in content:
@@ -183,7 +183,7 @@ def test_frontend_updated():
     if os.path.exists(template_path):
         print(f"✓ Template exists at {template_path}")
         
-        with open(template_path, 'r') as f:
+        with open(template_path, 'r', encoding='utf-8') as f:
             content = f.read()
             
             checks = [

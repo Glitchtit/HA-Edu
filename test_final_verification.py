@@ -85,7 +85,7 @@ def main():
     print("-" * 80)
     
     template_path = os.path.join(os.path.dirname(__file__), 'templates', 'index.html')
-    with open(template_path, 'r') as f:
+    with open(template_path, 'r', encoding='utf-8') as f:
         content = f.read()
         
         checks = [
@@ -107,7 +107,7 @@ def main():
     print("-" * 80)
     
     readme_path = os.path.join(os.path.dirname(__file__), 'README.md')
-    with open(readme_path, 'r') as f:
+    with open(readme_path, 'r', encoding='utf-8') as f:
         content = f.read()
         
         if 'ADMINS' in content and 'Cloudflare Zero Trust' in content:
@@ -117,7 +117,7 @@ def main():
             all_passed = False
     
     env_example_path = os.path.join(os.path.dirname(__file__), '.env.example')
-    with open(env_example_path, 'r') as f:
+    with open(env_example_path, 'r', encoding='utf-8') as f:
         content = f.read()
         
         if 'ADMINS=' in content:
