@@ -26,6 +26,10 @@ client = docker.from_env()
 # Initialize WebSocket support
 sock = Sock(app)
 
+# Thread lock for port allocation to prevent race conditions when multiple
+# students create instances simultaneously
+_port_allocation_lock = threading.Lock()
+
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
 BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
@@ -697,18 +701,32 @@ def create_instance():
     if not server_name:
         return jsonify({'error': 'Server name is required'}), 400
     
-    instances = load_instances()
-    
-    # Check if server name already exists
-    if server_name in instances:
-        return jsonify({'error': 'Server name already exists'}), 400
-    
-    # Get available port (no limit check - dynamic port assignment)
-    port = get_available_port()
-    
-    try:
-        # Create container
+    # Use lock to prevent race conditions when multiple students create instances simultaneously
+    # This ensures port allocation and instance registration are atomic operations
+    with _port_allocation_lock:
+        instances = load_instances()
+        
+        # Check if server name already exists
+        if server_name in instances:
+            return jsonify({'error': 'Server name already exists'}), 400
+        
+        # Get available port (no limit check - dynamic port assignment)
+        port = get_available_port()
+        
+        # Reserve the port immediately by adding a placeholder entry
+        # This prevents other concurrent requests from selecting the same port
         container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
+        instances[server_name] = {
+            'container_id': 'pending',
+            'container_name': container_name,
+            'port': port,
+            'created_at': datetime.now().isoformat(),
+            'status': 'creating'
+        }
+        save_instances(instances)
+    
+    # Now create the actual container outside the lock to avoid blocking other requests
+    try:
         volume_name = container_name
         
         # Clean up any leftover container with the same name
@@ -754,7 +772,7 @@ def create_instance():
             network_mode='bridge'
         )
         
-        # Save instance info
+        # Update instance info with actual container details
         instance_info = {
             'container_id': container.id,
             'container_name': container_name,
@@ -767,6 +785,7 @@ def create_instance():
         if instance_password:
             instance_info['instance_password_hash'] = hash_password(instance_password)
         
+        instances = load_instances()
         instances[server_name] = instance_info
         save_instances(instances)
         
@@ -779,6 +798,14 @@ def create_instance():
         
     except Exception as e:
         logger.error(f'Failed to create instance: {str(e)}', exc_info=True)
+        # Clean up the placeholder entry on failure
+        try:
+            instances = load_instances()
+            if server_name in instances and instances[server_name].get('container_id') == 'pending':
+                del instances[server_name]
+                save_instances(instances)
+        except Exception as cleanup_error:
+            logger.error(f'Failed to clean up placeholder entry: {str(cleanup_error)}')
         return jsonify({'error': 'Failed to create instance. Please try again or contact support.'}), 500
 
 @app.route('/api/instances/<server_name>', methods=['DELETE'])
