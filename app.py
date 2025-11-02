@@ -701,6 +701,30 @@ def verify_password(password, hashed):
     """
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
+def validate_instance_password(password, instance):
+    """Validate password for instance operations (delete/reset)
+    
+    Checks if the provided password matches either:
+    1. The admin password (if configured), OR
+    2. The instance password (if set when instance was created)
+    
+    Args:
+        password: Password to validate
+        instance: Instance dictionary containing metadata
+        
+    Returns:
+        bool: True if password is valid, False otherwise
+    """
+    # Check admin password first (if configured)
+    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
+        return True
+    
+    # Then check instance password (if set)
+    if instance.get('instance_password_hash'):
+        return verify_password(password, instance['instance_password_hash'])
+    
+    return False
+
 def restart_instance_container(container_id):
     """Restart a Docker container
     
@@ -792,7 +816,9 @@ def index():
             if inst.get('created_by', '') == user_id
         }
     
-    # Check if user already has an instance (for non-admins, to disable create button)
+    # Check if user already has an instance (to disable create button for non-admins)
+    # Admins can always create instances, but non-admins are limited to one instance
+    # to prevent resource exhaustion and ensure fair usage
     user_has_instance = len(instances) > 0 if not is_admin else False
     
     # Pass admin status and user_has_instance to template
@@ -966,22 +992,12 @@ def delete_instance(server_name):
     
     instance = instances[server_name]
     
-    # Check if password is valid (either instance password or admin password)
-    password_valid = False
-    
-    # First check admin password if configured
-    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
-        password_valid = True
-        logger.info(f'Instance {server_name} deletion authorized with admin password')
-    # Then check instance password if set
-    elif instance.get('instance_password_hash'):
-        if verify_password(password, instance['instance_password_hash']):
-            password_valid = True
-            logger.info(f'Instance {server_name} deletion authorized with instance password')
-    
-    if not password_valid:
+    # Validate password (accepts either admin password or instance password)
+    if not validate_instance_password(password, instance):
         logger.warning(f'Failed deletion attempt for instance {server_name} - invalid password')
         return jsonify({'error': 'Invalid password'}), 401
+    
+    logger.info(f'Instance {server_name} deletion authorized')
     
     try:
         # Stop and remove container
@@ -1056,22 +1072,12 @@ def reset_instance(server_name):
     
     instance = instances[server_name]
     
-    # Check if password is valid (either instance password or admin password)
-    password_valid = False
-    
-    # First check admin password if configured
-    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
-        password_valid = True
-        logger.info(f'Instance {server_name} reset authorized with admin password')
-    # Then check instance password if set
-    elif instance.get('instance_password_hash'):
-        if verify_password(password, instance['instance_password_hash']):
-            password_valid = True
-            logger.info(f'Instance {server_name} reset authorized with instance password')
-    
-    if not password_valid:
+    # Validate password (accepts either admin password or instance password)
+    if not validate_instance_password(password, instance):
         logger.warning(f'Failed reset attempt for instance {server_name} - invalid password')
         return jsonify({'error': 'Invalid password'}), 401
+    
+    logger.info(f'Instance {server_name} reset authorized')
     
     try:
         container_name = instance['container_name']
