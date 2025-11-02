@@ -36,6 +36,9 @@ ENV/
 data/
 *.json
 
+# Logs
+logs/
+
 # Docker
 .dockerignore
 

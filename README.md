@@ -11,6 +11,7 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 - 👨‍🏫 **Teacher Access**: Optional feature to add teacher admin accounts to student instances after onboarding
 - ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
 - 📊 **Instance Management**: View and manage unlimited instances
+- 📝 **Interaction Logging**: Comprehensive logging of all user and admin interactions (create, delete, access, etc.)
 - 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
 - 🔄 **Automatic Port Assignment**: Dynamically assigns ports starting from BASE_PORT (default: 8123)
 - ♻️ **Port Reuse**: Automatically reuses ports from deleted instances
@@ -205,10 +206,15 @@ Environment variables can be configured to customize the portal:
 |----------|---------|-------------|
 | `BASE_PORT` | `8123` | Starting port number for HA instances (dynamically assigned) |
 | `DATA_FILE` | `/data/instances.json` | Path to store instance data |
+| `LOG_DIR` | `/logs` | Path to store interaction logs |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant Docker image to use |
 | `ADMIN_PASSWORD` | (empty) | **Required** admin password for delete and reset operations. If not set, delete and reset operations will fail |
 | `TEACHER_USERNAME` | (empty) | *Optional* Username for teacher admin account. Required for Teacher Access feature |
 | `TEACHER_PASSWORD` | (empty) | *Optional* Password for teacher admin account. Required for Teacher Access feature |
+| `ADMINS` | (empty) | *Optional* Comma-separated list of admin email addresses for Cloudflare authentication |
+| `MAX_INSTANCES` | `0` (unlimited) | *Optional* Maximum instances per non-admin user (0 = unlimited) |
+
+For more details on interaction logging, see [LOGGING.md](LOGGING.md).
 
 ## Architecture
 
