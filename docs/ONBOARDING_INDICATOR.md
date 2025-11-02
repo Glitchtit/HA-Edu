@@ -23,6 +23,13 @@ This feature adds an onboarding status indicator to the instance list for admini
 3. The onboarding status is added to the instance data as a boolean field
 4. The frontend displays this status with a color-coded badge
 
+### Performance Optimization
+
+To avoid delays when admins have many instances, the onboarding check uses an in-memory cache:
+- Each onboarding status is cached for 60 seconds
+- Subsequent requests within this window use the cached value instead of creating a new Docker container
+- This significantly improves response times when viewing the instance list multiple times
+
 ## Onboarding Detection Logic
 
 An instance is considered "onboarded" when both of the following files exist in the instance's volume:
