@@ -697,6 +697,16 @@
                         <strong>Skapad av:</strong> {{ instance.created_by }}
                     </div>
                     {% endif %}
+                    {% if is_admin %}
+                    <div class="instance-info">
+                        <strong>Onboarded:</strong> 
+                        {% if instance.get('onboarded') %}
+                        <span class="status-badge status-running">Ja</span>
+                        {% else %}
+                        <span class="status-badge status-created">Nej</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     <div class="instance-actions">
                         <div class="instance-actions-row">
                             <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>

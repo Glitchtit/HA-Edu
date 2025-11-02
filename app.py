@@ -7,6 +7,7 @@ import threading
 import bcrypt
 import urllib.parse
 import ipaddress
+import time
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 from flask_sock import Sock
 import docker
@@ -31,6 +32,11 @@ sock = Sock(app)
 # students create instances simultaneously
 _port_allocation_lock = threading.Lock()
 
+# Cache for onboarding status to avoid redundant Docker container checks
+# Key: volume_name, Value: (timestamp, onboarded_status)
+_onboarding_cache = {}
+_onboarding_cache_lock = threading.Lock()
+
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
 BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
@@ -44,6 +50,8 @@ ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresse
 MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
 MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
+# Onboarding cache TTL in seconds - how long to cache onboarding status checks
+ONBOARDING_CACHE_TTL = int(os.getenv('ONBOARDING_CACHE_TTL', '60'))
 
 def is_admin_user(request):
     """Check if the current user has admin access
@@ -352,6 +360,37 @@ def check_instance_onboarding_complete(volume_name):
     except Exception as e:
         logger.error(f'Failed to check onboarding status for volume {volume_name}: {str(e)}', exc_info=True)
         return False
+
+def check_instance_onboarding_complete_cached(volume_name):
+    """Cached wrapper for check_instance_onboarding_complete
+    
+    Uses an in-memory cache with TTL to avoid redundant Docker container checks
+    when checking onboarding status for multiple instances.
+    
+    Args:
+        volume_name: Name of the Docker volume to check
+        
+    Returns:
+        bool: True if onboarding is complete, False otherwise
+    """
+    current_time = time.time()
+    
+    # Check cache first
+    with _onboarding_cache_lock:
+        if volume_name in _onboarding_cache:
+            cached_time, cached_status = _onboarding_cache[volume_name]
+            # Return cached value if still valid
+            if current_time - cached_time < ONBOARDING_CACHE_TTL:
+                return cached_status
+    
+    # Cache miss or expired - perform actual check
+    onboarded = check_instance_onboarding_complete(volume_name)
+    
+    # Update cache
+    with _onboarding_cache_lock:
+        _onboarding_cache[volume_name] = (current_time, onboarded)
+    
+    return onboarded
 
 def create_teacher_account(volume_name, teacher_username, teacher_password, reset_if_exists=False):
     """Create a teacher admin account in a Home Assistant instance
@@ -908,6 +947,11 @@ def get_instances():
                 name: inst for name, inst in instances.items()
                 if inst.get('created_by', '') == user_id
             }
+    else:
+        # For admins, add onboarding status to each instance
+        for server_name, instance in instances.items():
+            volume_name = instance.get('container_name', f'ha-edu-{server_name.lower().replace(" ", "-")}')
+            instance['onboarded'] = check_instance_onboarding_complete_cached(volume_name)
     
     return jsonify(instances)
 
