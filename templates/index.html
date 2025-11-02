@@ -653,6 +653,11 @@
                     <div class="instance-info">
                         <strong>Skapad:</strong> {{ instance.created_at.split('T')[0] }}
                     </div>
+                    {% if is_admin and instance.get('created_by') %}
+                    <div class="instance-info">
+                        <strong>Skapad av:</strong> {{ instance.created_by }}
+                    </div>
+                    {% endif %}
                     <div class="instance-actions">
                         <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
                         <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">🔄 Starta om</button>

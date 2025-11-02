@@ -725,21 +725,95 @@ def restart_instance_container(container_id):
         logger.error(f'Unexpected error restarting container {container_id}: {str(e)}', exc_info=True)
         return False, 'An error occurred while restarting instance'
 
+def get_user_identifier(request):
+    """Get a unique identifier for the current user
+    
+    Returns either the Cloudflare authenticated email or the IP address
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        str: User identifier (email or IP address)
+    """
+    # First try to get Cloudflare authenticated email
+    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
+    if user_email:
+        return user_email
+    
+    # Fall back to IP address
+    client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+    if not client_ip:
+        client_ip = request.remote_addr
+    
+    return f"IP: {client_ip}"
+
+def can_view_instance(request, instance):
+    """Check if the current user can view a specific instance
+    
+    Users can view instances if:
+    1. They have admin access (local IP or approved email), OR
+    2. They created the instance
+    
+    Args:
+        request: Flask request object
+        instance: Instance dictionary with metadata
+        
+    Returns:
+        bool: True if user can view the instance
+    """
+    # Admins and local users can see all instances
+    if is_admin_user(request):
+        return True
+    
+    # Get current user identifier
+    current_user = get_user_identifier(request)
+    
+    # Check if this user created the instance
+    created_by = instance.get('created_by', '')
+    
+    return current_user == created_by
+
 @app.route('/')
 def index():
     """Main page with instance management UI"""
     instances = load_instances()
     # Update status for each instance by checking actual container state
     update_instances_status(instances)
-    # No max_instances limit - show active count only
-    return render_template('index.html', instances=instances)
+    
+    # Filter instances based on user access
+    is_admin = is_admin_user(request)
+    if not is_admin:
+        # Non-admin users only see their own instances
+        user_id = get_user_identifier(request)
+        instances = {
+            name: inst for name, inst in instances.items()
+            if inst.get('created_by', '') == user_id
+        }
+    
+    # Pass admin status to template
+    return render_template('index.html', instances=instances, is_admin=is_admin)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
-    """API endpoint to get all instances with real-time status"""
+    """API endpoint to get all instances with real-time status
+    
+    Returns only instances the user has permission to see
+    """
     instances = load_instances()
     # Update status for each instance by checking actual container state
     update_instances_status(instances)
+    
+    # Filter instances based on user access
+    is_admin = is_admin_user(request)
+    if not is_admin:
+        # Non-admin users only see their own instances
+        user_id = get_user_identifier(request)
+        instances = {
+            name: inst for name, inst in instances.items()
+            if inst.get('created_by', '') == user_id
+        }
+    
     return jsonify(instances)
 
 @app.route('/api/instances', methods=['POST'])
@@ -769,6 +843,9 @@ def create_instance():
         # Get available port (no limit check - dynamic port assignment)
         port = get_available_port()
         
+        # Get user identifier (email or IP)
+        created_by = get_user_identifier(request)
+        
         # Reserve the port immediately by adding a placeholder entry
         # This prevents other concurrent requests from selecting the same port
         container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
@@ -777,6 +854,7 @@ def create_instance():
             'container_name': container_name,
             'port': port,
             'created_at': datetime.now().isoformat(),
+            'created_by': created_by,
             'status': 'creating'
         }
         save_instances(instances)
@@ -834,6 +912,7 @@ def create_instance():
             'container_name': container_name,
             'port': port,
             'created_at': datetime.now().isoformat(),
+            'created_by': created_by,
             'status': 'running'
         }
         
