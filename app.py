@@ -40,6 +40,8 @@ ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
 TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
 ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresses
+# Maximum instances for non-admin users (0 or None means unlimited)
+MAX_INSTANCES = int(os.getenv('MAX_INSTANCES', '0')) if os.getenv('MAX_INSTANCES', '').strip() else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 
 def is_admin_user(request):
@@ -805,6 +807,37 @@ def can_view_instance(request, instance):
     
     return current_user == created_by
 
+def can_create_instance(request, instances):
+    """Check if the current user can create a new instance
+    
+    Users can create instances if:
+    1. They have admin access (always allowed), OR
+    2. MAX_INSTANCES is 0/unset (unlimited for all users), OR
+    3. They have fewer instances than MAX_INSTANCES
+    
+    Args:
+        request: Flask request object
+        instances: Dictionary of all instances
+        
+    Returns:
+        tuple: (bool: can_create, int: current_count, int: max_allowed)
+    """
+    # Admins can always create instances regardless of MAX_INSTANCES
+    if is_admin_user(request):
+        return True, 0, 0
+    
+    # If MAX_INSTANCES is 0 or not set, unlimited instances for all users
+    if MAX_INSTANCES == 0:
+        return True, 0, 0
+    
+    # Count instances created by this user
+    user_id = get_user_identifier(request)
+    user_instance_count = sum(1 for inst in instances.values() if inst.get('created_by', '') == user_id)
+    
+    # Check if user has reached the limit
+    can_create = user_instance_count < MAX_INSTANCES
+    return can_create, user_instance_count, MAX_INSTANCES
+
 @app.route('/')
 def index():
     """Main page with instance management UI"""
@@ -823,13 +856,17 @@ def index():
             if inst.get('created_by', '') == user_id
         }
     
-    # Check if user already has an instance (to disable create button for non-admins)
-    # Admins can always create instances, but non-admins are limited to one instance
-    # to prevent resource exhaustion and ensure fair usage
-    user_has_instance = len(instances) > 0 if not is_admin else False
+    # Check if user can create more instances
+    can_create, user_count, max_allowed = can_create_instance(request, load_instances())
+    user_has_instance = not can_create
     
-    # Pass admin status and user_has_instance to template
-    return render_template('index.html', instances=instances, is_admin=is_admin, user_has_instance=user_has_instance)
+    # Pass admin status, user_has_instance, and max instances info to template
+    return render_template('index.html', 
+                         instances=instances, 
+                         is_admin=is_admin, 
+                         user_has_instance=user_has_instance,
+                         max_instances=max_allowed,
+                         user_instance_count=user_count)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
@@ -861,6 +898,15 @@ def create_instance():
     if not settings.get('instance_creation_enabled', True):
         return jsonify({'error': 'Instance creation is currently disabled'}), 403
     
+    # Check if user can create more instances (server-side validation)
+    instances = load_instances()
+    can_create, user_count, max_allowed = can_create_instance(request, instances)
+    
+    if not can_create:
+        return jsonify({
+            'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
+        }), 403
+    
     data = request.json
     server_name = data.get('server_name', '').strip()
     instance_password = data.get('instance_password', '').strip()
@@ -872,6 +918,13 @@ def create_instance():
     # This ensures port allocation and instance registration are atomic operations
     with _port_allocation_lock:
         instances = load_instances()
+        
+        # Re-check limit inside lock to prevent race condition
+        can_create, user_count, max_allowed = can_create_instance(request, instances)
+        if not can_create:
+            return jsonify({
+                'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
+            }), 403
         
         # Check if server name already exists
         if server_name in instances:
