@@ -10,6 +10,7 @@ import json
 import tempfile
 import threading
 import time
+from datetime import datetime
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -80,7 +81,7 @@ def test_15_students_simultaneous_creation():
                             'container_name': container_name,
                             'port': port,
                             'status': 'running',
-                            'created_at': time.strftime('%Y-%m-%dT%H:%M:%S')
+                            'created_at': datetime.now().isoformat()
                         }
                         app.save_instances(instances)
                         

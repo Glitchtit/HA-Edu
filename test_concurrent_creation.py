@@ -9,6 +9,7 @@ import json
 import tempfile
 import threading
 import time
+from datetime import datetime
 from unittest.mock import Mock, patch, MagicMock
 
 # Add current directory to path
@@ -53,7 +54,7 @@ def test_concurrent_port_allocation():
                         instances[server_name] = {
                             'container_id': f'test-{index}',
                             'port': port,
-                            'created_at': '2024-01-01T00:00:00'
+                            'created_at': datetime.now().isoformat()
                         }
                         app.save_instances(instances)
                         allocated_ports.append(port)
