@@ -653,6 +653,11 @@
                     <div class="instance-info">
                         <strong>Skapad:</strong> {{ instance.created_at.split('T')[0] }}
                     </div>
+                    {% if is_admin and instance.get('created_by') %}
+                    <div class="instance-info">
+                        <strong>Skapad av:</strong> {{ instance.created_by }}
+                    </div>
+                    {% endif %}
                     <div class="instance-actions">
                         <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
                         <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">🔄 Starta om</button>
@@ -868,15 +873,21 @@
         let pendingToggleState = null;
         let adminUnlocked = false;
         
-        // Check if admin password is enabled on page load
+        // Check if admin password is enabled and if user has admin access
         async function checkAdminEnabled() {
             try {
-                const response = await fetch('/api/admin/check');
+                const response = await fetch('/api/admin/check-access');
                 const data = await response.json();
                 
-                if (data.admin_enabled) {
-                    // Show the unlock button instead of showing admin buttons directly
+                // Only show unlock button if:
+                // 1. Admin password is enabled, AND
+                // 2. User has admin access (local IP or approved email)
+                if (data.admin_password_enabled && data.has_admin_access) {
+                    // Show the unlock button for users with admin access
                     document.getElementById('unlockAdminBtn').classList.remove('hidden');
+                } else if (data.admin_password_enabled && !data.has_admin_access) {
+                    // Admin password is enabled but user doesn't have access
+                    console.log('Admin features are restricted to authorized users only');
                 }
             } catch (error) {
                 console.error('Failed to check admin status:', error);

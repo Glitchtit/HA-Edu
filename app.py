@@ -6,6 +6,7 @@ import re
 import threading
 import bcrypt
 import urllib.parse
+import ipaddress
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 from flask_sock import Sock
 import docker
@@ -38,7 +39,62 @@ HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
 TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
+ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresses
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
+
+def is_admin_user(request):
+    """Check if the current user has admin access
+    
+    Admin access is granted if:
+    1. The request comes from the local network (192.168.50.0/24), OR
+    2. The user is authenticated via Cloudflare Zero Trust with an email in the ADMINS list
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        bool: True if user has admin access, False otherwise
+    """
+    # Define the allowed local network subnet
+    ALLOWED_SUBNET = ipaddress.ip_network('192.168.50.0/24')
+    
+    # Check if the request is from the local network (192.168.50.0/24)
+    # First check X-Forwarded-For header (set by reverse proxies)
+    # Note: In production, you should validate the proxy is trusted before using this header
+    # For this application, we assume the Cloudflare tunnel is the only proxy
+    client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+    if not client_ip:
+        # Fall back to direct remote_addr
+        client_ip = request.remote_addr
+    
+    # Check if IP is in 192.168.50.0/24 subnet
+    if client_ip:
+        try:
+            # Parse IP address and check if it's in the allowed subnet
+            ip_obj = ipaddress.ip_address(client_ip)
+            if ip_obj in ALLOWED_SUBNET:
+                logger.debug(f'Admin access granted for local IP: {client_ip}')
+                return True
+        except ValueError:
+            # Invalid IP address format
+            logger.warning(f'Invalid IP address format: {client_ip}')
+    
+    # Check if user is authenticated via Cloudflare Zero Trust
+    # Cloudflare Access sets the Cf-Access-Authenticated-User-Email header
+    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
+    
+    if user_email and ADMINS:
+        # Parse the ADMINS environment variable (comma-separated list)
+        admin_emails = [email.strip().lower() for email in ADMINS.split(',') if email.strip()]
+        
+        # Check if the user's email is in the admin list (case-insensitive)
+        if user_email.lower() in admin_emails:
+            logger.debug(f'Admin access granted for Cloudflare user: {user_email}')
+            return True
+    
+    logger.debug(f'Admin access denied for IP: {client_ip}, Email: {user_email}')
+    return False
+
 
 def load_data():
     """Load all data from JSON file"""
@@ -669,21 +725,95 @@ def restart_instance_container(container_id):
         logger.error(f'Unexpected error restarting container {container_id}: {str(e)}', exc_info=True)
         return False, 'An error occurred while restarting instance'
 
+def get_user_identifier(request):
+    """Get a unique identifier for the current user
+    
+    Returns either the Cloudflare authenticated email or the IP address
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        str: User identifier (email or IP address)
+    """
+    # First try to get Cloudflare authenticated email
+    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
+    if user_email:
+        return user_email
+    
+    # Fall back to IP address
+    client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+    if not client_ip:
+        client_ip = request.remote_addr
+    
+    return f"IP: {client_ip}"
+
+def can_view_instance(request, instance):
+    """Check if the current user can view a specific instance
+    
+    Users can view instances if:
+    1. They have admin access (local IP or approved email), OR
+    2. They created the instance
+    
+    Args:
+        request: Flask request object
+        instance: Instance dictionary with metadata
+        
+    Returns:
+        bool: True if user can view the instance
+    """
+    # Admins and local users can see all instances
+    if is_admin_user(request):
+        return True
+    
+    # Get current user identifier
+    current_user = get_user_identifier(request)
+    
+    # Check if this user created the instance
+    created_by = instance.get('created_by', '')
+    
+    return current_user == created_by
+
 @app.route('/')
 def index():
     """Main page with instance management UI"""
     instances = load_instances()
     # Update status for each instance by checking actual container state
     update_instances_status(instances)
-    # No max_instances limit - show active count only
-    return render_template('index.html', instances=instances)
+    
+    # Filter instances based on user access
+    is_admin = is_admin_user(request)
+    if not is_admin:
+        # Non-admin users only see their own instances
+        user_id = get_user_identifier(request)
+        instances = {
+            name: inst for name, inst in instances.items()
+            if inst.get('created_by', '') == user_id
+        }
+    
+    # Pass admin status to template
+    return render_template('index.html', instances=instances, is_admin=is_admin)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
-    """API endpoint to get all instances with real-time status"""
+    """API endpoint to get all instances with real-time status
+    
+    Returns only instances the user has permission to see
+    """
     instances = load_instances()
     # Update status for each instance by checking actual container state
     update_instances_status(instances)
+    
+    # Filter instances based on user access
+    is_admin = is_admin_user(request)
+    if not is_admin:
+        # Non-admin users only see their own instances
+        user_id = get_user_identifier(request)
+        instances = {
+            name: inst for name, inst in instances.items()
+            if inst.get('created_by', '') == user_id
+        }
+    
     return jsonify(instances)
 
 @app.route('/api/instances', methods=['POST'])
@@ -713,6 +843,9 @@ def create_instance():
         # Get available port (no limit check - dynamic port assignment)
         port = get_available_port()
         
+        # Get user identifier (email or IP)
+        created_by = get_user_identifier(request)
+        
         # Reserve the port immediately by adding a placeholder entry
         # This prevents other concurrent requests from selecting the same port
         container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
@@ -721,6 +854,7 @@ def create_instance():
             'container_name': container_name,
             'port': port,
             'created_at': datetime.now().isoformat(),
+            'created_by': created_by,
             'status': 'creating'
         }
         save_instances(instances)
@@ -778,6 +912,7 @@ def create_instance():
             'container_name': container_name,
             'port': port,
             'created_at': datetime.now().isoformat(),
+            'created_by': created_by,
             'status': 'running'
         }
         
@@ -1022,6 +1157,19 @@ def restart_instance(server_name):
 def check_admin():
     """API endpoint to check if admin password is configured"""
     return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
+
+@app.route('/api/admin/check-access', methods=['GET'])
+def check_admin_access():
+    """API endpoint to check if the current user has admin access
+    
+    Returns:
+        JSON response with has_admin_access boolean
+    """
+    has_access = is_admin_user(request)
+    return jsonify({
+        'has_admin_access': has_access,
+        'admin_password_enabled': bool(ADMIN_PASSWORD)
+    }), 200
 
 @app.route('/api/admin/unlock', methods=['POST'])
 def unlock_admin():

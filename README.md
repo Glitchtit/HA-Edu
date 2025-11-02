@@ -7,6 +7,7 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 
 - 🚀 **Easy Instance Creation**: Create new Home Assistant instances with a simple web interface - no password required
 - 🔑 **Admin Password Protected**: Admin password required for deleting and resetting instances
+- 🔐 **Role-Based Access Control**: Control admin access via local network or Cloudflare Zero Trust email authentication
 - 👨‍🏫 **Teacher Access**: Optional feature to add teacher admin accounts to student instances after onboarding
 - ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
 - 📊 **Instance Management**: View and manage unlimited instances
@@ -66,7 +67,34 @@ docker-compose up -d
      - `BASE_PORT`: `8123` (starting port for instances, assigned dynamically)
      - `HA_IMAGE`: `ghcr.io/home-assistant/home-assistant:stable`
      - `ADMIN_PASSWORD`: (optional) Admin password for reset functionality
+     - `ADMINS`: (optional) Comma-separated list of email addresses for admin access via Cloudflare Zero Trust
    - **Network Mode**: `bridge` (for proper isolation)
+
+### Admin Access Control
+
+The portal supports fine-grained admin access control based on network location and Cloudflare Zero Trust authentication:
+
+**Admin access is granted if:**
+- User is accessing from the local network (`192.168.50.0/24` subnet), OR
+- User is authenticated via Cloudflare Zero Trust with an email address in the `ADMINS` environment variable
+
+**Configuration:**
+```bash
+# Example: Grant admin access to specific email addresses
+ADMINS=admin@example.com,teacher@example.com
+```
+
+**How it works:**
+- When users access the portal through Cloudflare Zero Trust, Cloudflare sets the `Cf-Access-Authenticated-User-Email` header
+- The portal checks if this email is in the approved `ADMINS` list (case-insensitive)
+- Users without admin access won't see the unlock button or admin controls
+- Local network users (192.168.50.x) always have admin access regardless of the `ADMINS` setting
+
+**Security features:**
+- Email comparison is case-insensitive
+- Supports reverse proxy configurations (checks `X-Forwarded-For` header)
+- Admin buttons are hidden client-side for non-admin users
+- Server-side validation ensures only authorized users can perform admin actions
 
 ### Network Isolation & Cloudflare Tunnel
 
