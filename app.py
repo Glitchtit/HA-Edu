@@ -46,7 +46,7 @@ def is_admin_user(request):
     """Check if the current user has admin access
     
     Admin access is granted if:
-    1. The request comes from the local network (192.168.50.0/24), OR
+    1. The request comes from the local network (192.168.50.0/24 or 10.0.0.0/8), OR
     2. The user is authenticated via Cloudflare Zero Trust with an email in the ADMINS list
     
     Args:
@@ -55,10 +55,14 @@ def is_admin_user(request):
     Returns:
         bool: True if user has admin access, False otherwise
     """
-    # Define the allowed local network subnet
-    ALLOWED_SUBNET = ipaddress.ip_network('192.168.50.0/24')
+    # Define the allowed local network subnets
+    ALLOWED_SUBNETS = [
+        ipaddress.ip_network('192.168.50.0/24'),
+        ipaddress.ip_network('10.0.0.0/8'),  # Added 10.x.x.x range for local admin access
+        ipaddress.ip_network('127.0.0.0/8')  # Added localhost range
+    ]
     
-    # Check if the request is from the local network (192.168.50.0/24)
+    # Check if the request is from the local network
     # First check X-Forwarded-For header (set by reverse proxies)
     # Note: In production, you should validate the proxy is trusted before using this header
     # For this application, we assume the Cloudflare tunnel is the only proxy
@@ -67,14 +71,15 @@ def is_admin_user(request):
         # Fall back to direct remote_addr
         client_ip = request.remote_addr
     
-    # Check if IP is in 192.168.50.0/24 subnet
+    # Check if IP is in any of the allowed subnets
     if client_ip:
         try:
-            # Parse IP address and check if it's in the allowed subnet
+            # Parse IP address and check if it's in any allowed subnet
             ip_obj = ipaddress.ip_address(client_ip)
-            if ip_obj in ALLOWED_SUBNET:
-                logger.debug(f'Admin access granted for local IP: {client_ip}')
-                return True
+            for subnet in ALLOWED_SUBNETS:
+                if ip_obj in subnet:
+                    logger.debug(f'Admin access granted for local IP: {client_ip} (subnet: {subnet})')
+                    return True
         except ValueError:
             # Invalid IP address format
             logger.warning(f'Invalid IP address format: {client_ip}')

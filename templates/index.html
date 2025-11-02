@@ -633,6 +633,7 @@
                     <input type="checkbox" id="instanceCreationToggle" checked>
                     <span class="toggle-slider"></span>
                 </label>
+                {% endif %}
             </div>
             <div class="instance-count">
                 <span id="instanceCount">{{ instances|length }}</span> aktiva instanser
@@ -666,6 +667,14 @@
                     <div class="instance-actions">
                         <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
                         <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">🔄 Starta om</button>
+                        {% if is_admin %}
+                        <button class="btn-teacher-access" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
+                                {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
+                            👨‍🏫 Lärare
+                        </button>
+                        <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
+                        <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
+                        {% else %}
                         <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
                                 {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
                             👨‍🏫 Lärare
@@ -890,7 +899,8 @@
         let currentTeacherAccessServer = null;
         let currentRestartServer = null;
         let pendingToggleState = null;
-        let adminUnlocked = false;
+        let adminUnlocked = {{ 'true' if is_admin else 'false' }};
+        let isAdmin = {{ 'true' if is_admin else 'false' }};
         
         // Check if admin password is enabled and if user has admin access
         async function checkAdminEnabled() {
@@ -898,12 +908,22 @@
                 const response = await fetch('/api/admin/check-access');
                 const data = await response.json();
                 
+                // If user is already admin, no need to show unlock button
+                if (isAdmin) {
+                    console.log('User has admin access - admin features already visible');
+                    return;
+                }
+                
                 // Only show unlock button if:
                 // 1. Admin password is enabled, AND
-                // 2. User has admin access (local IP or approved email)
-                if (data.admin_password_enabled && data.has_admin_access) {
+                // 2. User has admin access (local IP or approved email), AND
+                // 3. User is not already identified as admin (fallback for non-admin users)
+                if (data.admin_password_enabled && data.has_admin_access && !isAdmin) {
                     // Show the unlock button for users with admin access
-                    document.getElementById('unlockAdminBtn').classList.remove('hidden');
+                    const unlockBtn = document.getElementById('unlockAdminBtn');
+                    if (unlockBtn) {
+                        unlockBtn.classList.remove('hidden');
+                    }
                 } else if (data.admin_password_enabled && !data.has_admin_access) {
                     // Admin password is enabled but user doesn't have access
                     console.log('Admin features are restricted to authorized users only');
@@ -913,11 +933,13 @@
             }
         }
         
-        // Show all admin buttons
+        // Show all admin buttons (only for non-admin users after unlock)
         function showAdminButtons() {
             // Show delete all button and toggle container
-            document.getElementById('deleteAllBtn').classList.remove('hidden');
-            document.getElementById('toggleContainer').classList.remove('hidden');
+            const deleteAllBtn = document.getElementById('deleteAllBtn');
+            const toggleContainer = document.getElementById('toggleContainer');
+            if (deleteAllBtn) deleteAllBtn.classList.remove('hidden');
+            if (toggleContainer) toggleContainer.classList.remove('hidden');
         }
         
         // Check if teacher access feature is enabled
@@ -927,18 +949,25 @@
                 const data = await response.json();
                 
                 if (data.teacher_access_enabled) {
-                    // Store teacher info but don't show buttons yet (wait for unlock)
+                    // Store teacher info
                     window.teacherAccessEnabled = true;
                     window.teacherUsername = data.teacher_username;
+                    
+                    // If user is admin, teacher access buttons are already visible
+                    // If not admin but has admin access, show buttons after unlock
+                    if (isAdmin) {
+                        // Teacher access buttons are already visible for admin users
+                        console.log('Teacher access enabled for admin user');
+                    }
                 }
             } catch (error) {
                 console.error('Failed to check teacher access status:', error);
             }
         }
         
-        // Show teacher access buttons (called after unlock)
+        // Show teacher access buttons (called after unlock for non-admin users)
         function showTeacherAccessButtons() {
-            if (window.teacherAccessEnabled) {
+            if (window.teacherAccessEnabled && !isAdmin) {
                 document.querySelectorAll('.btn-teacher-access').forEach(btn => {
                     btn.classList.remove('hidden');
                 });
