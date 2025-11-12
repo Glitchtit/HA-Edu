@@ -267,6 +267,7 @@
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
             border: 1px solid var(--border);
             transition: all 0.3s ease;
+            position: relative;
         }
         
         .instance-card:hover {
@@ -274,10 +275,37 @@
             box-shadow: 0 25px 70px var(--shadow-color);
         }
         
+        .instance-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
         .instance-card h3 {
             color: var(--foreground);
-            margin-bottom: 10px;
+            margin: 0;
             font-size: 1.3em;
+            flex: 1;
+        }
+        
+        .btn-lock {
+            background: transparent;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 10px;
+            transition: transform 0.2s ease;
+            line-height: 1;
+        }
+        
+        .btn-lock:hover {
+            transform: scale(1.2);
+        }
+        
+        .btn-lock.locked {
+            filter: drop-shadow(0 0 3px oklch(0.65 0.22 35));
         }
         
         .instance-info {
@@ -676,13 +704,20 @@
         <div class="instances-grid" id="instancesGrid">
             {% if instances %}
                 {% for name, instance in instances.items() %}
-                <div class="instance-card" data-server-name="{{ name }}">
-                    <h3>
-                        {{ name }}
-                        {% if instance.get('teacher_access_added', False) %}
-                        <span class="teacher-access-badge">Läraråtkomst</span>
-                        {% endif %}
-                    </h3>
+                <div class="instance-card" data-server-name="{{ name }}" data-locked="{{ 'true' if instance.get('locked', False) else 'false' }}">
+                    <div class="instance-card-header">
+                        <h3>
+                            {{ name }}
+                            {% if instance.get('teacher_access_added', False) %}
+                            <span class="teacher-access-badge">Läraråtkomst</span>
+                            {% endif %}
+                        </h3>
+                        <button class="btn-lock {% if instance.get('locked', False) %}locked{% endif %}" 
+                                onclick="toggleLock('{{ name }}')" 
+                                title="{% if instance.get('locked', False) %}Låst - klicka för att låsa upp{% else %}Olåst - klicka för att låsa{% endif %}">
+                            {% if instance.get('locked', False) %}🔒{% else %}🔓{% endif %}
+                        </button>
+                    </div>
                     <div class="instance-info">
                         <strong>Port:</strong> {{ instance.port }}
                     </div>
@@ -1658,6 +1693,46 @@
         
         async function restartInstance(serverName) {
             openRestartModal(serverName);
+        }
+        
+        // Toggle lock on an instance
+        async function toggleLock(serverName) {
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(serverName)}/toggle-lock`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Update the lock button in the UI
+                    const instanceCard = document.querySelector(`.instance-card[data-server-name="${serverName}"]`);
+                    if (instanceCard) {
+                        const lockBtn = instanceCard.querySelector('.btn-lock');
+                        if (lockBtn) {
+                            if (data.locked) {
+                                lockBtn.textContent = '🔒';
+                                lockBtn.classList.add('locked');
+                                lockBtn.title = 'Låst - klicka för att låsa upp';
+                            } else {
+                                lockBtn.textContent = '🔓';
+                                lockBtn.classList.remove('locked');
+                                lockBtn.title = 'Olåst - klicka för att låsa';
+                            }
+                        }
+                        instanceCard.dataset.locked = data.locked ? 'true' : 'false';
+                    }
+                } else {
+                    console.error('Failed to toggle lock:', data.error);
+                    alert(`Kunde inte ändra låsstatus: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Failed to toggle lock:', error);
+                alert(`Kunde inte ändra låsstatus: ${error.message}`);
+            }
         }
         
         // Update instance count
