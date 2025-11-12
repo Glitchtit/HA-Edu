@@ -12,6 +12,7 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 - ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
 - 📊 **Instance Management**: View and manage unlimited instances
 - 📝 **Interaction Logging**: Comprehensive logging of all user and admin interactions (create, delete, access, etc.)
+- 🔒 **GDPR Compliance**: Automatic log retention with 90-day maximum (configurable)
 - 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
 - 🔄 **Automatic Port Assignment**: Dynamically assigns ports starting from BASE_PORT (default: 8123)
 - ♻️ **Port Reuse**: Automatically reuses ports from deleted instances
@@ -207,6 +208,7 @@ Environment variables can be configured to customize the portal:
 | `BASE_PORT` | `8123` | Starting port number for HA instances (dynamically assigned) |
 | `DATA_FILE` | `/data/instances.json` | Path to store instance data |
 | `LOG_DIR` | `/logs` | Path to store interaction logs |
+| `LOG_RETENTION_DAYS` | `90` | **GDPR Compliance**: Maximum days to retain logs. Set to `0` for unlimited retention |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant Docker image to use |
 | `ADMIN_PASSWORD` | (empty) | **Required** admin password for delete and reset operations. If not set, delete and reset operations will fail |
 | `TEACHER_USERNAME` | (empty) | *Optional* Username for teacher admin account. Required for Teacher Access feature |
@@ -215,7 +217,9 @@ Environment variables can be configured to customize the portal:
 | `MAX_INSTANCES` | `0` (unlimited) | *Optional* Maximum instances per non-admin user (0 = unlimited) |
 | `DOCKER_HOST_IP` | `host.docker.internal` | *Optional* IP/hostname to access instance containers from portal container. Use `host.docker.internal` on Docker Desktop, or set to host's IP if needed |
 
-For more details on interaction logging, see [LOGGING.md](LOGGING.md).
+**GDPR Compliance**: The portal automatically removes logs older than 90 days by default. Adjust `LOG_RETENTION_DAYS` based on your data protection requirements.
+
+For more details on interaction logging and GDPR compliance, see [LOGGING.md](LOGGING.md).
 
 ## Architecture
 

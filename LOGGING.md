@@ -152,27 +152,101 @@ volumes:
 
 This ensures logs persist on the host machine at `./logs/` relative to the docker-compose.yml file.
 
+### Log Retention (GDPR Compliance)
+
+- `LOG_RETENTION_DAYS`: Maximum number of days to retain logs (default: `90` days)
+  - Set to `90` for GDPR compliance (automatic cleanup of logs older than 90 days)
+  - Set to `0` for unlimited retention (no automatic cleanup)
+  - Logs are cleaned up automatically on application startup and during log rotation
+
+## GDPR Compliance
+
+The HA-Edu portal implements **automatic log retention** to comply with GDPR (General Data Protection Regulation) requirements.
+
+### Default Retention Period
+
+- **90 days**: All log entries older than 90 days are automatically removed
+- Configurable via the `LOG_RETENTION_DAYS` environment variable
+- Cleanup happens automatically on application startup and during log rotation
+
+### How It Works
+
+1. **Automatic Cleanup**: Old log entries are removed automatically when:
+   - The application starts
+   - Log files are rotated (when they reach 10 MB)
+
+2. **Timestamp-Based Retention**: The system checks the `timestamp` field of each log entry
+   - Entries older than the retention period are removed
+   - Entries within the retention period are kept
+
+3. **All Log Files Cleaned**: Cleanup applies to:
+   - Main log file (`interactions.log`)
+   - All rotated log files (`interactions.log.1`, `interactions.log.2`, etc.)
+
+### Configuration Examples
+
+```yaml
+# Docker Compose example - 90-day retention (GDPR compliant)
+environment:
+  - LOG_RETENTION_DAYS=90
+
+# Shorter retention period (30 days)
+environment:
+  - LOG_RETENTION_DAYS=30
+
+# Unlimited retention (not recommended for GDPR compliance)
+environment:
+  - LOG_RETENTION_DAYS=0
+```
+
+### What Gets Removed
+
+When logs are cleaned up:
+- ✅ Log entries with timestamps older than the retention period
+- ❌ Malformed log entries are preserved (to prevent data loss)
+- ❌ Recent log entries within the retention period
+
+### Compliance Benefits
+
+- **GDPR Article 5(1)(e)**: Storage limitation - personal data kept no longer than necessary
+- **Right to erasure**: Old personal data (email addresses) automatically removed
+- **Data minimization**: Only relevant recent data is retained
+- **Audit trail**: Sufficient retention period for security and operational needs
+
 ## Privacy Considerations
 
 - Logs contain user email addresses (from Cloudflare authentication)
 - Logs show which users created, accessed, modified, and deleted instances
-- Consider your privacy policy and data retention requirements
-- You may want to implement log anonymization or periodic cleanup based on your needs
+- **GDPR Compliance**: Logs are automatically cleaned up after 90 days (configurable)
+- Consider your specific privacy policy and data retention requirements
+- For stricter privacy requirements, reduce `LOG_RETENTION_DAYS` to a lower value
 
 ## Testing
 
 Run the logging test suite:
 
 ```bash
+# Test basic logging functionality
 python3 test_logging.py
+
+# Test GDPR log retention functionality
+python3 test_log_retention.py
 ```
 
-This verifies:
+**Basic logging tests verify:**
 - Logger can be created
 - Events are logged correctly
 - Log rotation works
 - Filtering by event type works
 - Integration with the main app is correct
+
+**GDPR retention tests verify:**
+- Retention period configuration
+- Old log cleanup (removes entries older than retention period)
+- Cleanup on initialization
+- Cleanup with rotated log files
+- Unlimited retention mode (retention_days=0)
+- Malformed entries are preserved
 
 ## Example Use Cases
 

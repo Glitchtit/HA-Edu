@@ -17,6 +17,7 @@ services:
       # MAX_INSTANCES removed - no limit, ports assigned dynamically
       - DATA_FILE=/data/instances.json
       - LOG_DIR=/logs
+      - LOG_RETENTION_DAYS=90  # GDPR compliance: automatic log cleanup after 90 days
       - HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       # Docker host IP for accessing instance containers

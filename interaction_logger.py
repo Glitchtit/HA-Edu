@@ -12,7 +12,7 @@ Logs are stored in /logs directory with rotation support.
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import threading
 
@@ -32,21 +32,30 @@ INTERACTION_LOG_FILE = os.path.join(LOG_DIR, 'interactions.log')
 MAX_LOG_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_LOG_FILES = 10
 
+# GDPR compliance: Maximum log retention period in days
+# Default is 90 days, can be configured via LOG_RETENTION_DAYS environment variable
+LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', '90'))
+
 # Configure logger
 logger = logging.getLogger(__name__)
 
 class InteractionLogger:
     """Logger for user and admin interactions"""
     
-    def __init__(self, log_dir=LOG_DIR):
+    def __init__(self, log_dir=LOG_DIR, retention_days=LOG_RETENTION_DAYS):
         """Initialize the interaction logger
         
         Args:
             log_dir: Directory to store log files
+            retention_days: Maximum number of days to retain logs (default: 90 for GDPR compliance)
         """
         self.log_dir = log_dir
         self.log_file = os.path.join(log_dir, 'interactions.log')
+        self.retention_days = retention_days
         self._dir_created = False
+        
+        # Clean up old logs on initialization
+        self._cleanup_old_logs()
         
     def _ensure_log_dir(self):
         """Ensure log directory exists (lazy creation)"""
@@ -99,9 +108,71 @@ class InteractionLogger:
             # Rename current log file
             if os.path.exists(self.log_file):
                 os.rename(self.log_file, f'{self.log_file}.1')
+            
+            # Clean up old logs after rotation
+            self._cleanup_old_logs()
                 
         except Exception as e:
             logger.error(f'Failed to rotate logs: {str(e)}')
+    
+    def _cleanup_old_logs(self):
+        """Clean up log entries older than retention_days for GDPR compliance
+        
+        This method removes log entries that are older than the configured retention period.
+        It processes all log files (main and rotated) and rewrites them without expired entries.
+        Runs on logger initialization and can be called periodically.
+        """
+        if self.retention_days <= 0:
+            # If retention is set to 0 or negative, don't clean up (infinite retention)
+            return
+            
+        try:
+            # Calculate cutoff timestamp
+            cutoff_date = datetime.now() - timedelta(days=self.retention_days)
+            
+            # Get all log files (main + rotated)
+            log_files_to_process = [self.log_file]
+            for i in range(1, MAX_LOG_FILES + 1):
+                rotated_file = f'{self.log_file}.{i}'
+                if os.path.exists(rotated_file):
+                    log_files_to_process.append(rotated_file)
+            
+            # Process each log file
+            for log_file_path in log_files_to_process:
+                if not os.path.exists(log_file_path):
+                    continue
+                    
+                # Read all entries from the file
+                retained_entries = []
+                removed_count = 0
+                
+                try:
+                    with open(log_file_path, 'r') as f:
+                        for line in f:
+                            try:
+                                entry = json.loads(line.strip())
+                                # Parse timestamp and check if it's within retention period
+                                entry_timestamp = datetime.fromisoformat(entry.get('timestamp', ''))
+                                
+                                if entry_timestamp >= cutoff_date:
+                                    retained_entries.append(line)
+                                else:
+                                    removed_count += 1
+                            except (json.JSONDecodeError, ValueError, KeyError):
+                                # Keep malformed entries to avoid data loss
+                                retained_entries.append(line)
+                    
+                    # Only rewrite the file if we removed entries
+                    if removed_count > 0:
+                        with open(log_file_path, 'w') as f:
+                            f.writelines(retained_entries)
+                        logger.info(f'GDPR cleanup: Removed {removed_count} expired log entries from {os.path.basename(log_file_path)}')
+                    
+                except Exception as e:
+                    logger.error(f'Failed to cleanup logs in {log_file_path}: {str(e)}')
+                    
+        except Exception as e:
+            logger.error(f'Failed to cleanup old logs: {str(e)}')
     
     def log_instance_creation(self, server_name, user_id, user_type, port, container_id):
         """Log instance creation event
