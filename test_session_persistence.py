@@ -57,6 +57,7 @@ def test_secret_key_persistence():
         
         if second_key != first_key:
             print("✗ Secret key changed on reload")
+            # Note: Logging partial keys for test debugging only - these are test-generated keys
             print(f"  First:  {first_key[:16]}... (masked)")
             print(f"  Second: {second_key[:16]}... (masked)")
             return False
@@ -89,6 +90,7 @@ def test_env_var_override():
         
         if app.app.secret_key != custom_key:
             print(f"✗ Environment variable not used")
+            # Note: Logging partial keys for test debugging only - these are test-generated keys
             print(f"  Expected: {custom_key[:16]}... (masked)")
             print(f"  Got:      {app.app.secret_key[:16]}... (masked)")
             return False

@@ -135,15 +135,18 @@ def test_secret_key_same_across_workers():
         import importlib
         
         worker1_key = app.app.secret_key
+        # Note: Logging partial key for test verification only - this is a test-generated key
         print(f"✓ Worker 1 key: {worker1_key[:16]}...")
         
         # Reload app (worker 2)
         importlib.reload(app)
         worker2_key = app.app.secret_key
+        # Note: Logging partial key for test verification only - this is a test-generated key
         print(f"✓ Worker 2 key: {worker2_key[:16]}...")
         
         if worker1_key != worker2_key:
             print("✗ Secret keys differ between workers!")
+            # Note: Logging partial keys for test debugging only - these are test-generated keys
             print(f"  Worker 1: {worker1_key[:16]}... (masked)")
             print(f"  Worker 2: {worker2_key[:16]}... (masked)")
             return False
