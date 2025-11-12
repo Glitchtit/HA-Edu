@@ -59,6 +59,10 @@ MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
 # Onboarding cache TTL in seconds - how long to cache onboarding status checks
 ONBOARDING_CACHE_TTL = int(os.getenv('ONBOARDING_CACHE_TTL', '60'))
+# Docker host IP for accessing instance containers from within the portal container
+# Use 'host.docker.internal' (Docker Desktop) or 'gateway.docker.internal' (Linux)
+# Or set to 'localhost' when running the portal directly on the host (not in Docker)
+DOCKER_HOST_IP = os.getenv('DOCKER_HOST_IP', 'host.docker.internal')
 
 # Paths that trigger access logging (to avoid logging every asset request)
 ACCESS_LOG_PATHS = ['', 'index.html', 'lovelace']
@@ -1878,7 +1882,7 @@ def proxy(port, path):
         )
     
     # Build the target URL
-    target_url = f'http://192.168.50.111:{port}/{path}'
+    target_url = f'http://{DOCKER_HOST_IP}:{port}/{path}'
     
     # Get query string if present
     if request.query_string:
@@ -1915,7 +1919,7 @@ def proxy(port, path):
                 headers[key] = value
 
         # Set the correct Host header for the backend
-        headers['Host'] = f'192.168.50.111:{port}'
+        headers['Host'] = f'{DOCKER_HOST_IP}:{port}'
         
         # Add proxy headers that HA needs
         headers['X-Forwarded-For'] = request.remote_addr
@@ -1981,13 +1985,13 @@ def proxy(port, path):
                     # This prevents users from being kicked back to the app index after onboarding
                     elif value.startswith('http://') or value.startswith('https://'):
                         # Parse the URL to check if it's pointing to our backend
-                        # Backend URLs look like: http://192.168.50.111:{port}/path or http://localhost:{port}/path
+                        # Backend URLs look like: http://{DOCKER_HOST_IP}:{port}/path or http://localhost:{port}/path
                         # or external domain: https://edu.wredlund.fi:{port}/path
                         parsed = urllib.parse.urlparse(value)
                         # Check if this is a redirect to the backend instance (matching both port and hostname)
                         # We need to verify both to avoid false positives (e.g., external services on same port)
-                        # Note: The backend IP address (192.168.50.111) matches the hardcoded value used throughout this codebase
-                        is_backend_host = parsed.hostname in ['192.168.50.111', 'localhost', '127.0.0.1']
+                        # Note: The backend can be accessed via multiple hostnames depending on Docker setup
+                        is_backend_host = parsed.hostname in [DOCKER_HOST_IP, 'localhost', '127.0.0.1', '192.168.50.111']
                         
                         # Also check if the hostname matches the request's Host header (for external domains)
                         # This handles cases like https://edu.wredlund.fi:8123/ when accessed externally
@@ -2305,7 +2309,7 @@ def _websocket_proxy_handler(ws, port=None):
     session['proxy_port'] = port
     
     # Build the backend WebSocket URL
-    backend_url = f'ws://192.168.50.111:{port}/api/websocket'
+    backend_url = f'ws://{DOCKER_HOST_IP}:{port}/api/websocket'
     
     logger.info(f'WebSocket proxy established for port {port}')
     
