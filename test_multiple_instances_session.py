@@ -144,8 +144,8 @@ def test_secret_key_same_across_workers():
         
         if worker1_key != worker2_key:
             print("✗ Secret keys differ between workers!")
-            print(f"  Worker 1: {worker1_key}")
-            print(f"  Worker 2: {worker2_key}")
+            print(f"  Worker 1: {worker1_key[:16]}... (masked)")
+            print(f"  Worker 2: {worker2_key[:16]}... (masked)")
             return False
         
         print("✓ Secret keys are consistent across workers")

@@ -57,8 +57,8 @@ def test_secret_key_persistence():
         
         if second_key != first_key:
             print("✗ Secret key changed on reload")
-            print(f"  First:  {first_key}")
-            print(f"  Second: {second_key}")
+            print(f"  First:  {first_key[:16]}... (masked)")
+            print(f"  Second: {second_key[:16]}... (masked)")
             return False
         
         print("✓ Secret key persisted across reload")
@@ -89,8 +89,8 @@ def test_env_var_override():
         
         if app.app.secret_key != custom_key:
             print(f"✗ Environment variable not used")
-            print(f"  Expected: {custom_key}")
-            print(f"  Got:      {app.app.secret_key}")
+            print(f"  Expected: {custom_key[:16]}... (masked)")
+            print(f"  Got:      {app.app.secret_key[:16]}... (masked)")
             return False
         
         print("✓ Environment variable SECRET_KEY used correctly")
