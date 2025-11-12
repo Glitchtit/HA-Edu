@@ -36,6 +36,9 @@ ENV/
 data/
 *.json
 
+# Environment variables
+.env
+
 # Logs
 logs/
 
