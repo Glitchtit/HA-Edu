@@ -1247,6 +1247,11 @@ def delete_instance(server_name):
     
     instance = instances[server_name]
     
+    # Check if instance is locked
+    if instance.get('locked', False):
+        logger.warning(f'Failed deletion attempt for instance {server_name} - instance is locked')
+        return jsonify({'error': 'Cannot delete a locked instance. Please unlock it first.'}), 403
+    
     # Validate password (accepts either admin password or instance password)
     if not validate_instance_password(password, instance):
         logger.warning(f'Failed deletion attempt for instance {server_name} - invalid password')
@@ -1292,6 +1297,31 @@ def delete_instance(server_name):
     except Exception as e:
         logger.error(f'Failed to delete instance: {str(e)}', exc_info=True)
         return jsonify({'error': 'Failed to delete instance. Please try again or contact support.'}), 500
+
+@app.route('/api/instances/<server_name>/toggle-lock', methods=['POST'])
+def toggle_instance_lock(server_name):
+    """API endpoint to toggle instance lock state"""
+    instances = load_instances()
+    
+    if server_name not in instances:
+        return jsonify({'error': 'Instance not found'}), 404
+    
+    instance = instances[server_name]
+    
+    # Toggle the lock state (default to False if not set)
+    current_lock_state = instance.get('locked', False)
+    instance['locked'] = not current_lock_state
+    
+    # Save updated instances
+    instances[server_name] = instance
+    save_instances(instances)
+    
+    logger.info(f'Instance {server_name} lock state changed to: {instance["locked"]}')
+    
+    return jsonify({
+        'locked': instance['locked'],
+        'message': f'Instance {"locked" if instance["locked"] else "unlocked"} successfully'
+    }), 200
 
 @app.route('/api/instances/<server_name>/status', methods=['GET'])
 def get_instance_status(server_name):
@@ -1527,10 +1557,17 @@ def delete_all_instances():
     
     deleted_count = 0
     failed_count = 0
+    locked_count = 0
     
     try:
-        # Delete all instances
+        # Delete all unlocked instances
         for server_name, instance in list(instances.items()):
+            # Skip locked instances
+            if instance.get('locked', False):
+                logger.info(f'Skipping locked instance: {server_name}')
+                locked_count += 1
+                continue
+                
             try:
                 # Stop and remove container
                 try:
@@ -1551,26 +1588,33 @@ def delete_all_instances():
                 except Exception as e:
                     logger.warning(f'Failed to remove volume {volume_name}: {str(e)}')
                 
+                # Remove from instances dict
+                del instances[server_name]
                 deleted_count += 1
             except Exception as e:
                 logger.error(f'Failed to delete instance {server_name}: {str(e)}')
                 failed_count += 1
         
-        # Clear all instances
-        save_instances({})
+        # Save updated instances (locked ones remain)
+        save_instances(instances)
         
         # Log admin operation
         user_id, user_type = get_user_info_for_logging(request)
         interaction_logger.log_admin_operation(
             operation='delete_all_instances',
             user_id=user_id,
-            details={'deleted_count': deleted_count, 'failed_count': failed_count}
+            details={'deleted_count': deleted_count, 'failed_count': failed_count, 'locked_count': locked_count}
         )
         
+        message = f'Successfully deleted {deleted_count} instance(s)'
+        if locked_count > 0:
+            message += f', {locked_count} locked instance(s) were preserved'
+        
         return jsonify({
-            'message': f'Successfully deleted {deleted_count} instance(s)',
+            'message': message,
             'deleted_count': deleted_count,
-            'failed_count': failed_count
+            'failed_count': failed_count,
+            'locked_count': locked_count
         }), 200
         
     except Exception as e:
