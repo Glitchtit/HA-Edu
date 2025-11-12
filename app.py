@@ -33,6 +33,11 @@ sock = Sock(app)
 # students create instances simultaneously
 _port_allocation_lock = threading.Lock()
 
+# Semaphore to limit concurrent temporary container operations
+# This prevents overwhelming the Docker daemon when many instances are created
+# Maximum of 5 concurrent temporary container operations (config copy, onboarding check, etc.)
+_temp_container_semaphore = threading.Semaphore(5)
+
 # Cache for onboarding status to avoid redundant Docker container checks
 # Key: volume_name, Value: (timestamp, onboarded_status)
 _onboarding_cache = {}
@@ -269,56 +274,61 @@ def copy_master_config_to_volume(volume_name):
     
     Creates a temporary container to copy the master configuration
     into the specified volume's /config directory.
+    Uses semaphore to limit concurrent operations.
     """
-    try:
-        # Read the master configuration file
-        with open(MASTER_CONFIG_PATH, 'r') as f:
-            master_config_content = f.read()
-        
-        # Pull alpine image if not present
+    # Use semaphore to limit concurrent temporary container operations
+    with _temp_container_semaphore:
+        temp_container = None
         try:
-            client.images.get('alpine:latest')
-        except docker.errors.ImageNotFound:
-            logger.info('Pulling alpine:latest image...')
-            client.images.pull('alpine:latest')
-        
-        # Create a temporary container with the volume mounted
-        # Use alpine image - it's lightweight and has sh
-        temp_container = client.containers.create(
-            'alpine:latest',
-            command=['sh', '-c', 'sleep 30'],
-            volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
-        )
-        
-        # Start the container
-        temp_container.start()
-        
-        # Write the master config and empty files for automations, scripts, and scenes
-        # These files are required by the master configuration
-        # Use exec_run to write files
-        temp_container.exec_run(
-            ['sh', '-c', f'cat > /config/configuration.yaml << \'EOF\'\n{master_config_content}\nEOF']
-        )
-        temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/automations.yaml'])
-        temp_container.exec_run(['sh', '-c', 'echo "{}" > /config/scripts.yaml'])
-        temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/scenes.yaml'])
-        
-        # Stop and clean up
-        temp_container.stop()
-        temp_container.remove()
-        
-        logger.info(f'Successfully copied master configuration to volume {volume_name}')
-        return True
-        
-    except Exception as e:
-        logger.error(f'Failed to copy master configuration to volume {volume_name}: {str(e)}', exc_info=True)
-        # Clean up on error
-        try:
-            temp_container.stop()
-            temp_container.remove(force=True)
-        except:
-            pass
-        return False
+            # Read the master configuration file
+            with open(MASTER_CONFIG_PATH, 'r') as f:
+                master_config_content = f.read()
+            
+            # Pull alpine image if not present
+            try:
+                client.images.get('alpine:latest')
+            except docker.errors.ImageNotFound:
+                logger.info('Pulling alpine:latest image...')
+                client.images.pull('alpine:latest')
+            
+            # Create a temporary container with the volume mounted
+            # Use alpine image - it's lightweight and has sh
+            temp_container = client.containers.create(
+                'alpine:latest',
+                command=['sh', '-c', 'sleep 30'],
+                volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
+            )
+            
+            # Start the container
+            temp_container.start()
+            
+            # Write the master config and empty files for automations, scripts, and scenes
+            # These files are required by the master configuration
+            # Use exec_run to write files
+            temp_container.exec_run(
+                ['sh', '-c', f'cat > /config/configuration.yaml << \'EOF\'\n{master_config_content}\nEOF']
+            )
+            temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/automations.yaml'])
+            temp_container.exec_run(['sh', '-c', 'echo "{}" > /config/scripts.yaml'])
+            temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/scenes.yaml'])
+            
+            # Stop and clean up
+            temp_container.stop(timeout=5)
+            temp_container.remove()
+            
+            logger.info(f'Successfully copied master configuration to volume {volume_name}')
+            return True
+            
+        except Exception as e:
+            logger.error(f'Failed to copy master configuration to volume {volume_name}: {str(e)}', exc_info=True)
+            # Clean up on error
+            if temp_container:
+                try:
+                    temp_container.stop(timeout=5)
+                    temp_container.remove(force=True)
+                except Exception as cleanup_error:
+                    logger.warning(f'Failed to cleanup temp container: {cleanup_error}')
+            return False
 
 def check_instance_onboarding_complete(volume_name):
     """Check if a Home Assistant instance has completed onboarding
@@ -326,6 +336,7 @@ def check_instance_onboarding_complete(volume_name):
     Checks for the existence of required .storage files in the volume,
     which indicates that at least one user has been created and the
     authentication provider is configured.
+    Uses semaphore to limit concurrent operations.
     
     Args:
         volume_name: Name of the Docker volume to check
@@ -333,37 +344,46 @@ def check_instance_onboarding_complete(volume_name):
     Returns:
         bool: True if onboarding is complete, False otherwise
     """
-    try:
-        # Pull alpine image if not present
+    # Use semaphore to limit concurrent temporary container operations
+    with _temp_container_semaphore:
+        temp_container = None
         try:
-            client.images.get('alpine:latest')
-        except docker.errors.ImageNotFound:
-            logger.info('Pulling alpine:latest image...')
-            client.images.pull('alpine:latest')
-        
-        # Create a temporary container to check both required files
-        # Both files are needed for create_teacher_account to work
-        temp_container = client.containers.create(
-            'alpine:latest',
-            command=['sh', '-c', 'test -f /config/.storage/auth && test -f /config/.storage/auth_provider.homeassistant && echo "exists" || echo "missing"'],
-            volumes={volume_name: {'bind': '/config', 'mode': 'ro'}}
-        )
-        
-        # Start and wait for container
-        temp_container.start()
-        exit_code = temp_container.wait()
-        
-        # Get output
-        output = temp_container.logs().decode('utf-8').strip()
-        
-        # Clean up
-        temp_container.remove()
-        
-        return output == 'exists'
-        
-    except Exception as e:
-        logger.error(f'Failed to check onboarding status for volume {volume_name}: {str(e)}', exc_info=True)
-        return False
+            # Pull alpine image if not present
+            try:
+                client.images.get('alpine:latest')
+            except docker.errors.ImageNotFound:
+                logger.info('Pulling alpine:latest image...')
+                client.images.pull('alpine:latest')
+            
+            # Create a temporary container to check both required files
+            # Both files are needed for create_teacher_account to work
+            temp_container = client.containers.create(
+                'alpine:latest',
+                command=['sh', '-c', 'test -f /config/.storage/auth && test -f /config/.storage/auth_provider.homeassistant && echo "exists" || echo "missing"'],
+                volumes={volume_name: {'bind': '/config', 'mode': 'ro'}}
+            )
+            
+            # Start and wait for container
+            temp_container.start()
+            exit_code = temp_container.wait(timeout=10)
+            
+            # Get output
+            output = temp_container.logs().decode('utf-8').strip()
+            
+            # Clean up
+            temp_container.remove()
+            
+            return output == 'exists'
+            
+        except Exception as e:
+            logger.error(f'Failed to check onboarding status for volume {volume_name}: {str(e)}', exc_info=True)
+            # Clean up on error
+            if temp_container:
+                try:
+                    temp_container.remove(force=True)
+                except Exception as cleanup_error:
+                    logger.warning(f'Failed to cleanup temp container: {cleanup_error}')
+            return False
 
 def check_instance_onboarding_complete_cached(volume_name):
     """Cached wrapper for check_instance_onboarding_complete
@@ -401,6 +421,7 @@ def create_teacher_account(volume_name, teacher_username, teacher_password, rese
     
     Directly manipulates .storage/auth and .storage/auth_provider.homeassistant
     files in the instance volume using a temporary Alpine container.
+    Uses semaphore to limit concurrent operations.
     
     Args:
         volume_name: Name of the Docker volume
@@ -411,23 +432,26 @@ def create_teacher_account(volume_name, teacher_username, teacher_password, rese
     Returns:
         tuple: (success: bool, message: str)
     """
-    try:
-        # Pull alpine image if not present
+    # Use semaphore to limit concurrent temporary container operations
+    with _temp_container_semaphore:
+        temp_container = None
         try:
-            client.images.get('alpine:latest')
-        except docker.errors.ImageNotFound:
-            logger.info('Pulling alpine:latest image...')
-            client.images.pull('alpine:latest')
-        
-        # Create a temporary container with the volume mounted
-        temp_container = client.containers.create(
-            'alpine:latest',
-            command=['sh', '-c', 'sleep 60'],
-            volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
-        )
-        
-        # Start the container
-        temp_container.start()
+            # Pull alpine image if not present
+            try:
+                client.images.get('alpine:latest')
+            except docker.errors.ImageNotFound:
+                logger.info('Pulling alpine:latest image...')
+                client.images.pull('alpine:latest')
+            
+            # Create a temporary container with the volume mounted
+            temp_container = client.containers.create(
+                'alpine:latest',
+                command=['sh', '-c', 'sleep 60'],
+                volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
+            )
+            
+            # Start the container
+            temp_container.start()
         
         # Install Python in the container for bcrypt hashing
         install_result = temp_container.exec_run(['sh', '-c', 'apk add --no-cache python3 py3-pip'])
@@ -695,41 +719,42 @@ with open(person_path, 'w') as f:
 print('success')
 """
         
-        # Write the script to the container
-        temp_container.exec_run(['sh', '-c', f'cat > /tmp/create_user.py << \'EOF\'\n{hash_script}\nEOF'])
-        
-        # Run the script
-        result = temp_container.exec_run(['python3', '/tmp/create_user.py'])
-        
-        # Clean up
-        temp_container.stop()
-        temp_container.remove()
-        
-        output = result.output.decode('utf-8').strip()
-        
-        if result.exit_code == 0:
-            if output == 'exists':
-                logger.info(f'Teacher account already exists in volume {volume_name}')
-                return False, 'Teacher account already exists'
-            elif output == 'reset':
-                logger.info(f'Successfully reset teacher account password in volume {volume_name}')
-                return True, 'Teacher account password reset successfully'
-            elif output == 'success':
-                logger.info(f'Successfully created teacher account in volume {volume_name}')
-                return True, 'Teacher account created successfully'
-        
-        logger.error(f'Failed to create teacher account: {output}')
-        return False, 'Failed to create teacher account'
-        
-    except Exception as e:
-        logger.error(f'Failed to create teacher account in volume {volume_name}: {str(e)}', exc_info=True)
-        # Clean up on error
-        try:
-            temp_container.stop()
-            temp_container.remove(force=True)
-        except:
-            pass
-        return False, 'An error occurred while creating teacher account'
+            # Write the script to the container
+            temp_container.exec_run(['sh', '-c', f'cat > /tmp/create_user.py << \'EOF\'\n{hash_script}\nEOF'])
+            
+            # Run the script
+            result = temp_container.exec_run(['python3', '/tmp/create_user.py'])
+            
+            # Clean up
+            temp_container.stop(timeout=5)
+            temp_container.remove()
+            
+            output = result.output.decode('utf-8').strip()
+            
+            if result.exit_code == 0:
+                if output == 'exists':
+                    logger.info(f'Teacher account already exists in volume {volume_name}')
+                    return False, 'Teacher account already exists'
+                elif output == 'reset':
+                    logger.info(f'Successfully reset teacher account password in volume {volume_name}')
+                    return True, 'Teacher account password reset successfully'
+                elif output == 'success':
+                    logger.info(f'Successfully created teacher account in volume {volume_name}')
+                    return True, 'Teacher account created successfully'
+            
+            logger.error(f'Failed to create teacher account: {output}')
+            return False, 'Failed to create teacher account'
+            
+        except Exception as e:
+            logger.error(f'Failed to create teacher account in volume {volume_name}: {str(e)}', exc_info=True)
+            # Clean up on error
+            if temp_container:
+                try:
+                    temp_container.stop(timeout=5)
+                    temp_container.remove(force=True)
+                except Exception as cleanup_error:
+                    logger.warning(f'Failed to cleanup temp container: {cleanup_error}')
+            return False, 'An error occurred while creating teacher account'
 
 def hash_password(password):
     """Hash a password using bcrypt

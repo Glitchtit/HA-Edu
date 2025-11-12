@@ -27,4 +27,5 @@ ENV PYTHONUNBUFFERED=1
 # --worker-class gevent enables WebSocket support via gevent
 # Note: Removed --preload to allow gevent monkey-patching in wsgi.py to work correctly
 # The wsgi.py module applies monkey-patching before importing app to avoid SSL import warnings
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "gevent", "--timeout", "120", "wsgi:application"]
+# Increased workers to 8 for better handling of concurrent requests with many instances
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "8", "--worker-class", "gevent", "--timeout", "120", "wsgi:application"]
