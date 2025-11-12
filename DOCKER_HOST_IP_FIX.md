@@ -2,31 +2,63 @@
 
 ## Problem Statement
 
-When 2 or more Home Assistant instances existed, users encountered the error: **"Something went wrong loading onboarding, try refreshing"**
+When 2 or more Home Assistant instances existed, users encountered the error: **"Something went wrong loading onboarding, try refreshing"**. 
 
-### Root Cause
+Even more concerning: **all instances** (including the first one) would become unstable or "bricked" when multiple instances existed. Deleting instances wouldn't fix previously broken ones - only deleting ALL instances and creating a single new one would restore functionality.
 
-The proxy code used a hardcoded IP address `192.168.50.111` to connect to Home Assistant instance containers:
+### Root Cause - Docker Network Isolation
 
+The real issue is **Docker network isolation** between the portal container and HA instance containers:
+
+1. **Portal container** runs on the `ha-edu-network` custom bridge network (from docker-compose.yml)
+2. **HA instance containers** are created with `network_mode='bridge'` - the **default Docker bridge** network
+3. These are **different networks** - containers on different Docker networks cannot directly communicate
+
+The proxy code attempted to connect to instances using:
 ```python
 target_url = f'http://192.168.50.111:{port}/{path}'
 ```
 
-This IP address was specific to the original developer's network environment and would not work in other deployments, including:
-- Different network configurations
-- Docker Desktop on Mac/Windows
-- **Unraid servers** (the primary deployment target)
-- Any server where the host IP is different
+Where `192.168.50.111` was the original developer's **host machine's LAN IP address**.
 
-When the portal container tried to proxy requests to Home Assistant instances using this hardcoded IP, the connections would fail, causing:
-- Onboarding screens to fail with errors
-- Graphics and assets not loading
-- Instances becoming effectively "bricked"
-- The problem worsening with multiple instances
+#### Why This Fails
+
+From inside the `ha-edu-portal` container running on `ha-edu-network`:
+- It **cannot** directly access containers on the default bridge network
+- It **cannot reliably** reach the host's LAN IP (`192.168.50.111`) because:
+  - The custom bridge network is isolated from the host LAN
+  - Docker's networking rules don't guarantee routing from custom bridge → host LAN IP
+  - On Unraid and many Linux setups, this route is blocked by default
+
+#### Why First Instance Sometimes Works
+
+If the first instance "works" initially, it's due to:
+- Network initialization timing (routes not yet fully isolated)
+- Specific Docker/Unraid network configuration quirks
+- Cached connections or DNS resolution
+
+But as soon as a second instance is created:
+- Increased network activity exposes the routing failure
+- Resource contention makes timing issues worse  
+- The isolation becomes fully enforced
+- **ALL instances fail**, including the first one
+
+#### Why Deleting One Instance Doesn't Help
+
+The network isolation issue persists as long as multiple containers exist on different networks. Deleting one instance doesn't fix the fundamental routing problem. Only deleting ALL instances and recreating a single one (which might temporarily work due to timing/caching) appears to "fix" it.
 
 ## Solution
 
-Replaced the hardcoded IP address with a configurable environment variable `DOCKER_HOST_IP` that adapts to different Docker environments.
+Replace the hardcoded LAN IP with `host.docker.internal` + `host-gateway` mapping, which provides a **reliable route** from any Docker container to the host's mapped ports.
+
+### How host.docker.internal Solves This
+
+1. **`host.docker.internal`** is a special DNS name that resolves to an IP that allows containers to reach the Docker host
+2. **`--add-host=host.docker.internal:host-gateway`** (via extra_hosts) makes this work on Linux/Unraid by mapping it to the Docker gateway IP
+3. The Docker **gateway IP** is specifically designed to route traffic from containers back to the host
+4. HA instances bind to **host ports** (8123, 8124, etc.) via port mapping
+5. Portal accesses them via `host.docker.internal:8123`, `host.docker.internal:8124`, etc.
+6. Docker's gateway routing ensures this works **reliably** regardless of network configuration
 
 ### Changes Made
 
