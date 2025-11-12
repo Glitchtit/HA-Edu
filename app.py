@@ -452,25 +452,25 @@ def create_teacher_account(volume_name, teacher_username, teacher_password, rese
             
             # Start the container
             temp_container.start()
-        
-        # Install Python in the container for bcrypt hashing
-        install_result = temp_container.exec_run(['sh', '-c', 'apk add --no-cache python3 py3-pip'])
-        if install_result.exit_code != 0:
-            logger.error(f'Failed to install Python in temp container: {install_result.output.decode()}')
-            temp_container.stop()
-            temp_container.remove()
-            return False, 'Failed to install dependencies in temporary container'
-        
-        # Install bcrypt
-        bcrypt_result = temp_container.exec_run(['sh', '-c', 'pip3 install --break-system-packages bcrypt'])
-        if bcrypt_result.exit_code != 0:
-            logger.error(f'Failed to install bcrypt: {bcrypt_result.output.decode()}')
-            temp_container.stop()
-            temp_container.remove()
-            return False, 'Failed to install bcrypt library'
-        
-        # Generate bcrypt hash for the password
-        hash_script = f"""
+            
+            # Install Python in the container for bcrypt hashing
+            install_result = temp_container.exec_run(['sh', '-c', 'apk add --no-cache python3 py3-pip'])
+            if install_result.exit_code != 0:
+                logger.error(f'Failed to install Python in temp container: {install_result.output.decode()}')
+                temp_container.stop(timeout=5)
+                temp_container.remove()
+                return False, 'Failed to install dependencies in temporary container'
+            
+            # Install bcrypt
+            bcrypt_result = temp_container.exec_run(['sh', '-c', 'pip3 install --break-system-packages bcrypt'])
+            if bcrypt_result.exit_code != 0:
+                logger.error(f'Failed to install bcrypt: {bcrypt_result.output.decode()}')
+                temp_container.stop(timeout=5)
+                temp_container.remove()
+                return False, 'Failed to install bcrypt library'
+            
+            # Generate bcrypt hash for the password
+            hash_script = f"""
 import bcrypt
 import json
 import uuid
