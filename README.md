@@ -213,6 +213,7 @@ Environment variables can be configured to customize the portal:
 | `TEACHER_PASSWORD` | (empty) | *Optional* Password for teacher admin account. Required for Teacher Access feature |
 | `ADMINS` | (empty) | *Optional* Comma-separated list of admin email addresses for Cloudflare authentication |
 | `MAX_INSTANCES` | `0` (unlimited) | *Optional* Maximum instances per non-admin user (0 = unlimited) |
+| `DOCKER_HOST_IP` | `host.docker.internal` | *Optional* IP/hostname to access instance containers from portal container. Use `host.docker.internal` on Docker Desktop, or set to host's IP if needed |
 
 For more details on interaction logging, see [LOGGING.md](LOGGING.md).
 
