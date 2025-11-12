@@ -19,9 +19,17 @@ services:
       - LOG_DIR=/logs
       - HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # Docker host IP for accessing instance containers
+      # Use 'host.docker.internal' on Docker Desktop (Mac/Windows)
+      # Use 'localhost' when running portal directly on host (not in Docker)
+      # Or set to host's IP address (e.g., 192.168.1.10) if needed
+      - DOCKER_HOST_IP=host.docker.internal
     restart: unless-stopped
     networks:
       - ha-edu-network
+    # Enable host.docker.internal on Linux
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Network isolation: Portal can access Docker socket to manage containers
     # Created HA containers use bridge network (isolated from host LAN)
     # Internet access via NAT, LAN devices not accessible
