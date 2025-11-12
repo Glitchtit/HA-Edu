@@ -22,8 +22,64 @@ logger = logging.getLogger(__name__)
 
 # Disable Flask's default static folder to avoid conflicts with Home Assistant's /static/ paths
 app = Flask(__name__, static_folder=None)
+
+def get_or_create_secret_key():
+    """Get or create a persistent secret key for session management
+    
+    This ensures all Gunicorn workers share the same secret key, which is critical
+    for session cookies to work correctly across multiple workers.
+    
+    The secret key is:
+    1. Read from SECRET_KEY environment variable if set, OR
+    2. Read from secret_key file (in same directory as DATA_FILE) if it exists, OR
+    3. Generated and saved to secret_key file for future use
+    
+    Returns:
+        str: The secret key for Flask session management
+    """
+    # Check environment variable first
+    env_secret = os.getenv('SECRET_KEY', '').strip()
+    if env_secret:
+        logger.info('Using SECRET_KEY from environment variable')
+        return env_secret
+    
+    # Path to store the secret key (in same directory as DATA_FILE)
+    data_dir = os.path.dirname(os.getenv('DATA_FILE', '/data/instances.json'))
+    secret_key_file = os.path.join(data_dir, 'secret_key')
+    
+    try:
+        # Try to read existing secret key
+        if os.path.exists(secret_key_file):
+            with open(secret_key_file, 'r') as f:
+                key = f.read().strip()
+                if key:
+                    logger.info(f'Loaded SECRET_KEY from {secret_key_file}')
+                    return key
+        
+        # Generate new secret key
+        new_key = secrets.token_hex(32)
+        
+        # Ensure directory exists
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Save it for future use
+        with open(secret_key_file, 'w') as f:
+            f.write(new_key)
+        
+        # Set restrictive permissions (owner read/write only)
+        os.chmod(secret_key_file, 0o600)
+        
+        logger.info(f'Generated new SECRET_KEY and saved to {secret_key_file}')
+        return new_key
+        
+    except Exception as e:
+        logger.error(f'Failed to load or create persistent secret key: {e}. Falling back to temporary key.')
+        # Fallback to temporary key (not recommended but better than crashing)
+        return secrets.token_hex(32)
+
 # Set a secret key for session management
-app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
+# Must be consistent across all Gunicorn workers for sessions to work correctly
+app.secret_key = get_or_create_secret_key()
 client = docker.from_env()
 
 # Initialize WebSocket support
