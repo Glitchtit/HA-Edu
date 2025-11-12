@@ -35,7 +35,8 @@ _port_allocation_lock = threading.Lock()
 
 # Semaphore to limit concurrent temporary container operations
 # This prevents overwhelming the Docker daemon when many instances are created
-# Maximum of 5 concurrent temporary container operations (config copy, onboarding check, etc.)
+# Maximum of 5 concurrent temporary container operations (config copy, onboarding check, teacher account)
+# Ensures stable performance even with 15+ instances being created simultaneously
 _temp_container_semaphore = threading.Semaphore(5)
 
 # Cache for onboarding status to avoid redundant Docker container checks
