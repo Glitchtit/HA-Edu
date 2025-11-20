@@ -1008,6 +1008,11 @@ def index():
     elif not is_admin and user_id is None:
         # Unauthenticated non-admin users see no instances
         instances = {}
+    else:
+        # For admins, add onboarding status to each instance
+        for server_name, instance in instances.items():
+            volume_name = instance.get('container_name', f'ha-edu-{server_name.lower().replace(" ", "-")}')
+            instance['onboarded'] = check_instance_onboarding_complete_cached(volume_name)
     
     # Check if user can create more instances
     can_create, user_count, max_allowed = can_create_instance(request, load_instances())
