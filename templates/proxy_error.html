@@ -61,6 +61,7 @@
             align-items: center;
             justify-content: center;
             padding: 20px;
+            padding-bottom: 80px; /* Space for footer */
         }
         
         .error-container {
@@ -187,6 +188,19 @@
             font-size: 14px;
             margin-bottom: 15px;
         }
+        
+        footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            padding: 15px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85em;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
     </style>
 </head>
 <body>
@@ -219,7 +233,7 @@
         </div>
     </div>
     
-    <footer style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 15px; color: rgba(255, 255, 255, 0.7); font-size: 0.85em; background: rgba(0, 0, 0, 0.3); backdrop-filter: blur(10px);">
+    <footer>
         Copyright © 2025 Thomas Wredlund
     </footer>
 </body>
