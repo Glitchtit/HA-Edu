@@ -199,6 +199,44 @@
             box-shadow: 0 10px 20px oklch(0.55 0.22 25 / 0.3);
         }
         
+        .btn-start-all {
+            background: linear-gradient(90deg, 
+                oklch(0.60 0.20 145) 0%,
+                oklch(0.55 0.22 160) 100%
+            );
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-start-all:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px oklch(0.60 0.20 145 / 0.3);
+        }
+        
+        .btn-stop-all {
+            background: linear-gradient(90deg, 
+                oklch(0.60 0.15 50) 0%,
+                oklch(0.55 0.18 40) 100%
+            );
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-stop-all:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px oklch(0.60 0.15 50 / 0.3);
+        }
+        
         .toggle-container {
             display: flex;
             align-items: center;
@@ -685,6 +723,8 @@
                 <button id="addNewBtn" class="add-button" onclick="openModal()" 
                         {% if user_has_instance %}disabled title="{{ create_button_tooltip }}"{% endif %}>+ Skapa ny instans</button>
                 <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
+                <button id="startAllBtn" class="btn-start-all {% if not is_admin %}hidden{% endif %}" onclick="openStartAllModal()">Starta alla</button>
+                <button id="stopAllBtn" class="btn-stop-all {% if not is_admin %}hidden{% endif %}" onclick="openStopAllModal()">Stoppa alla</button>
                 <button id="deleteAllBtn" class="btn-delete-all {% if not is_admin %}hidden{% endif %}" onclick="openDeleteAllModal()">Ta bort alla</button>
                 <button id="teacherAccessAllBtn" class="btn-teacher-access {% if not is_admin %}hidden{% endif %}" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
                 <label class="toggle-container {% if not is_admin %}hidden{% endif %}" id="toggleContainer">
@@ -1007,6 +1047,61 @@
         </div>
     </div>
     
+    <!-- Start All Instances Modal -->
+    <div id="startAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Starta alla instanser</h2>
+            <p>Ange adminlösenord för att starta <strong>alla instanser</strong>.</p>
+            <div style="background: #c6f6d5; color: #276749; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Information:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Startar alla stoppade instanser</li>
+                    <li>Instanser som redan körs påverkas inte</li>
+                </ul>
+            </div>
+            <form id="startAllInstancesForm">
+                <div class="form-group">
+                    <label for="startAllAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="startAllAdminPassword" name="startAllAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="startAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeStartAllModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="startAllSubmitBtn">Starta alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Stop All Instances Modal -->
+    <div id="stopAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Stoppa alla instanser</h2>
+            <p>Ange adminlösenord för att stoppa <strong>alla instanser</strong>.</p>
+            <div style="background: #feebc8; color: #c05621; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>⚠️ Varning:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Stoppar alla körande instanser</li>
+                    <li>Användare kommer att förlora anslutningen till sina instanser</li>
+                    <li>Data bevaras - instanserna kan startas igen</li>
+                </ul>
+            </div>
+            <form id="stopAllInstancesForm">
+                <div class="form-group">
+                    <label for="stopAllAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="stopAllAdminPassword" name="stopAllAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="stopAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeStopAllModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="stopAllSubmitBtn">Stoppa alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         let currentResetServer = null;
         let currentDeleteServer = null;
@@ -1053,9 +1148,13 @@
             const deleteAllBtn = document.getElementById('deleteAllBtn');
             const toggleContainer = document.getElementById('toggleContainer');
             const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
+            const startAllBtn = document.getElementById('startAllBtn');
+            const stopAllBtn = document.getElementById('stopAllBtn');
             if (deleteAllBtn) deleteAllBtn.classList.remove('hidden');
             if (toggleContainer) toggleContainer.classList.remove('hidden');
             if (teacherAccessAllBtn && window.teacherAccessEnabled) teacherAccessAllBtn.classList.remove('hidden');
+            if (startAllBtn) startAllBtn.classList.remove('hidden');
+            if (stopAllBtn) stopAllBtn.classList.remove('hidden');
         }
         
         // Check if teacher access feature is enabled
@@ -1228,6 +1327,26 @@
             document.getElementById('teacherAccessAllModal').style.display = 'none';
         }
         
+        function openStartAllModal() {
+            document.getElementById('startAllModal').style.display = 'block';
+            document.getElementById('startAllModalMessage').innerHTML = '';
+            document.getElementById('startAllInstancesForm').reset();
+        }
+        
+        function closeStartAllModal() {
+            document.getElementById('startAllModal').style.display = 'none';
+        }
+        
+        function openStopAllModal() {
+            document.getElementById('stopAllModal').style.display = 'block';
+            document.getElementById('stopAllModalMessage').innerHTML = '';
+            document.getElementById('stopAllInstancesForm').reset();
+        }
+        
+        function closeStopAllModal() {
+            document.getElementById('stopAllModal').style.display = 'none';
+        }
+        
         function openRestartModal(serverName) {
             currentRestartServer = serverName;
             document.getElementById('restartServerName').textContent = serverName;
@@ -1251,6 +1370,8 @@
             const toggleModal = document.getElementById('toggleModal');
             const teacherAccessModal = document.getElementById('teacherAccessModal');
             const restartModal = document.getElementById('restartModal');
+            const startAllModal = document.getElementById('startAllModal');
+            const stopAllModal = document.getElementById('stopAllModal');
             if (event.target === addModal) {
                 closeModal();
             } else if (event.target === unlockModal) {
@@ -1267,6 +1388,10 @@
                 closeTeacherAccessModal();
             } else if (event.target === restartModal) {
                 closeRestartModal();
+            } else if (event.target === startAllModal) {
+                closeStartAllModal();
+            } else if (event.target === stopAllModal) {
+                closeStopAllModal();
             }
         }
         
@@ -1629,6 +1754,114 @@
                 messageDiv.innerHTML = `<div class="error-message">Kunde inte lägga till läraråtkomst: ${error.message}</div>`;
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Lägg till på alla';
+            }
+        });
+        
+        document.getElementById('startAllInstancesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('startAllSubmitBtn');
+            const messageDiv = document.getElementById('startAllModalMessage');
+            
+            const adminPassword = document.getElementById('startAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Startar...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/instances/start-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let message = '<div class="success-message">';
+                    message += `<strong>Resultat:</strong><br>`;
+                    message += `✓ Startade: ${data.started_count}<br>`;
+                    if (data.already_running_count > 0) {
+                        message += `⊘ Redan körande: ${data.already_running_count}<br>`;
+                    }
+                    if (data.failed_count > 0) {
+                        message += `✗ Misslyckades: ${data.failed_count}<br>`;
+                    }
+                    message += '<br>Laddar om sidan...';
+                    message += '</div>';
+                    
+                    messageDiv.innerHTML = message;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Starta alla';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte starta alla instanser: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Starta alla';
+            }
+        });
+        
+        document.getElementById('stopAllInstancesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('stopAllSubmitBtn');
+            const messageDiv = document.getElementById('stopAllModalMessage');
+            
+            const adminPassword = document.getElementById('stopAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Stoppar...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/instances/stop-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let message = '<div class="success-message">';
+                    message += `<strong>Resultat:</strong><br>`;
+                    message += `✓ Stoppade: ${data.stopped_count}<br>`;
+                    if (data.already_stopped_count > 0) {
+                        message += `⊘ Redan stoppade: ${data.already_stopped_count}<br>`;
+                    }
+                    if (data.failed_count > 0) {
+                        message += `✗ Misslyckades: ${data.failed_count}<br>`;
+                    }
+                    message += '<br>Laddar om sidan...';
+                    message += '</div>';
+                    
+                    messageDiv.innerHTML = message;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Stoppa alla';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte stoppa alla instanser: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Stoppa alla';
             }
         });
         

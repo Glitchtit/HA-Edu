@@ -1626,6 +1626,146 @@ def delete_all_instances():
         logger.error(f'Failed to delete all instances: {str(e)}', exc_info=True)
         return jsonify({'error': 'Failed to delete all instances. Please try again or contact support.'}), 500
 
+@app.route('/api/instances/start-all', methods=['POST'])
+def start_all_instances():
+    """API endpoint to start all instances (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    instances = load_instances()
+    
+    if not instances:
+        return jsonify({'message': 'No instances to start'}), 200
+    
+    started_count = 0
+    failed_count = 0
+    already_running_count = 0
+    
+    try:
+        for server_name, instance in instances.items():
+            try:
+                container = client.containers.get(instance['container_id'])
+                if container.status == 'running':
+                    already_running_count += 1
+                    continue
+                container.start()
+                instance['status'] = 'running'
+                started_count += 1
+                logger.info(f'Started instance: {server_name}')
+            except docker.errors.NotFound:
+                logger.warning(f'Container not found for instance {server_name}')
+                instance['status'] = 'removed'
+                failed_count += 1
+            except docker.errors.APIError as e:
+                logger.error(f'Failed to start instance {server_name}: {str(e)}')
+                failed_count += 1
+            except Exception as e:
+                logger.error(f'Unexpected error starting instance {server_name}: {str(e)}')
+                failed_count += 1
+        
+        # Save updated instances
+        save_instances(instances)
+        
+        # Log admin operation
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_admin_operation(
+            operation='start_all_instances',
+            user_id=user_id,
+            details={'started_count': started_count, 'failed_count': failed_count, 'already_running_count': already_running_count}
+        )
+        
+        message = f'Successfully started {started_count} instance(s)'
+        if already_running_count > 0:
+            message += f', {already_running_count} instance(s) were already running'
+        
+        return jsonify({
+            'message': message,
+            'started_count': started_count,
+            'failed_count': failed_count,
+            'already_running_count': already_running_count
+        }), 200
+        
+    except Exception as e:
+        logger.error(f'Failed to start all instances: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to start all instances. Please try again or contact support.'}), 500
+
+@app.route('/api/instances/stop-all', methods=['POST'])
+def stop_all_instances():
+    """API endpoint to stop all instances (requires admin password)"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json or {}
+    admin_password = data.get('admin_password', '')
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    instances = load_instances()
+    
+    if not instances:
+        return jsonify({'message': 'No instances to stop'}), 200
+    
+    stopped_count = 0
+    failed_count = 0
+    already_stopped_count = 0
+    
+    try:
+        for server_name, instance in instances.items():
+            try:
+                container = client.containers.get(instance['container_id'])
+                if container.status != 'running':
+                    already_stopped_count += 1
+                    continue
+                container.stop(timeout=10)
+                instance['status'] = 'exited'
+                stopped_count += 1
+                logger.info(f'Stopped instance: {server_name}')
+            except docker.errors.NotFound:
+                logger.warning(f'Container not found for instance {server_name}')
+                instance['status'] = 'removed'
+                failed_count += 1
+            except docker.errors.APIError as e:
+                logger.error(f'Failed to stop instance {server_name}: {str(e)}')
+                failed_count += 1
+            except Exception as e:
+                logger.error(f'Unexpected error stopping instance {server_name}: {str(e)}')
+                failed_count += 1
+        
+        # Save updated instances
+        save_instances(instances)
+        
+        # Log admin operation
+        user_id, user_type = get_user_info_for_logging(request)
+        interaction_logger.log_admin_operation(
+            operation='stop_all_instances',
+            user_id=user_id,
+            details={'stopped_count': stopped_count, 'failed_count': failed_count, 'already_stopped_count': already_stopped_count}
+        )
+        
+        message = f'Successfully stopped {stopped_count} instance(s)'
+        if already_stopped_count > 0:
+            message += f', {already_stopped_count} instance(s) were already stopped'
+        
+        return jsonify({
+            'message': message,
+            'stopped_count': stopped_count,
+            'failed_count': failed_count,
+            'already_stopped_count': already_stopped_count
+        }), 200
+        
+    except Exception as e:
+        logger.error(f'Failed to stop all instances: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to stop all instances. Please try again or contact support.'}), 500
+
 @app.route('/api/settings/instance-creation', methods=['GET'])
 def get_instance_creation_status():
     """API endpoint to get instance creation status"""
