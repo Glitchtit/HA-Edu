@@ -938,13 +938,167 @@
         .hidden {
             display: none;
         }
+        
+        /* Login Overlay */
+        .login-overlay {
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-card {
+            background: var(--card);
+            color: var(--card-foreground);
+            padding: 2rem;
+            border-radius: var(--radius);
+            max-width: 400px;
+            width: calc(100% - 2rem);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border);
+        }
+        
+        .login-card h2 {
+            text-align: center;
+            margin-bottom: 1.25rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .login-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1.25rem;
+            border-bottom: 2px solid var(--border);
+        }
+        
+        .login-tab {
+            flex: 1;
+            padding: 0.625rem;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.875rem;
+            background: none;
+            border: none;
+            color: var(--color-gray-700);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        
+        .login-tab.active {
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+        }
+        
+        .login-tab:hover:not(.active) {
+            color: var(--foreground);
+        }
+        
+        .login-tab-content {
+            display: none;
+        }
+        
+        .login-tab-content.active {
+            display: block;
+        }
+        
+        /* User bar */
+        .user-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+        
+        .user-bar span {
+            color: var(--color-gray-300);
+            font-size: 0.875rem;
+        }
+        
+        .user-bar button {
+            background: rgba(255,255,255,0.1);
+            color: var(--color-gray-300);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 0.375rem 0.75rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.8125rem;
+            transition: all 0.2s;
+        }
+        
+        .user-bar button:hover {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        {% if not logged_in %}
+        <!-- Login/Register Overlay -->
+        <div id="loginOverlay" class="login-overlay">
+            <div class="login-card">
+                <h2>🏠 HA-Edu</h2>
+                <div class="login-tabs">
+                    <button class="login-tab active" onclick="switchLoginTab('login')">Logga in</button>
+                    <button class="login-tab" onclick="switchLoginTab('register')">Skapa konto</button>
+                </div>
+                <div id="loginTabContent" class="login-tab-content active">
+                    <form id="loginForm">
+                        <div class="form-group">
+                            <label for="loginUsername">Användarnamn:</label>
+                            <input type="text" id="loginUsername" required placeholder="Användarnamn">
+                        </div>
+                        <div class="form-group">
+                            <label for="loginPassword">Lösenord:</label>
+                            <input type="password" id="loginPassword" required placeholder="Lösenord">
+                        </div>
+                        <div id="loginMessage"></div>
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-submit" style="width:100%">Logga in</button>
+                        </div>
+                    </form>
+                </div>
+                <div id="registerTabContent" class="login-tab-content">
+                    <form id="registerForm">
+                        <div class="form-group">
+                            <label for="registerUsername">Användarnamn:</label>
+                            <input type="text" id="registerUsername" required placeholder="Välj ett användarnamn">
+                        </div>
+                        <div class="form-group">
+                            <label for="registerPassword">Lösenord:</label>
+                            <input type="password" id="registerPassword" required placeholder="Välj ett lösenord">
+                        </div>
+                        <div id="registerMessage"></div>
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-submit" style="width:100%">Skapa konto</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <header>
             <h1>🏠 HA-Edu</h1>
             <p>Utbildningsportal för Home Assistant</p>
+            {% if logged_in %}
+            <div class="user-bar">
+                <span>👤 {{ username }}</span>
+                {% if is_admin %}<span style="background:var(--color-primary);color:white;padding:0.2rem 0.5rem;border-radius:9999px;font-size:0.75rem;">Admin</span>{% endif %}
+                <button onclick="logout()">Logga ut</button>
+            </div>
+            {% endif %}
         </header>
         
         <div class="controls">
@@ -952,11 +1106,11 @@
             <div class="controls-row">
                 <button id="addNewBtn" class="add-button" onclick="openModal()" 
                         {% if user_has_instance %}disabled title="{{ create_button_tooltip }}"{% endif %}>+ Skapa ny instans</button>
-                <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
                 <button id="startAllBtn" class="btn-start-all {% if not is_admin %}hidden{% endif %}" onclick="openStartAllModal()">Starta alla</button>
                 <button id="stopAllBtn" class="btn-stop-all {% if not is_admin %}hidden{% endif %}" onclick="openStopAllModal()">Stoppa alla</button>
                 <button id="deleteAllBtn" class="btn-delete-all {% if not is_admin %}hidden{% endif %}" onclick="openDeleteAllModal()">Ta bort alla</button>
                 <button id="teacherAccessAllBtn" class="btn-teacher-access {% if not is_admin %}hidden{% endif %}" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
+                <button id="teacherSettingsBtn" class="btn-accent {% if not is_admin %}hidden{% endif %}" onclick="openTeacherSettingsModal()">👨‍🏫 Lärarinställningar</button>
                 <label class="toggle-container {% if not is_admin %}hidden{% endif %}" id="toggleContainer">
                     <span class="toggle-label">Skapa instanser:</span>
                     <input type="checkbox" id="instanceCreationToggle" checked>
@@ -1074,45 +1228,28 @@
         </div>
     </div>
     
-    <!-- Unlock Admin Features Modal -->
-    <div id="unlockModal" class="modal">
-        <div class="modal-content">
-            <h2>Lås upp adminfunktioner</h2>
-            <p>Ange adminlösenordet för att visa administrationskontroller.</p>
-            <form id="unlockAdminForm">
-                <div class="form-group">
-                    <label for="unlockAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="unlockAdminPassword" name="unlockAdminPassword" required 
-                           placeholder="Ange adminlösenord">
-                </div>
-                <div id="unlockModalMessage"></div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-cancel" onclick="closeUnlockModal()">Avbryt</button>
-                    <button type="submit" class="btn-submit" id="unlockSubmitBtn">Lås upp</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
     <!-- Reset Instance Modal -->
     <div id="resetModal" class="modal">
         <div class="modal-content">
             <h2>Nollställ instans</h2>
-            <p>Ange lösenord för att nollställa <strong id="resetServerName"></strong> till standard HA-avbildning.</p>
+            <p>{% if is_admin %}Bekräfta nollställning av{% else %}Ange lösenord för att nollställa{% endif %} <strong id="resetServerName"></strong> till standard HA-avbildning.</p>
             <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att radera all data och alla konfigurationer för denna instans!</p>
+            {% if not is_admin %}
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>ℹ️ Lösenordsalternativ:</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
                     <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
-                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
                 </ul>
             </div>
+            {% endif %}
             <form id="resetInstanceForm">
+                {% if not is_admin %}
                 <div class="form-group">
                     <label for="resetPassword">Lösenord:</label>
                     <input type="password" id="resetPassword" name="resetPassword" required 
-                           placeholder="Ange instans- eller adminlösenord">
+                           placeholder="Ange instanslösenord">
                 </div>
+                {% endif %}
                 <div id="resetModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeResetModal()">Avbryt</button>
@@ -1126,21 +1263,24 @@
     <div id="deleteModal" class="modal">
         <div class="modal-content">
             <h2>Ta bort instans</h2>
-            <p>Ange lösenord för att ta bort <strong id="deleteServerName"></strong>.</p>
+            <p>{% if is_admin %}Bekräfta borttagning av{% else %}Ange lösenord för att ta bort{% endif %} <strong id="deleteServerName"></strong>.</p>
             <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort instansen och all dess data!</p>
+            {% if not is_admin %}
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>ℹ️ Lösenordsalternativ:</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
                     <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
-                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
                 </ul>
             </div>
+            {% endif %}
             <form id="deleteInstanceForm">
+                {% if not is_admin %}
                 <div class="form-group">
                     <label for="deletePassword">Lösenord:</label>
                     <input type="password" id="deletePassword" name="deletePassword" required 
-                           placeholder="Ange instans- eller adminlösenord">
+                           placeholder="Ange instanslösenord">
                 </div>
+                {% endif %}
                 <div id="deleteModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeDeleteModal()">Avbryt</button>
@@ -1154,14 +1294,9 @@
     <div id="deleteAllModal" class="modal">
         <div class="modal-content">
             <h2>Ta bort alla instanser</h2>
-            <p>Ange adminlösenord för att ta bort <strong>alla instanser</strong>.</p>
+            <p>Bekräfta att du vill ta bort <strong>alla instanser</strong>.</p>
             <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort ALLA instanser och all deras data!</p>
             <form id="deleteAllInstancesForm">
-                <div class="form-group">
-                    <label for="deleteAllAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="deleteAllAdminPassword" name="deleteAllAdminPassword" required 
-                           placeholder="Ange adminlösenord">
-                </div>
                 <div id="deleteAllModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeDeleteAllModal()">Avbryt</button>
@@ -1175,13 +1310,8 @@
     <div id="toggleModal" class="modal">
         <div class="modal-content">
             <h2>Växla instansskapande</h2>
-            <p>Ange adminlösenord för att <strong id="toggleAction"></strong> instansskapande.</p>
+            <p>Bekräfta att du vill <strong id="toggleAction"></strong> instansskapande.</p>
             <form id="toggleInstanceCreationForm">
-                <div class="form-group">
-                    <label for="toggleAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="toggleAdminPassword" name="toggleAdminPassword" required 
-                           placeholder="Ange adminlösenord">
-                </div>
                 <div id="toggleModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeToggleModal()">Avbryt</button>
@@ -1195,7 +1325,7 @@
     <div id="teacherAccessModal" class="modal">
         <div class="modal-content">
             <h2>Lägg till läraråtkomst</h2>
-            <p>Ange adminlösenord för att lägga till läraråtkomst till <strong id="teacherAccessServerName"></strong>.</p>
+            <p>Bekräfta tillägg av läraråtkomst till <strong id="teacherAccessServerName"></strong>.</p>
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>Vad gör detta?</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
@@ -1207,11 +1337,6 @@
             </div>
             <div id="teacherAccessStatus" style="margin: 10px 0;"></div>
             <form id="teacherAccessForm">
-                <div class="form-group">
-                    <label for="teacherAccessAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="teacherAccessAdminPassword" name="teacherAccessAdminPassword" required 
-                           placeholder="Ange adminlösenord">
-                </div>
                 <div id="teacherAccessModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeTeacherAccessModal()">Avbryt</button>
@@ -1225,20 +1350,23 @@
     <div id="restartModal" class="modal">
         <div class="modal-content">
             <h2>Starta om instans</h2>
-            <p>Ange lösenord för att starta om <strong id="restartServerName"></strong>.</p>
+            <p>{% if is_admin %}Bekräfta omstart av{% else %}Ange lösenord för att starta om{% endif %} <strong id="restartServerName"></strong>.</p>
+            {% if not is_admin %}
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>ℹ️ Lösenordsalternativ:</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
                     <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
-                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
                 </ul>
             </div>
+            {% endif %}
             <form id="restartInstanceForm">
+                {% if not is_admin %}
                 <div class="form-group">
                     <label for="restartPassword">Lösenord:</label>
                     <input type="password" id="restartPassword" name="restartPassword" required 
-                           placeholder="Ange instans- eller adminlösenord">
+                           placeholder="Ange instanslösenord">
                 </div>
+                {% endif %}
                 <div id="restartModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeRestartModal()">Avbryt</button>
@@ -1252,7 +1380,7 @@
     <div id="teacherAccessAllModal" class="modal">
         <div class="modal-content">
             <h2>Lägg till läraråtkomst på alla instanser</h2>
-            <p>Ange adminlösenord för att lägga till läraråtkomst till <strong>alla instanser</strong>.</p>
+            <p>Bekräfta att du vill lägga till läraråtkomst till <strong>alla instanser</strong>.</p>
             <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>Vad gör detta?</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
@@ -1263,11 +1391,6 @@
                 </ul>
             </div>
             <form id="teacherAccessAllForm">
-                <div class="form-group">
-                    <label for="teacherAccessAllAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="teacherAccessAllAdminPassword" name="teacherAccessAllAdminPassword" required 
-                           placeholder="Ange adminlösenord">
-                </div>
                 <div id="teacherAccessAllModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeTeacherAccessAllModal()">Avbryt</button>
@@ -1281,7 +1404,7 @@
     <div id="startAllModal" class="modal">
         <div class="modal-content">
             <h2>Starta alla instanser</h2>
-            <p>Ange adminlösenord för att starta <strong>alla instanser</strong>.</p>
+            <p>Bekräfta att du vill starta <strong>alla instanser</strong>.</p>
             <div style="background: #c6f6d5; color: #276749; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>ℹ️ Information:</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
@@ -1290,11 +1413,6 @@
                 </ul>
             </div>
             <form id="startAllInstancesForm">
-                <div class="form-group">
-                    <label for="startAllAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="startAllAdminPassword" name="startAllAdminPassword" required 
-                           placeholder="Ange adminlösenord">
-                </div>
                 <div id="startAllModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeStartAllModal()">Avbryt</button>
@@ -1308,7 +1426,7 @@
     <div id="stopAllModal" class="modal">
         <div class="modal-content">
             <h2>Stoppa alla instanser</h2>
-            <p>Ange adminlösenord för att stoppa <strong>alla instanser</strong>.</p>
+            <p>Bekräfta att du vill stoppa <strong>alla instanser</strong>.</p>
             <div style="background: #feebc8; color: #c05621; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <strong>⚠️ Varning:</strong>
                 <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
@@ -1318,15 +1436,56 @@
                 </ul>
             </div>
             <form id="stopAllInstancesForm">
-                <div class="form-group">
-                    <label for="stopAllAdminPassword">Adminlösenord:</label>
-                    <input type="password" id="stopAllAdminPassword" name="stopAllAdminPassword" required 
-                           placeholder="Ange adminlösenord">
-                </div>
                 <div id="stopAllModalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeStopAllModal()">Avbryt</button>
                     <button type="submit" class="btn-submit" id="stopAllSubmitBtn">Stoppa alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Change Credentials Modal -->
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content">
+            <h2>Ändra uppgifter</h2>
+            <p>Välj ett nytt användarnamn och lösenord.</p>
+            <form id="changePasswordForm">
+                <div class="form-group">
+                    <label for="newUsername">Nytt användarnamn:</label>
+                    <input type="text" id="newUsername" required placeholder="Nytt användarnamn">
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">Nytt lösenord:</label>
+                    <input type="password" id="newPassword" required placeholder="Nytt lösenord">
+                </div>
+                <div id="changePasswordMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" id="changePasswordCancelBtn" onclick="closeChangePasswordModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="changePasswordSubmitBtn">Spara</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Teacher Settings Modal -->
+    <div id="teacherSettingsModal" class="modal">
+        <div class="modal-content">
+            <h2>👨‍🏫 Lärarinställningar</h2>
+            <p>Konfigurera lärarens inloggningsuppgifter för HA-instanser.</p>
+            <form id="teacherSettingsForm">
+                <div class="form-group">
+                    <label for="teacherSettingsUsername">Lärarens användarnamn:</label>
+                    <input type="text" id="teacherSettingsUsername" required placeholder="t.ex. teacher">
+                </div>
+                <div class="form-group">
+                    <label for="teacherSettingsPassword">Lärarens lösenord:</label>
+                    <input type="password" id="teacherSettingsPassword" required placeholder="Ange lösenord">
+                </div>
+                <div id="teacherSettingsMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeTeacherSettingsModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="teacherSettingsSubmitBtn">Spara</button>
                 </div>
             </form>
         </div>
@@ -1338,54 +1497,189 @@
         let currentTeacherAccessServer = null;
         let currentRestartServer = null;
         let pendingToggleState = null;
-        let adminUnlocked = {{ 'true' if is_admin else 'false' }};
         let isAdmin = {{ 'true' if is_admin else 'false' }};
         
-        // Check if admin password is enabled and if user has admin access
-        async function checkAdminEnabled() {
-            try {
-                const response = await fetch('/api/admin/check-access');
-                const data = await response.json();
-                
-                // If user is already admin, no need to show unlock button
-                if (isAdmin) {
-                    console.log('User has admin access - admin features already visible');
-                    return;
-                }
-                
-                // Only show unlock button if:
-                // 1. Admin password is enabled, AND
-                // 2. User has admin access (local IP or approved email), AND
-                // 3. User is not already identified as admin (fallback for non-admin users)
-                if (data.admin_password_enabled && data.has_admin_access && !isAdmin) {
-                    // Show the unlock button for users with admin access
-                    const unlockBtn = document.getElementById('unlockAdminBtn');
-                    if (unlockBtn) {
-                        unlockBtn.classList.remove('hidden');
-                    }
-                } else if (data.admin_password_enabled && !data.has_admin_access) {
-                    // Admin password is enabled but user doesn't have access
-                    console.log('Admin features are restricted to authorized users only');
-                }
-            } catch (error) {
-                console.error('Failed to check admin status:', error);
+        // Login/Register functions
+        function switchLoginTab(tab) {
+            document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.login-tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'login') {
+                document.querySelectorAll('.login-tab')[0].classList.add('active');
+                document.getElementById('loginTabContent').classList.add('active');
+            } else {
+                document.querySelectorAll('.login-tab')[1].classList.add('active');
+                document.getElementById('registerTabContent').classList.add('active');
             }
         }
         
-        // Show all admin buttons (only for non-admin users after unlock)
-        function showAdminButtons() {
-            // Show delete all button and toggle container
-            const deleteAllBtn = document.getElementById('deleteAllBtn');
-            const toggleContainer = document.getElementById('toggleContainer');
-            const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
-            const startAllBtn = document.getElementById('startAllBtn');
-            const stopAllBtn = document.getElementById('stopAllBtn');
-            if (deleteAllBtn) deleteAllBtn.classList.remove('hidden');
-            if (toggleContainer) toggleContainer.classList.remove('hidden');
-            if (teacherAccessAllBtn && window.teacherAccessEnabled) teacherAccessAllBtn.classList.remove('hidden');
-            if (startAllBtn) startAllBtn.classList.remove('hidden');
-            if (stopAllBtn) stopAllBtn.classList.remove('hidden');
+        {% if not logged_in %}
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const msgDiv = document.getElementById('loginMessage');
+            msgDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('loginUsername').value,
+                        password: document.getElementById('loginPassword').value
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    msgDiv.innerHTML = '<div class="success-message">Inloggad! Laddar om...</div>';
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    msgDiv.innerHTML = '<div class="error-message">' + (data.error || 'Inloggning misslyckades') + '</div>';
+                }
+            } catch (err) {
+                msgDiv.innerHTML = '<div class="error-message">Kunde inte logga in: ' + err.message + '</div>';
+            }
+        });
+        
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const msgDiv = document.getElementById('registerMessage');
+            msgDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('registerUsername').value,
+                        password: document.getElementById('registerPassword').value
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    msgDiv.innerHTML = '<div class="success-message">Konto skapat! Laddar om...</div>';
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    msgDiv.innerHTML = '<div class="error-message">' + (data.error || 'Registrering misslyckades') + '</div>';
+                }
+            } catch (err) {
+                msgDiv.innerHTML = '<div class="error-message">Kunde inte skapa konto: ' + err.message + '</div>';
+            }
+        });
+        {% endif %}
+        
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                location.reload();
+            } catch (err) {
+                console.error('Logout failed:', err);
+                location.reload();
+            }
         }
+        
+        // Change credentials modal
+        function openChangePasswordModal() {
+            document.getElementById('changePasswordModal').style.display = 'block';
+            document.getElementById('changePasswordMessage').innerHTML = '';
+            document.getElementById('changePasswordForm').reset();
+        }
+        
+        function closeChangePasswordModal() {
+            // Don't allow closing if must_change_password
+            {% if must_change_password %}
+            return;
+            {% endif %}
+            document.getElementById('changePasswordModal').style.display = 'none';
+        }
+        
+        document.getElementById('changePasswordForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('changePasswordSubmitBtn');
+            const msgDiv = document.getElementById('changePasswordMessage');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sparar...';
+            msgDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        new_username: document.getElementById('newUsername').value,
+                        new_password: document.getElementById('newPassword').value
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    msgDiv.innerHTML = '<div class="success-message">Uppgifter ändrade! Laddar om...</div>';
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    msgDiv.innerHTML = '<div class="error-message">' + (data.error || 'Kunde inte ändra uppgifter') + '</div>';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Spara';
+                }
+            } catch (err) {
+                msgDiv.innerHTML = '<div class="error-message">Kunde inte ändra uppgifter: ' + err.message + '</div>';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Spara';
+            }
+        });
+        
+        function checkMustChangePassword() {
+            {% if must_change_password %}
+            openChangePasswordModal();
+            // Hide cancel button when forced
+            document.getElementById('changePasswordCancelBtn').style.display = 'none';
+            {% endif %}
+        }
+        
+        // Teacher settings modal
+        function openTeacherSettingsModal() {
+            document.getElementById('teacherSettingsModal').style.display = 'block';
+            document.getElementById('teacherSettingsMessage').innerHTML = '';
+            document.getElementById('teacherSettingsForm').reset();
+            // Fetch current settings
+            fetch('/api/settings/teacher-access')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.teacher_username) {
+                        document.getElementById('teacherSettingsUsername').value = data.teacher_username;
+                    }
+                })
+                .catch(() => {});
+        }
+        
+        function closeTeacherSettingsModal() {
+            document.getElementById('teacherSettingsModal').style.display = 'none';
+        }
+        
+        document.getElementById('teacherSettingsForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('teacherSettingsSubmitBtn');
+            const msgDiv = document.getElementById('teacherSettingsMessage');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sparar...';
+            msgDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/settings/teacher-access', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        teacher_username: document.getElementById('teacherSettingsUsername').value,
+                        teacher_password: document.getElementById('teacherSettingsPassword').value
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    msgDiv.innerHTML = '<div class="success-message">Lärarinställningar sparade! Laddar om...</div>';
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    msgDiv.innerHTML = '<div class="error-message">' + (data.error || 'Kunde inte spara') + '</div>';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Spara';
+                }
+            } catch (err) {
+                msgDiv.innerHTML = '<div class="error-message">Kunde inte spara: ' + err.message + '</div>';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Spara';
+            }
+        });
         
         // Check if teacher access feature is enabled
         async function checkTeacherAccessEnabled() {
@@ -1394,34 +1688,11 @@
                 const data = await response.json();
                 
                 if (data.teacher_access_enabled) {
-                    // Store teacher info
                     window.teacherAccessEnabled = true;
                     window.teacherUsername = data.teacher_username;
-                    
-                    // If user is admin, teacher access buttons are already visible
-                    // If not admin but has admin access, show buttons after unlock
-                    if (isAdmin) {
-                        // Teacher access buttons are already visible for admin users
-                        console.log('Teacher access enabled for admin user');
-                        // Show the teacher access all button for admins
-                        const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
-                        if (teacherAccessAllBtn) teacherAccessAllBtn.classList.remove('hidden');
-                    }
                 }
             } catch (error) {
                 console.error('Failed to check teacher access status:', error);
-            }
-        }
-        
-        // Show teacher access buttons (called after unlock for non-admin users)
-        function showTeacherAccessButtons() {
-            if (window.teacherAccessEnabled && !isAdmin) {
-                document.querySelectorAll('.btn-teacher-access').forEach(btn => {
-                    btn.classList.remove('hidden');
-                });
-                // Also show the teacher access all button
-                const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
-                if (teacherAccessAllBtn) teacherAccessAllBtn.classList.remove('hidden');
             }
         }
         
@@ -1452,16 +1723,6 @@
         
         function closeModal() {
             document.getElementById('addModal').style.display = 'none';
-        }
-        
-        function openUnlockModal() {
-            document.getElementById('unlockModal').style.display = 'block';
-            document.getElementById('unlockModalMessage').innerHTML = '';
-            document.getElementById('unlockAdminForm').reset();
-        }
-        
-        function closeUnlockModal() {
-            document.getElementById('unlockModal').style.display = 'none';
         }
         
         function openResetModal(serverName) {
@@ -1593,7 +1854,6 @@
         // Close modal when clicking outside
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
-            const unlockModal = document.getElementById('unlockModal');
             const resetModal = document.getElementById('resetModal');
             const deleteModal = document.getElementById('deleteModal');
             const deleteAllModal = document.getElementById('deleteAllModal');
@@ -1602,10 +1862,10 @@
             const restartModal = document.getElementById('restartModal');
             const startAllModal = document.getElementById('startAllModal');
             const stopAllModal = document.getElementById('stopAllModal');
+            const changePasswordModal = document.getElementById('changePasswordModal');
+            const teacherSettingsModal = document.getElementById('teacherSettingsModal');
             if (event.target === addModal) {
                 closeModal();
-            } else if (event.target === unlockModal) {
-                closeUnlockModal();
             } else if (event.target === resetModal) {
                 closeResetModal();
             } else if (event.target === deleteModal) {
@@ -1622,6 +1882,10 @@
                 closeStartAllModal();
             } else if (event.target === stopAllModal) {
                 closeStopAllModal();
+            } else if (event.target === changePasswordModal) {
+                closeChangePasswordModal();
+            } else if (event.target === teacherSettingsModal) {
+                closeTeacherSettingsModal();
             }
         }
         
@@ -1675,60 +1939,14 @@
             }
         });
         
-        document.getElementById('unlockAdminForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('unlockSubmitBtn');
-            const messageDiv = document.getElementById('unlockModalMessage');
-            
-            const adminPassword = document.getElementById('unlockAdminPassword').value;
-            
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Låser upp...';
-            messageDiv.innerHTML = '';
-            
-            try {
-                const response = await fetch('/api/admin/unlock', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        admin_password: adminPassword
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    messageDiv.innerHTML = `<div class="success-message">Adminfunktioner upplåsta!</div>`;
-                    adminUnlocked = true;
-                    showAdminButtons();
-                    showTeacherAccessButtons();
-                    // Hide the unlock button after unlocking
-                    document.getElementById('unlockAdminBtn').classList.add('hidden');
-                    setTimeout(() => {
-                        closeUnlockModal();
-                    }, 1000);
-                } else {
-                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Lås upp';
-                }
-            } catch (error) {
-                messageDiv.innerHTML = `<div class="error-message">Kunde inte låsa upp: ${error.message}</div>`;
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Lås upp';
-            }
-        });
-        
         document.getElementById('resetInstanceForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const submitBtn = document.getElementById('resetSubmitBtn');
             const messageDiv = document.getElementById('resetModalMessage');
             
-            const password = document.getElementById('resetPassword').value;
+            const passwordEl = document.getElementById('resetPassword');
+            const password = passwordEl ? passwordEl.value : '';
             
             submitBtn.disabled = true;
             submitBtn.textContent = 'Nollställer...';
@@ -1770,7 +1988,8 @@
             const submitBtn = document.getElementById('deleteSubmitBtn');
             const messageDiv = document.getElementById('deleteModalMessage');
             
-            const password = document.getElementById('deletePassword').value;
+            const passwordEl = document.getElementById('deletePassword');
+            const password = passwordEl ? passwordEl.value : '';
             
             submitBtn.disabled = true;
             submitBtn.textContent = 'Tar bort...';
@@ -1812,8 +2031,6 @@
             const submitBtn = document.getElementById('deleteAllSubmitBtn');
             const messageDiv = document.getElementById('deleteAllModalMessage');
             
-            const adminPassword = document.getElementById('deleteAllAdminPassword').value;
-            
             submitBtn.disabled = true;
             submitBtn.textContent = 'Tar bort...';
             messageDiv.innerHTML = '';
@@ -1824,9 +2041,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        admin_password: adminPassword
-                    })
+                    body: JSON.stringify({})
                 });
                 
                 const data = await response.json();
@@ -1854,8 +2069,6 @@
             const submitBtn = document.getElementById('toggleSubmitBtn');
             const messageDiv = document.getElementById('toggleModalMessage');
             
-            const adminPassword = document.getElementById('toggleAdminPassword').value;
-            
             submitBtn.disabled = true;
             submitBtn.textContent = 'Bearbetar...';
             messageDiv.innerHTML = '';
@@ -1867,7 +2080,6 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        admin_password: adminPassword,
                         enabled: pendingToggleState
                     })
                 });
@@ -1897,8 +2109,6 @@
             const submitBtn = document.getElementById('teacherAccessSubmitBtn');
             const messageDiv = document.getElementById('teacherAccessModalMessage');
             
-            const adminPassword = document.getElementById('teacherAccessAdminPassword').value;
-            
             submitBtn.disabled = true;
             submitBtn.textContent = 'Lägger till...';
             messageDiv.innerHTML = '';
@@ -1909,9 +2119,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        admin_password: adminPassword
-                    })
+                    body: JSON.stringify({})
                 });
                 
                 const data = await response.json();
@@ -1939,8 +2147,6 @@
             const submitBtn = document.getElementById('teacherAccessAllSubmitBtn');
             const messageDiv = document.getElementById('teacherAccessAllModalMessage');
             
-            const adminPassword = document.getElementById('teacherAccessAllAdminPassword').value;
-            
             submitBtn.disabled = true;
             submitBtn.textContent = 'Bearbetar...';
             messageDiv.innerHTML = '<div style="color: #2563eb;">Lägger till läraråtkomst på alla instanser...</div>';
@@ -1951,9 +2157,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        admin_password: adminPassword
-                    })
+                    body: JSON.stringify({})
                 });
                 
                 const data = await response.json();
@@ -1993,8 +2197,6 @@
             const submitBtn = document.getElementById('startAllSubmitBtn');
             const messageDiv = document.getElementById('startAllModalMessage');
             
-            const adminPassword = document.getElementById('startAllAdminPassword').value;
-            
             submitBtn.disabled = true;
             submitBtn.textContent = 'Startar...';
             messageDiv.innerHTML = '';
@@ -2005,9 +2207,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        admin_password: adminPassword
-                    })
+                    body: JSON.stringify({})
                 });
                 
                 const data = await response.json();
@@ -2047,8 +2247,6 @@
             const submitBtn = document.getElementById('stopAllSubmitBtn');
             const messageDiv = document.getElementById('stopAllModalMessage');
             
-            const adminPassword = document.getElementById('stopAllAdminPassword').value;
-            
             submitBtn.disabled = true;
             submitBtn.textContent = 'Stoppar...';
             messageDiv.innerHTML = '';
@@ -2059,9 +2257,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        admin_password: adminPassword
-                    })
+                    body: JSON.stringify({})
                 });
                 
                 const data = await response.json();
@@ -2101,7 +2297,8 @@
             const submitBtn = document.getElementById('restartSubmitBtn');
             const messageDiv = document.getElementById('restartModalMessage');
             
-            const password = document.getElementById('restartPassword').value;
+            const passwordEl = document.getElementById('restartPassword');
+            const password = passwordEl ? passwordEl.value : '';
             
             submitBtn.disabled = true;
             submitBtn.textContent = 'Startar om...';
@@ -2206,9 +2403,9 @@
         
         // Initialize page
         updateInstanceCount();
-        checkAdminEnabled();
         checkTeacherAccessEnabled();
         checkInstanceCreationStatus();
+        checkMustChangePassword();
     </script>
     
     <footer style="text-align: center; padding: 30px 20px 20px; color: rgba(0, 0, 0, 0.9); font-size: 0.9em;">

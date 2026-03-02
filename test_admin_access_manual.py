@@ -1,159 +1,94 @@
 #!/usr/bin/env python3
 """
-Manual test script to verify admin access control functionality
-This script simulates different access scenarios and tests the API responses
+Manual test script to verify session-based admin access control.
 """
 
 import sys
 import os
 import json
-from unittest.mock import Mock
+import tempfile
 
-# Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-def test_scenario(scenario_name, remote_addr, cf_email=None, x_forwarded_for=None, admin_emails=''):
-    """Test a specific access scenario"""
-    print(f"\n{'='*70}")
-    print(f"Scenario: {scenario_name}")
-    print(f"{'='*70}")
-    print(f"Remote IP: {remote_addr}")
-    print(f"X-Forwarded-For: {x_forwarded_for}")
-    print(f"Cloudflare Email: {cf_email}")
-    print(f"ADMINS List: {admin_emails}")
-    print(f"{'-'*70}")
-    
-    # Set up environment
-    os.environ['ADMINS'] = admin_emails
-    os.environ['ADMIN_PASSWORD'] = 'test123'
-    
-    # Reload app module to pick up new env vars
+
+def setup_app():
+    tmpfile = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+    json.dump({'instances': {}, 'settings': {'instance_creation_enabled': True}}, tmpfile)
+    tmpfile.close()
+    os.environ['DATA_FILE'] = tmpfile.name
+    for v in ['ADMIN_PASSWORD', 'TEACHER_USERNAME', 'TEACHER_PASSWORD', 'ADMINS', 'ADMIN_USERNAME']:
+        os.environ.pop(v, None)
+
     import importlib
     import app as app_module
     importlib.reload(app_module)
-    
-    # Create mock request
-    request = Mock()
-    request.remote_addr = remote_addr
-    
-    # Set up headers
-    headers = {}
-    if x_forwarded_for:
-        headers['X-Forwarded-For'] = x_forwarded_for
-    if cf_email:
-        headers['Cf-Access-Authenticated-User-Email'] = cf_email
-    
-    request.headers = headers
-    
-    # Check admin access
-    has_access = app_module.is_admin_user(request)
-    
-    print(f"Result: {'✓ ADMIN ACCESS GRANTED' if has_access else '✗ ADMIN ACCESS DENIED'}")
-    print(f"{'='*70}")
-    
-    return has_access
+    app_module.app.testing = True
+    return app_module.app.test_client(), tmpfile.name
+
+
+def run_scenario(client, name, steps):
+    print(f"\n{'='*60}")
+    print(f"Scenario: {name}")
+    print(f"{'='*60}")
+    for desc, method, url, kwargs, check_fn in steps:
+        resp = client.post(url, **kwargs) if method == 'POST' else client.get(url, **kwargs)
+        ok = check_fn(resp)
+        print(f"  {'✓' if ok else '✗'} {desc} (HTTP {resp.status_code})")
+        if not ok:
+            print(f"    Response: {resp.get_json()}")
+            return False
+    return True
+
 
 def main():
-    """Run manual test scenarios"""
-    print("="*70)
-    print("HA-Edu Admin Access Control - Manual Test Scenarios")
-    print("="*70)
-    
-    scenarios = []
-    
-    # Scenario 1: Local network access (192.168.50.x)
-    result = test_scenario(
-        "Local Network Access (192.168.50.100)",
-        remote_addr='192.168.50.100',
-        admin_emails=''
-    )
-    scenarios.append(('Local IP (no ADMINS)', result, True))
-    
-    # Scenario 2: Remote access without authentication
-    result = test_scenario(
-        "Remote Access Without Authentication",
-        remote_addr='203.0.113.50',
-        admin_emails=''
-    )
-    scenarios.append(('Remote IP (no auth)', result, False))
-    
-    # Scenario 3: Cloudflare authenticated user in ADMINS list
-    result = test_scenario(
-        "Cloudflare Authenticated User (Approved)",
-        remote_addr='203.0.113.50',
-        cf_email='admin@example.com',
-        admin_emails='admin@example.com,teacher@example.com'
-    )
-    scenarios.append(('Cloudflare approved email', result, True))
-    
-    # Scenario 4: Cloudflare authenticated user NOT in ADMINS list
-    result = test_scenario(
-        "Cloudflare Authenticated User (Not Approved)",
-        remote_addr='203.0.113.50',
-        cf_email='student@example.com',
-        admin_emails='admin@example.com,teacher@example.com'
-    )
-    scenarios.append(('Cloudflare unapproved email', result, False))
-    
-    # Scenario 5: X-Forwarded-For with local IP (behind reverse proxy)
-    result = test_scenario(
-        "Behind Reverse Proxy with Local IP",
-        remote_addr='10.0.0.1',
-        x_forwarded_for='192.168.50.200, 10.0.0.1',
-        admin_emails=''
-    )
-    scenarios.append(('X-Forwarded-For local IP', result, True))
-    
-    # Scenario 6: X-Forwarded-For with remote IP
-    result = test_scenario(
-        "Behind Reverse Proxy with Remote IP",
-        remote_addr='10.0.0.1',
-        x_forwarded_for='203.0.113.99, 10.0.0.1',
-        admin_emails=''
-    )
-    scenarios.append(('X-Forwarded-For remote IP', result, False))
-    
-    # Scenario 7: Case-insensitive email matching
-    result = test_scenario(
-        "Cloudflare Email (Case Insensitive)",
-        remote_addr='203.0.113.50',
-        cf_email='Admin@Example.COM',
-        admin_emails='admin@example.com'
-    )
-    scenarios.append(('Case-insensitive email', result, True))
-    
-    # Scenario 8: Different subnet (192.168.51.x)
-    result = test_scenario(
-        "Different Local Subnet (192.168.51.100)",
-        remote_addr='192.168.51.100',
-        admin_emails=''
-    )
-    scenarios.append(('Different subnet', result, False))
-    
-    # Print summary
-    print("\n" + "="*70)
-    print("TEST SUMMARY")
-    print("="*70)
-    
-    passed = 0
-    failed = 0
-    
-    for name, actual, expected in scenarios:
-        status = "✓ PASS" if actual == expected else "✗ FAIL"
-        if actual == expected:
-            passed += 1
-        else:
-            failed += 1
-        
-        print(f"{status}: {name}")
-        if actual != expected:
-            print(f"        Expected: {expected}, Got: {actual}")
-    
-    print("="*70)
-    print(f"Total: {passed} passed, {failed} failed")
-    print("="*70)
-    
-    return 0 if failed == 0 else 1
+    print("=" * 60)
+    print("HA-Edu Session-Based Auth - Manual Tests")
+    print("=" * 60)
+
+    client, tmpfile = setup_app()
+    results = []
+
+    ok = run_scenario(client, "Admin login/logout", [
+        ("Login as admin", 'POST', '/api/auth/login',
+         {'json': {'username': 'admin', 'password': 'admin'}},
+         lambda r: r.status_code == 200 and r.get_json()['role'] == 'admin'),
+        ("Admin has access", 'GET', '/api/admin/check-access', {},
+         lambda r: r.get_json().get('has_admin_access') is True),
+        ("Logout", 'POST', '/api/auth/logout', {},
+         lambda r: r.status_code == 200),
+        ("No access after logout", 'GET', '/api/admin/check-access', {},
+         lambda r: r.get_json().get('has_admin_access') is False),
+    ])
+    results.append(ok)
+
+    ok = run_scenario(client, "Wrong password rejected", [
+        ("Wrong password", 'POST', '/api/auth/login',
+         {'json': {'username': 'admin', 'password': 'wrong'}},
+         lambda r: r.status_code == 401),
+    ])
+    results.append(ok)
+
+    ok = run_scenario(client, "Student no admin access", [
+        ("Register student", 'POST', '/api/auth/register',
+         {'json': {'username': 'student1', 'password': 'pass1234'}},
+         lambda r: r.status_code == 201),
+        ("Student denied admin", 'GET', '/api/admin/check-access', {},
+         lambda r: r.get_json().get('has_admin_access') is False),
+    ])
+    results.append(ok)
+
+    passed = sum(results)
+    total = len(results)
+    print(f"\n{'='*60}")
+    print(f"Results: {passed}/{total} passed")
+    print("=" * 60)
+
+    try:
+        os.unlink(tmpfile)
+    except OSError:
+        pass
+    return 0 if passed == total else 1
+
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -1,53 +1,39 @@
 #!/usr/bin/env python3
 """
-Test script for admin access control based on IP address and Cloudflare email.
+Test script for admin access control with session-based authentication.
 """
 
 import sys
 import os
+import json
+import tempfile
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 
 def test_imports():
     """Test that all required modules can be imported"""
     print("Testing imports...")
     try:
         import flask
-        from flask import Flask, request
+        from flask import Flask, request, session
         print("✓ All dependencies imported successfully")
         return True
     except ImportError as e:
         print(f"✗ Import error: {e}")
         return False
 
-def test_admin_env_variable():
-    """Test that ADMINS environment variable is loaded"""
-    print("\nTesting ADMINS environment variable...")
-    try:
-        import app
-        
-        # Check if ADMINS variable exists
-        if hasattr(app, 'ADMINS'):
-            print("✓ ADMINS variable exists in app module")
-            print(f"  Current value: '{app.ADMINS}'")
-            return True
-        else:
-            print("✗ ADMINS variable not found in app module")
-            return False
-    except Exception as e:
-        print(f"✗ Environment variable test error: {e}")
-        return False
 
 def test_is_admin_user_function():
-    """Test that is_admin_user function exists"""
+    """Test that is_admin_user function exists and checks session role"""
     print("\nTesting is_admin_user function...")
     try:
         import app
-        
+
         if hasattr(app, 'is_admin_user'):
             print("✓ is_admin_user function exists")
-            
+
             # Check function signature
             import inspect
             sig = inspect.signature(app.is_admin_user)
@@ -56,7 +42,7 @@ def test_is_admin_user_function():
             else:
                 print("✗ Function signature incorrect")
                 return False
-            
+
             return True
         else:
             print("✗ is_admin_user function not found")
@@ -65,133 +51,121 @@ def test_is_admin_user_function():
         print(f"✗ Function test error: {e}")
         return False
 
+
 def test_admin_check_access_route():
     """Test that admin check-access route is registered"""
     print("\nTesting /api/admin/check-access route...")
     try:
         import app
-        
-        # Check if new route is registered
+
         routes = [rule.rule for rule in app.app.url_map.iter_rules()]
-        
+
         if '/api/admin/check-access' in routes:
             print("✓ Route registered: /api/admin/check-access")
             return True
         else:
             print("✗ Route /api/admin/check-access not found")
-            print(f"  Available routes: {[r for r in routes if 'admin' in r]}")
             return False
     except Exception as e:
         print(f"✗ Route test error: {e}")
         return False
 
-def test_ip_parsing_logic():
-    """Test the IP address parsing logic"""
-    print("\nTesting IP address parsing logic...")
+
+def test_auth_routes_registered():
+    """Test that auth routes are registered"""
+    print("\nTesting auth routes...")
     try:
-        # Test IP address pattern
-        test_ips = [
-            ('192.168.50.1', True, 'Valid local IP'),
-            ('192.168.50.255', True, 'Valid local IP (broadcast)'),
-            ('192.168.51.1', False, 'Different subnet'),
-            ('10.0.0.1', False, 'Different network'),
-            ('192.168.50.1.1', False, 'Invalid IP format'),
+        import app
+
+        routes = [rule.rule for rule in app.app.url_map.iter_rules()]
+
+        expected = [
+            '/api/auth/login',
+            '/api/auth/register',
+            '/api/auth/logout',
+            '/api/auth/status',
+            '/api/auth/change-password',
         ]
-        
-        all_passed = True
-        for ip, should_match, desc in test_ips:
-            try:
-                ip_parts = ip.split('.')
-                matches = (len(ip_parts) == 4 and 
-                          ip_parts[0] == '192' and 
-                          ip_parts[1] == '168' and 
-                          ip_parts[2] == '50')
-                
-                if matches == should_match:
-                    print(f"✓ {desc}: {ip} -> {matches}")
-                else:
-                    print(f"✗ {desc}: {ip} -> {matches} (expected {should_match})")
-                    all_passed = False
-            except Exception as e:
-                print(f"✗ Error parsing {ip}: {e}")
-                all_passed = False
-        
-        return all_passed
+
+        all_found = True
+        for route in expected:
+            if route in routes:
+                print(f"✓ Route registered: {route}")
+            else:
+                print(f"✗ Route missing: {route}")
+                all_found = False
+
+        return all_found
     except Exception as e:
-        print(f"✗ IP parsing test error: {e}")
+        print(f"✗ Auth routes test error: {e}")
         return False
 
-def test_email_list_parsing():
-    """Test email list parsing from ADMINS variable"""
-    print("\nTesting email list parsing...")
+
+def test_ensure_admin_account():
+    """Test that ensure_admin_account creates a default admin user"""
+    print("\nTesting ensure_admin_account...")
     try:
-        test_cases = [
-            ('admin@example.com,user@test.com', ['admin@example.com', 'user@test.com']),
-            ('admin@example.com', ['admin@example.com']),
-            ('admin@example.com, user@test.com , test@demo.com', 
-             ['admin@example.com', 'user@test.com', 'test@demo.com']),
-            ('', []),
-        ]
-        
-        all_passed = True
-        for admins_str, expected in test_cases:
-            result = [email.strip().lower() for email in admins_str.split(',') if email.strip()]
-            if result == expected:
-                print(f"✓ Parsing '{admins_str}' -> {result}")
-            else:
-                print(f"✗ Parsing '{admins_str}' -> {result} (expected {expected})")
-                all_passed = False
-        
-        return all_passed
+        import app
+
+        if hasattr(app, 'ensure_admin_account'):
+            print("✓ ensure_admin_account function exists")
+        else:
+            print("✗ ensure_admin_account function not found")
+            return False
+
+        users = app.load_users()
+        has_admin = any(u.get('role') == 'admin' for u in users.values())
+        if has_admin:
+            print("✓ Admin account exists")
+        else:
+            print("✗ No admin account found")
+            return False
+
+        return True
     except Exception as e:
-        print(f"✗ Email parsing test error: {e}")
+        print(f"✗ ensure_admin_account test error: {e}")
         return False
 
-def test_env_example_updated():
-    """Test that .env.example contains ADMINS variable"""
-    print("\nTesting .env.example file...")
-    env_example_path = os.path.join(os.path.dirname(__file__), '.env.example')
-    
-    if os.path.exists(env_example_path):
-        print(f"✓ .env.example exists at {env_example_path}")
-        
-        with open(env_example_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-            if 'ADMINS=' in content:
-                print("✓ ADMINS variable found in .env.example")
-                
-                # Check for documentation
-                if 'email' in content.lower() and 'comma' in content.lower():
-                    print("✓ ADMINS variable has proper documentation")
-                    return True
-                else:
-                    print("⚠ ADMINS variable could use better documentation")
-                    return True
+
+def test_no_old_env_vars():
+    """Test that old env var attributes are gone"""
+    print("\nTesting that old env vars are removed...")
+    try:
+        import app
+
+        old_vars = ['ADMIN_PASSWORD', 'ADMINS', 'ADMIN_USERNAME']
+        all_gone = True
+        for var in old_vars:
+            if hasattr(app, var):
+                print(f"✗ Old attribute still present: {var}")
+                all_gone = False
             else:
-                print("✗ ADMINS variable not found in .env.example")
-                return False
-    else:
-        print(f"✗ .env.example not found at {env_example_path}")
+                print(f"✓ {var} not present (removed)")
+
+        return all_gone
+    except Exception as e:
+        print(f"✗ Env var test error: {e}")
         return False
+
 
 def test_frontend_updated():
-    """Test that index.html has been updated with new admin check"""
+    """Test that index.html has login overlay and auth endpoints"""
     print("\nTesting frontend updates...")
     template_path = os.path.join(os.path.dirname(__file__), 'templates', 'index.html')
-    
+
     if os.path.exists(template_path):
         print(f"✓ Template exists at {template_path}")
-        
+
         with open(template_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            
+
             checks = [
-                ('/api/admin/check-access', 'New admin check-access endpoint'),
-                ('has_admin_access', 'Admin access check variable'),
-                ('admin_password_enabled', 'Admin password enabled check'),
+                ('loginOverlay', 'Login overlay element'),
+                ('/api/auth/login', 'Login API call'),
+                ('/api/auth/register', 'Register API call'),
+                ('logged_in', 'logged_in template variable'),
             ]
-            
+
             all_passed = True
             for check, desc in checks:
                 if check in content:
@@ -199,44 +173,58 @@ def test_frontend_updated():
                 else:
                     print(f"✗ Missing: {desc}")
                     all_passed = False
-            
+
             return all_passed
     else:
         print(f"✗ Template not found at {template_path}")
         return False
 
+
 def main():
     """Run all tests"""
+    # Setup temp data file
+    tmpfile = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+    json.dump({'instances': {}, 'settings': {'instance_creation_enabled': True}}, tmpfile)
+    tmpfile.close()
+    os.environ['DATA_FILE'] = tmpfile.name
+    for v in ['ADMIN_PASSWORD', 'TEACHER_USERNAME', 'TEACHER_PASSWORD', 'ADMINS', 'ADMIN_USERNAME']:
+        os.environ.pop(v, None)
+
     print("=" * 70)
-    print("HA-Edu Admin Access Control Tests")
+    print("HA-Edu Admin Access Control Tests (Session-Based Auth)")
     print("=" * 70)
-    
+
     tests = [
         test_imports,
-        test_admin_env_variable,
         test_is_admin_user_function,
         test_admin_check_access_route,
-        test_ip_parsing_logic,
-        test_email_list_parsing,
-        test_env_example_updated,
+        test_auth_routes_registered,
+        test_ensure_admin_account,
+        test_no_old_env_vars,
         test_frontend_updated,
     ]
-    
+
     results = [test() for test in tests]
-    
-    passed = sum(results)
+
+    passed = sum(1 for r in results if r)
     total = len(results)
-    
+
     print("\n" + "=" * 70)
     print(f"Tests passed: {passed}/{total}")
     print("=" * 70)
-    
+
+    try:
+        os.unlink(tmpfile.name)
+    except OSError:
+        pass
+
     if passed == total:
         print("\n✓ All tests passed!")
         return 0
     else:
         print(f"\n✗ {total - passed} test(s) failed")
         return 1
+
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -105,10 +105,6 @@ DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
 BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
 # MAX_INSTANCES removed - no limit on instances, ports assigned dynamically
 HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
-TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
-TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
-ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresses
 # Maximum instances for non-admin users (0 or None means unlimited)
 MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
 MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
@@ -126,9 +122,8 @@ ACCESS_LOG_PATHS = ['', 'index.html', 'lovelace']
 def is_admin_user(request):
     """Check if the current user has admin access
     
-    Admin access is granted if:
-    1. The request comes from the local network (192.168.50.0/24 or 10.0.0.0/8), OR
-    2. The user is authenticated via Cloudflare Zero Trust with an email in the ADMINS list
+    Admin access is granted if the user is logged in with an account
+    that has the 'admin' role.
     
     Args:
         request: Flask request object
@@ -136,49 +131,15 @@ def is_admin_user(request):
     Returns:
         bool: True if user has admin access, False otherwise
     """
-    # Define the allowed local network subnets
-    ALLOWED_SUBNETS = [
-        ipaddress.ip_network('192.168.50.0/24'),
-        ipaddress.ip_network('10.0.0.0/8'),  # Added 10.x.x.x range for local admin access
-        ipaddress.ip_network('127.0.0.0/8')  # Added localhost range
-    ]
-    
-    # Check if the request is from the local network
-    # First check X-Forwarded-For header (set by reverse proxies)
-    # Note: In production, you should validate the proxy is trusted before using this header
-    # For this application, we assume the Cloudflare tunnel is the only proxy
-    client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-    if not client_ip:
-        # Fall back to direct remote_addr
-        client_ip = request.remote_addr
-    
-    # Check if IP is in any of the allowed subnets
-    if client_ip:
-        try:
-            # Parse IP address and check if it's in any allowed subnet
-            ip_obj = ipaddress.ip_address(client_ip)
-            for subnet in ALLOWED_SUBNETS:
-                if ip_obj in subnet:
-                    logger.debug(f'Admin access granted for local IP: {client_ip} (subnet: {subnet})')
-                    return True
-        except ValueError:
-            # Invalid IP address format
-            logger.warning(f'Invalid IP address format: {client_ip}')
-    
-    # Check if user is authenticated via Cloudflare Zero Trust
-    # Cloudflare Access sets the Cf-Access-Authenticated-User-Email header
-    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
-    
-    if user_email and ADMINS:
-        # Parse the ADMINS environment variable (comma-separated list)
-        admin_emails = [email.strip().lower() for email in ADMINS.split(',') if email.strip()]
-        
-        # Check if the user's email is in the admin list (case-insensitive)
-        if user_email.lower() in admin_emails:
-            logger.debug(f'Admin access granted for Cloudflare user: {user_email}')
+    username = session.get('username')
+    if username:
+        users = load_users()
+        user = users.get(username)
+        if user and user.get('role') == 'admin':
+            logger.debug(f'Admin access granted for admin user: {username}')
             return True
     
-    logger.debug(f'Admin access denied for IP: {client_ip}, Email: {user_email}')
+    logger.debug(f'Admin access denied for user: {session.get("username")}')
     return False
 
 
@@ -220,6 +181,40 @@ def save_settings(settings):
     data = load_data()
     data['settings'] = settings
     save_data(data)
+
+# ---------------------------------------------------------------------------
+# User account management
+# ---------------------------------------------------------------------------
+
+def load_users():
+    """Load user accounts from JSON file"""
+    data = load_data()
+    return data.get('users', {})
+
+def save_users(users):
+    """Save user accounts to JSON file"""
+    data = load_data()
+    data['users'] = users
+    save_data(data)
+
+def ensure_admin_account():
+    """Ensure a default admin account exists.
+
+    On first run, creates an admin account with credentials admin / admin.
+    The user will be prompted to change the credentials on first login.
+    """
+    users = load_users()
+    # Check if any admin account already exists
+    has_admin = any(u.get('role') == 'admin' for u in users.values())
+    if not has_admin:
+        users['admin'] = {
+            'password_hash': hash_password('admin'),
+            'role': 'admin',
+            'created_at': datetime.now().isoformat(),
+            'must_change_password': True,
+        }
+        save_users(users)
+        logger.info('Auto-created default admin account (admin / admin)')
 
 def get_available_port():
     """Get next available port for a new instance
@@ -840,12 +835,14 @@ def verify_password(password, hashed):
     """
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
+# Ensure the default admin account exists on startup
+ensure_admin_account()
+
 def validate_instance_password(password, instance):
     """Validate password for instance operations (delete/reset)
     
-    Checks if the provided password matches either:
-    1. The admin password (if configured), OR
-    2. The instance password (if set when instance was created)
+    Checks the instance password (if set when instance was created).
+    Admin users bypass this check entirely (handled at the route level).
     
     Args:
         password: Password to validate
@@ -854,11 +851,7 @@ def validate_instance_password(password, instance):
     Returns:
         bool: True if password is valid, False otherwise
     """
-    # Check admin password first (if configured)
-    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
-        return True
-    
-    # Then check instance password (if set)
+    # Check instance password (if set)
     if instance.get('instance_password_hash'):
         return verify_password(password, instance['instance_password_hash'])
     
@@ -891,18 +884,17 @@ def restart_instance_container(container_id):
 def get_user_identifier(request):
     """Get a unique identifier for the current user
     
-    Returns the Cloudflare authenticated email. In classroom settings,
-    all students share the same IP address, so email-based tracking is required.
+    Returns the logged-in username from the session. In classroom settings,
+    all students share the same IP address, so account-based tracking is required.
     
     Args:
         request: Flask request object
         
     Returns:
-        str: User email identifier, or None if not authenticated
+        str: Username, or None if not logged in
     """
-    # Get Cloudflare authenticated email (required for user tracking)
-    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
-    return user_email if user_email else None
+    username = session.get('username')
+    return username if username else None
 
 def get_user_info_for_logging(request):
     """Get user information for logging purposes
@@ -926,7 +918,7 @@ def can_view_instance(request, instance):
     """Check if the current user can view a specific instance
     
     Users can view instances if:
-    1. They have admin access (local IP or approved email), OR
+    1. They have admin access, OR
     2. They created the instance
     
     Args:
@@ -1022,16 +1014,26 @@ def index():
     create_button_tooltip = ""
     if user_has_instance:
         if user_id is None:
-            create_button_tooltip = "Du måste vara autentiserad via Cloudflare för att skapa instanser."
+            create_button_tooltip = "Du måste vara inloggad för att skapa instanser."
         elif max_allowed > 0:
             create_button_tooltip = f"Du har nått gränsen på {max_allowed} instans(er). Ta bort en befintlig instans för att skapa en ny."
         else:
             create_button_tooltip = "Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."
     
+    # Check if user must change default credentials
+    must_change_password = False
+    if user_id:
+        users = load_users()
+        user = users.get(user_id, {})
+        must_change_password = user.get('must_change_password', False)
+    
     # Pass admin status, user_has_instance, and max instances info to template
     return render_template('index.html', 
                          instances=instances, 
-                         is_admin=is_admin, 
+                         is_admin=is_admin,
+                         logged_in=user_id is not None,
+                         username=user_id or '',
+                         must_change_password=must_change_password,
                          user_has_instance=user_has_instance,
                          max_instances=max_allowed,
                          user_instance_count=user_count,
@@ -1085,7 +1087,7 @@ def create_instance():
         user_id = get_user_identifier(request)
         if user_id is None:
             return jsonify({
-                'error': 'You must be authenticated via Cloudflare to create instances.'
+                'error': 'You must be logged in to create instances.'
             }), 403
         return jsonify({
             'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
@@ -1110,7 +1112,7 @@ def create_instance():
             user_id = get_user_identifier(request)
             if user_id is None:
                 return jsonify({
-                    'error': 'You must be authenticated via Cloudflare to create instances.'
+                    'error': 'You must be logged in to create instances.'
                 }), 403
             return jsonify({
                 'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
@@ -1123,7 +1125,7 @@ def create_instance():
         # Get available port (no limit check - dynamic port assignment)
         port = get_available_port()
         
-        # Get user identifier (email only)
+        # Get user identifier
         created_by = get_user_identifier(request)
         
         # Reserve the port immediately by adding a placeholder entry
@@ -1176,7 +1178,7 @@ def create_instance():
             logger.warning(f'Failed to pull latest image, using cached version: {e}')
         
         # Network configuration: Create container with bridge network for internet access
-        # but isolated from host LAN. This works with Cloudflare tunnel setup.
+        # but isolated from host LAN.
         container = client.containers.run(
             HA_IMAGE,
             name=container_name,
@@ -1245,12 +1247,9 @@ def create_instance():
 
 @app.route('/api/instances/<server_name>', methods=['DELETE'])
 def delete_instance(server_name):
-    """API endpoint to delete an instance (requires instance password or admin password)"""
+    """API endpoint to delete an instance (admin bypasses password; others need instance password)"""
     data = request.json or {}
     password = data.get('password', '')
-    
-    if not password:
-        return jsonify({'error': 'Password is required'}), 400
     
     instances = load_instances()
     
@@ -1264,10 +1263,14 @@ def delete_instance(server_name):
         logger.warning(f'Failed deletion attempt for instance {server_name} - instance is locked')
         return jsonify({'error': 'Cannot delete a locked instance. Please unlock it first.'}), 403
     
-    # Validate password (accepts either admin password or instance password)
-    if not validate_instance_password(password, instance):
-        logger.warning(f'Failed deletion attempt for instance {server_name} - invalid password')
-        return jsonify({'error': 'Invalid password'}), 401
+    # Admin users bypass password check
+    if not is_admin_user(request):
+        if not password:
+            return jsonify({'error': 'Password is required'}), 400
+        # Validate password (instance password only)
+        if not validate_instance_password(password, instance):
+            logger.warning(f'Failed deletion attempt for instance {server_name} - invalid password')
+            return jsonify({'error': 'Invalid password'}), 401
     
     logger.info(f'Instance {server_name} deletion authorized')
     
@@ -1364,12 +1367,9 @@ def get_instance_status(server_name):
 
 @app.route('/api/instances/<server_name>/reset', methods=['POST'])
 def reset_instance(server_name):
-    """API endpoint to reset an instance to default HA image (requires instance password or admin password)"""
+    """API endpoint to reset an instance to default HA image (admin bypasses password; others need instance password)"""
     data = request.json or {}
     password = data.get('password', '')
-    
-    if not password:
-        return jsonify({'error': 'Password is required'}), 400
     
     instances = load_instances()
     
@@ -1378,10 +1378,14 @@ def reset_instance(server_name):
     
     instance = instances[server_name]
     
-    # Validate password (accepts either admin password or instance password)
-    if not validate_instance_password(password, instance):
-        logger.warning(f'Failed reset attempt for instance {server_name} - invalid password')
-        return jsonify({'error': 'Invalid password'}), 401
+    # Admin users bypass password check
+    if not is_admin_user(request):
+        if not password:
+            return jsonify({'error': 'Password is required'}), 400
+        # Validate password (instance password only)
+        if not validate_instance_password(password, instance):
+            logger.warning(f'Failed reset attempt for instance {server_name} - invalid password')
+            return jsonify({'error': 'Invalid password'}), 401
     
     logger.info(f'Instance {server_name} reset authorized')
     
@@ -1461,12 +1465,9 @@ def reset_instance(server_name):
 
 @app.route('/api/instances/<server_name>/restart', methods=['POST'])
 def restart_instance(server_name):
-    """API endpoint to restart an instance (requires instance password or admin password)"""
+    """API endpoint to restart an instance (admin bypasses password; others need instance password)"""
     data = request.json or {}
     password = data.get('password', '')
-    
-    if not password:
-        return jsonify({'error': 'Password is required'}), 400
     
     instances = load_instances()
     
@@ -1475,18 +1476,19 @@ def restart_instance(server_name):
     
     instance = instances[server_name]
     
-    # Check if password is valid (either instance password or admin password)
-    password_valid = False
-    
-    # First check admin password if configured
-    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
+    # Admin users bypass password check
+    if is_admin_user(request):
         password_valid = True
-        logger.info(f'Instance {server_name} restart authorized with admin password')
-    # Then check instance password if set
-    elif instance.get('instance_password_hash'):
-        if verify_password(password, instance['instance_password_hash']):
-            password_valid = True
-            logger.info(f'Instance {server_name} restart authorized with instance password')
+        logger.info(f'Instance {server_name} restart authorized for admin user')
+    else:
+        password_valid = False
+        if not password:
+            return jsonify({'error': 'Password is required'}), 400
+        # Check instance password if set
+        if instance.get('instance_password_hash'):
+            if verify_password(password, instance['instance_password_hash']):
+                password_valid = True
+                logger.info(f'Instance {server_name} restart authorized with instance password')
     
     if not password_valid:
         logger.warning(f'Failed restart attempt for instance {server_name} - invalid password')
@@ -1523,10 +1525,142 @@ def restart_instance(server_name):
         logger.error(f'Failed to restart instance: {str(e)}', exc_info=True)
         return jsonify({'error': 'Failed to restart instance. Please try again or contact support.'}), 500
 
+# ---------------------------------------------------------------------------
+# Authentication routes
+# ---------------------------------------------------------------------------
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    """Log in with username and password"""
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
+    
+    users = load_users()
+    user = users.get(username)
+    
+    if not user or not verify_password(password, user['password_hash']):
+        return jsonify({'error': 'Invalid username or password'}), 401
+    
+    session['username'] = username
+    return jsonify({
+        'message': 'Login successful',
+        'username': username,
+        'role': user.get('role', 'user'),
+        'must_change_password': user.get('must_change_password', False),
+    }), 200
+
+@app.route('/api/auth/register', methods=['POST'])
+def auth_register():
+    """Create a new user account"""
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
+    
+    if len(username) < 2:
+        return jsonify({'error': 'Username must be at least 2 characters'}), 400
+    
+    if len(password) < 4:
+        return jsonify({'error': 'Password must be at least 4 characters'}), 400
+    
+    if not re.match(r'^[a-zA-Z0-9_\-]+$', username):
+        return jsonify({'error': 'Username may only contain letters, numbers, hyphens and underscores'}), 400
+    
+    users = load_users()
+    
+    if username in users:
+        return jsonify({'error': 'Username already taken'}), 409
+    
+    users[username] = {
+        'password_hash': hash_password(password),
+        'role': 'user',
+        'created_at': datetime.now().isoformat(),
+    }
+    save_users(users)
+    
+    session['username'] = username
+    logger.info(f'New user account created: {username}')
+    return jsonify({
+        'message': 'Account created',
+        'username': username,
+        'role': 'user',
+    }), 201
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    """Log out the current user"""
+    session.pop('username', None)
+    return jsonify({'message': 'Logged out'}), 200
+
+@app.route('/api/auth/status', methods=['GET'])
+def auth_status():
+    """Return current authentication status"""
+    username = session.get('username')
+    if not username:
+        return jsonify({'logged_in': False}), 200
+    users = load_users()
+    user = users.get(username, {})
+    return jsonify({
+        'logged_in': True,
+        'username': username,
+        'role': user.get('role', 'user'),
+        'must_change_password': user.get('must_change_password', False),
+    }), 200
+
+@app.route('/api/auth/change-password', methods=['POST'])
+def auth_change_password():
+    """Change credentials for the logged-in user (or set new admin username on first setup)"""
+    username = session.get('username')
+    if not username:
+        return jsonify({'error': 'Not logged in'}), 401
+    
+    data = request.json or {}
+    new_username = data.get('new_username', '').strip()
+    new_password = data.get('new_password', '')
+    
+    if not new_password:
+        return jsonify({'error': 'New password is required'}), 400
+    
+    if len(new_password) < 4:
+        return jsonify({'error': 'Password must be at least 4 characters'}), 400
+    
+    users = load_users()
+    user = users.get(username)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # If a new username is provided and it differs, rename the account
+    if new_username and new_username != username:
+        if not re.match(r'^[a-zA-Z0-9_\-]+$', new_username):
+            return jsonify({'error': 'Username may only contain letters, numbers, hyphens and underscores'}), 400
+        if new_username in users:
+            return jsonify({'error': 'Username already taken'}), 409
+        # Move the user entry to the new key
+        del users[username]
+        username = new_username
+    
+    user['password_hash'] = hash_password(new_password)
+    user['must_change_password'] = False
+    users[username] = user
+    save_users(users)
+    
+    session['username'] = username
+    logger.info(f'User credentials updated: {username}')
+    return jsonify({
+        'message': 'Credentials updated',
+        'username': username,
+    }), 200
+
 @app.route('/api/admin/check', methods=['GET'])
 def check_admin():
-    """API endpoint to check if admin password is configured"""
-    return jsonify({'admin_enabled': bool(ADMIN_PASSWORD)}), 200
+    """API endpoint to check if admin features are available"""
+    return jsonify({'admin_enabled': True}), 200
 
 @app.route('/api/admin/check-access', methods=['GET'])
 def check_admin_access():
@@ -1536,38 +1670,23 @@ def check_admin_access():
         JSON response with has_admin_access boolean
     """
     has_access = is_admin_user(request)
+    logged_in = session.get('username') is not None
+    must_change = False
+    if logged_in:
+        users = load_users()
+        user = users.get(session.get('username'), {})
+        must_change = user.get('must_change_password', False)
     return jsonify({
         'has_admin_access': has_access,
-        'admin_password_enabled': bool(ADMIN_PASSWORD)
+        'logged_in': logged_in,
+        'must_change_password': must_change,
     }), 200
-
-@app.route('/api/admin/unlock', methods=['POST'])
-def unlock_admin():
-    """API endpoint to verify admin password and unlock admin features"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
-    
-    data = request.json or {}
-    admin_password = data.get('admin_password', '')
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
-    
-    return jsonify({'message': 'Admin features unlocked', 'unlocked': True}), 200
 
 @app.route('/api/instances/delete-all', methods=['POST'])
 def delete_all_instances():
-    """API endpoint to delete all instances (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
-    
-    data = request.json or {}
-    admin_password = data.get('admin_password', '')
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
+    """API endpoint to delete all instances (requires admin session)"""
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
     
     instances = load_instances()
     
@@ -1642,16 +1761,9 @@ def delete_all_instances():
 
 @app.route('/api/instances/start-all', methods=['POST'])
 def start_all_instances():
-    """API endpoint to start all instances (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
-    
-    data = request.json or {}
-    admin_password = data.get('admin_password', '')
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
+    """API endpoint to start all instances (requires admin session)"""
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
     
     instances = load_instances()
     
@@ -1712,16 +1824,9 @@ def start_all_instances():
 
 @app.route('/api/instances/stop-all', methods=['POST'])
 def stop_all_instances():
-    """API endpoint to stop all instances (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
-    
-    data = request.json or {}
-    admin_password = data.get('admin_password', '')
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
+    """API endpoint to stop all instances (requires admin session)"""
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
     
     instances = load_instances()
     
@@ -1790,17 +1895,12 @@ def get_instance_creation_status():
 
 @app.route('/api/settings/instance-creation', methods=['POST'])
 def set_instance_creation_status():
-    """API endpoint to set instance creation status (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
+    """API endpoint to set instance creation status (requires admin session)"""
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
     
     data = request.json or {}
-    admin_password = data.get('admin_password', '')
     enabled = data.get('enabled', True)
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
     
     settings = load_settings()
     settings['instance_creation_enabled'] = enabled
@@ -1814,27 +1914,50 @@ def set_instance_creation_status():
 @app.route('/api/settings/teacher-access', methods=['GET'])
 def check_teacher_access():
     """API endpoint to check if teacher access feature is enabled"""
-    enabled = bool(TEACHER_USERNAME and TEACHER_PASSWORD)
+    settings = load_settings()
+    teacher_username = settings.get('teacher_username', '')
+    teacher_password = settings.get('teacher_password', '')
+    enabled = bool(teacher_username and teacher_password)
     return jsonify({
         'teacher_access_enabled': enabled,
-        'teacher_username': TEACHER_USERNAME if enabled else None
+        'teacher_username': teacher_username if enabled else None
+    }), 200
+
+@app.route('/api/settings/teacher-access', methods=['POST'])
+def set_teacher_access():
+    """API endpoint to configure teacher access credentials (requires admin session)"""
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json or {}
+    teacher_username = data.get('teacher_username', '').strip()
+    teacher_password = data.get('teacher_password', '').strip()
+    
+    if not teacher_username or not teacher_password:
+        return jsonify({'error': 'Both teacher username and password are required'}), 400
+    
+    settings = load_settings()
+    settings['teacher_username'] = teacher_username
+    settings['teacher_password'] = teacher_password
+    save_settings(settings)
+    
+    return jsonify({
+        'message': 'Teacher access credentials saved',
+        'teacher_username': teacher_username
     }), 200
 
 @app.route('/api/instances/<server_name>/add-teacher-access', methods=['POST'])
 def add_teacher_access(server_name):
-    """API endpoint to add teacher access to an instance (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
+    """API endpoint to add teacher access to an instance (requires admin session)"""
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
     
-    if not TEACHER_USERNAME or not TEACHER_PASSWORD:
-        return jsonify({'error': 'Teacher access not configured. Please set TEACHER_USERNAME and TEACHER_PASSWORD environment variables.'}), 403
+    settings = load_settings()
+    teacher_username = settings.get('teacher_username', '')
+    teacher_password = settings.get('teacher_password', '')
     
-    data = request.json or {}
-    admin_password = data.get('admin_password', '')
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
+    if not teacher_username or not teacher_password:
+        return jsonify({'error': 'Teacher access not configured. Set teacher credentials in the admin settings.'}), 403
     
     instances = load_instances()
     
@@ -1856,7 +1979,7 @@ def add_teacher_access(server_name):
             }), 400
         
         # Create teacher account (or reset password if already exists)
-        success, message = create_teacher_account(volume_name, TEACHER_USERNAME, TEACHER_PASSWORD, reset_if_exists=reset_if_exists)
+        success, message = create_teacher_account(volume_name, teacher_username, teacher_password, reset_if_exists=reset_if_exists)
         
         if not success:
             return jsonify({'error': message}), 400
@@ -1872,11 +1995,11 @@ def add_teacher_access(server_name):
         interaction_logger.log_teacher_access_added(
             server_name=server_name,
             user_id=user_id,
-            teacher_username=TEACHER_USERNAME
+            teacher_username=teacher_username
         )
         
         # Log for audit trail
-        logger.info(f'Teacher access added to instance {server_name} by admin. Teacher username: {TEACHER_USERNAME}')
+        logger.info(f'Teacher access added to instance {server_name} by admin. Teacher username: {teacher_username}')
         
         # Automatically restart the instance to apply the teacher account changes
         restart_success, restart_message = restart_instance_container(instance['container_id'])
@@ -1885,7 +2008,7 @@ def add_teacher_access(server_name):
             logger.warning(f'Teacher access added but failed to restart instance {server_name}: {restart_message}')
             return jsonify({
                 'message': 'Teacher access added successfully, but instance restart failed. Please restart manually.',
-                'teacher_username': TEACHER_USERNAME,
+                'teacher_username': teacher_username,
                 'restart_warning': restart_message
             }), 200
         
@@ -1893,7 +2016,7 @@ def add_teacher_access(server_name):
         
         return jsonify({
             'message': 'Teacher access added successfully and instance restarted',
-            'teacher_username': TEACHER_USERNAME
+            'teacher_username': teacher_username
         }), 200
         
     except Exception as e:
@@ -1902,19 +2025,16 @@ def add_teacher_access(server_name):
 
 @app.route('/api/instances/add-teacher-access-all', methods=['POST'])
 def add_teacher_access_all():
-    """API endpoint to add teacher access to all instances (requires admin password)"""
-    if not ADMIN_PASSWORD:
-        return jsonify({'error': 'Admin password not configured'}), 403
+    """API endpoint to add teacher access to all instances (requires admin session)"""
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
     
-    if not TEACHER_USERNAME or not TEACHER_PASSWORD:
-        return jsonify({'error': 'Teacher access not configured. Please set TEACHER_USERNAME and TEACHER_PASSWORD environment variables.'}), 403
+    settings = load_settings()
+    teacher_username = settings.get('teacher_username', '')
+    teacher_password = settings.get('teacher_password', '')
     
-    data = request.json or {}
-    admin_password = data.get('admin_password', '')
-    
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
-        return jsonify({'error': 'Invalid admin password'}), 401
+    if not teacher_username or not teacher_password:
+        return jsonify({'error': 'Teacher access not configured. Set teacher credentials in the admin settings.'}), 403
     
     instances = load_instances()
     
@@ -1943,7 +2063,7 @@ def add_teacher_access_all():
             
             # Create teacher account (or reset password if already exists)
             # Always use reset_if_exists=True for bulk operation to handle both creation and reset
-            success, message = create_teacher_account(volume_name, TEACHER_USERNAME, TEACHER_PASSWORD, reset_if_exists=True)
+            success, message = create_teacher_account(volume_name, teacher_username, teacher_password, reset_if_exists=True)
             
             if success:
                 # Update instance metadata
@@ -1989,7 +2109,7 @@ def add_teacher_access_all():
     
     return jsonify({
         'message': f'Teacher access operation completed. {success_count} succeeded, {failed_count} failed, {skipped_count} skipped.',
-        'teacher_username': TEACHER_USERNAME,
+        'teacher_username': teacher_username,
         'success_count': success_count,
         'failed_count': failed_count,
         'skipped_count': skipped_count,
@@ -2232,7 +2352,7 @@ def proxy(port, path):
                 if key.lower() == 'content-type':
                     content_type = value.lower()
                 # Rewrite Location header for redirects to include proxy prefix
-                # This is crucial for Cloudflare tunnel compatibility
+                # This is crucial for proxy compatibility
                 if key.lower() == 'location':
                     original_value = value
                     # Check if this is a relative path (starts with /) and not already prefixed
