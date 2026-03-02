@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0
+
+- Grant admin access to HA users in the Owner or Administrators group: on each Ingress login the add-on queries the Supervisor API (`GET /auth/list`) and sets the app role to `admin` for users whose HA account is Owner or belongs to the `system-admin` group
+- Automatically update an existing user's role when their HA group membership changes
+- Enable `hassio_api` with `admin` role in the add-on manifest so the Supervisor API can be queried for user group information
+
 ## 1.5.0
 
 - Map each Home Assistant user to a dedicated app account using `X-Remote-User-Id` / `X-Remote-User-Name` headers sent by the HA Ingress proxy, so different HA users get their own sessions instead of sharing a single admin account
