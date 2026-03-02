@@ -53,10 +53,17 @@
                 --card: oklch(0.25 0.02 265);
                 --card-foreground: oklch(0.98 0.01 265);
                 --border: oklch(0.35 0.01 265);
+                --input: oklch(0.30 0.01 265);
                 --sidebar: oklch(0.25 0.02 265);
                 --sidebar-foreground: oklch(0.98 0.01 265);
                 --sidebar-accent: oklch(0.30 0.02 265);
                 --sidebar-border: oklch(0.35 0.01 265);
+                
+                /* Neutral palette overrides for dark mode */
+                --color-gray-100: oklch(0.30 0.01 265);
+                --color-gray-300: oklch(0.40 0.01 265);
+                --color-gray-700: oklch(0.70 0.01 265);
+                --color-gray-800: oklch(0.80 0.01 265);
             }
         }
         
@@ -1040,6 +1047,188 @@
             background: rgba(255,255,255,0.2);
             color: white;
         }
+        
+        /* Utility classes for modal info/warning/danger boxes */
+        .info-box {
+            background: #bee3f8;
+            color: #2c5282;
+            padding: 15px;
+            border-radius: var(--radius-sm);
+            margin: 15px 0;
+        }
+        
+        .info-box ul {
+            margin: 10px 0 0 20px;
+            line-height: 1.6;
+        }
+        
+        .success-box {
+            background: #c6f6d5;
+            color: #276749;
+            padding: 15px;
+            border-radius: var(--radius-sm);
+            margin: 15px 0;
+        }
+        
+        .success-box ul {
+            margin: 10px 0 0 20px;
+            line-height: 1.6;
+        }
+        
+        .caution-box {
+            background: #feebc8;
+            color: #c05621;
+            padding: 15px;
+            border-radius: var(--radius-sm);
+            margin: 15px 0;
+        }
+        
+        .caution-box ul {
+            margin: 10px 0 0 20px;
+            line-height: 1.6;
+        }
+        
+        .danger-text {
+            color: #e53e3e;
+            margin: 10px 0;
+        }
+        
+        .teacher-badge-box {
+            background: #d6bcfa;
+            color: #553c9a;
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            margin: 10px 0;
+        }
+        
+        /* Footer */
+        .site-footer {
+            text-align: center;
+            padding: 30px 20px 20px;
+            color: var(--color-gray-700);
+            font-size: 0.9em;
+        }
+        
+        .site-footer .footer-inner {
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* Dark mode overrides for elements with hardcoded colors */
+        @media (prefers-color-scheme: dark) {
+            /* Warning button needs visible text */
+            .btn-warning,
+            .btn-stop-all {
+                background: oklch(0.45 0.15 75);
+                color: oklch(0.95 0.05 75);
+            }
+            
+            .btn-warning:hover:not(:disabled),
+            .btn-stop-all:hover:not(:disabled) {
+                background: oklch(0.40 0.15 75);
+            }
+            
+            /* Status badges */
+            .status-running {
+                background: oklch(0.30 0.10 145);
+                color: oklch(0.80 0.12 145);
+            }
+            
+            .status-stopped,
+            .status-exited {
+                background: oklch(0.30 0.08 25);
+                color: oklch(0.80 0.10 25);
+            }
+            
+            .status-restarting {
+                background: oklch(0.30 0.10 75);
+                color: oklch(0.80 0.10 75);
+            }
+            
+            .status-paused {
+                background: oklch(0.30 0.04 265);
+                color: oklch(0.80 0.04 265);
+            }
+            
+            .status-created {
+                background: oklch(0.30 0.08 230);
+                color: oklch(0.80 0.10 230);
+            }
+            
+            .status-removing {
+                background: oklch(0.30 0.10 340);
+                color: oklch(0.80 0.10 340);
+            }
+            
+            .status-removed,
+            .status-unknown {
+                background: oklch(0.30 0.02 265);
+                color: oklch(0.75 0.02 265);
+            }
+            
+            /* Teacher access badge */
+            .teacher-access-badge {
+                background: oklch(0.30 0.10 340);
+                color: oklch(0.82 0.12 340);
+            }
+            
+            /* Lock button */
+            .btn-lock.locked {
+                background: oklch(0.35 0.10 35);
+                border-color: oklch(0.45 0.15 35);
+            }
+            
+            /* Error / success messages */
+            .error-message {
+                background: oklch(0.25 0.08 25);
+                color: oklch(0.80 0.12 25);
+                border-left-color: oklch(0.50 0.20 25);
+            }
+            
+            .success-message {
+                background: oklch(0.25 0.08 145);
+                color: oklch(0.80 0.10 145);
+                border-left-color: oklch(0.50 0.15 145);
+            }
+            
+            /* Status code badge on proxy error page */
+            .status-code {
+                background: oklch(0.30 0.10 25);
+                color: oklch(0.80 0.15 25);
+            }
+            
+            /* Info / success / caution boxes in modals */
+            .info-box {
+                background: oklch(0.25 0.06 230);
+                color: oklch(0.82 0.08 230);
+            }
+            
+            .success-box {
+                background: oklch(0.25 0.06 145);
+                color: oklch(0.82 0.08 145);
+            }
+            
+            .caution-box {
+                background: oklch(0.28 0.06 75);
+                color: oklch(0.85 0.08 75);
+            }
+            
+            .danger-text {
+                color: oklch(0.70 0.18 25);
+            }
+            
+            .teacher-badge-box {
+                background: oklch(0.30 0.10 300);
+                color: oklch(0.82 0.10 300);
+            }
+            
+            /* No instances empty state */
+            .no-instances {
+                color: var(--color-gray-700);
+            }
+        }
     </style>
 </head>
 <body>
@@ -1233,11 +1422,11 @@
         <div class="modal-content">
             <h2>Nollställ instans</h2>
             <p>{% if is_admin %}Bekräfta nollställning av{% else %}Ange lösenord för att nollställa{% endif %} <strong id="resetServerName"></strong> till standard HA-avbildning.</p>
-            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att radera all data och alla konfigurationer för denna instans!</p>
+            <p class="danger-text"><strong>Varning:</strong> Detta kommer att radera all data och alla konfigurationer för denna instans!</p>
             {% if not is_admin %}
-            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <div class="info-box">
                 <strong>ℹ️ Lösenordsalternativ:</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                <ul>
                     <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
                 </ul>
             </div>
@@ -1264,11 +1453,11 @@
         <div class="modal-content">
             <h2>Ta bort instans</h2>
             <p>{% if is_admin %}Bekräfta borttagning av{% else %}Ange lösenord för att ta bort{% endif %} <strong id="deleteServerName"></strong>.</p>
-            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort instansen och all dess data!</p>
+            <p class="danger-text"><strong>Varning:</strong> Detta kommer att permanent ta bort instansen och all dess data!</p>
             {% if not is_admin %}
-            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <div class="info-box">
                 <strong>ℹ️ Lösenordsalternativ:</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                <ul>
                     <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
                 </ul>
             </div>
@@ -1295,7 +1484,7 @@
         <div class="modal-content">
             <h2>Ta bort alla instanser</h2>
             <p>Bekräfta att du vill ta bort <strong>alla instanser</strong>.</p>
-            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort ALLA instanser och all deras data!</p>
+            <p class="danger-text"><strong>Varning:</strong> Detta kommer att permanent ta bort ALLA instanser och all deras data!</p>
             <form id="deleteAllInstancesForm">
                 <div id="deleteAllModalMessage"></div>
                 <div class="modal-actions">
@@ -1326,9 +1515,9 @@
         <div class="modal-content">
             <h2>Lägg till läraråtkomst</h2>
             <p>Bekräfta tillägg av läraråtkomst till <strong id="teacherAccessServerName"></strong>.</p>
-            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <div class="info-box">
                 <strong>Vad gör detta?</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                <ul>
                     <li>Skapar ett sekundärt adminkonto för läraren (<strong id="teacherUsernameDisplay"></strong>)</li>
                     <li>Studentens konto och data förblir oförändrade</li>
                     <li>Låter läraren övervaka studentens framsteg</li>
@@ -1352,9 +1541,9 @@
             <h2>Starta om instans</h2>
             <p>{% if is_admin %}Bekräfta omstart av{% else %}Ange lösenord för att starta om{% endif %} <strong id="restartServerName"></strong>.</p>
             {% if not is_admin %}
-            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <div class="info-box">
                 <strong>ℹ️ Lösenordsalternativ:</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                <ul>
                     <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
                 </ul>
             </div>
@@ -1381,9 +1570,9 @@
         <div class="modal-content">
             <h2>Lägg till läraråtkomst på alla instanser</h2>
             <p>Bekräfta att du vill lägga till läraråtkomst till <strong>alla instanser</strong>.</p>
-            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <div class="info-box">
                 <strong>Vad gör detta?</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                <ul>
                     <li>Skapar ett läraradminkonto (<strong id="teacherUsernameDisplayAll"></strong>) på varje instans</li>
                     <li>Hoppar över instanser som inte slutfört onboarding</li>
                     <li>Studentkonton och data förblir oförändrade</li>
@@ -1405,9 +1594,9 @@
         <div class="modal-content">
             <h2>Starta alla instanser</h2>
             <p>Bekräfta att du vill starta <strong>alla instanser</strong>.</p>
-            <div style="background: #c6f6d5; color: #276749; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <div class="success-box">
                 <strong>ℹ️ Information:</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                <ul>
                     <li>Startar alla stoppade instanser</li>
                     <li>Instanser som redan körs påverkas inte</li>
                 </ul>
@@ -1427,9 +1616,9 @@
         <div class="modal-content">
             <h2>Stoppa alla instanser</h2>
             <p>Bekräfta att du vill stoppa <strong>alla instanser</strong>.</p>
-            <div style="background: #feebc8; color: #c05621; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <div class="caution-box">
                 <strong>⚠️ Varning:</strong>
-                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                <ul>
                     <li>Stoppar alla körande instanser</li>
                     <li>Användare kommer att förlora anslutningen till sina instanser</li>
                     <li>Data bevaras - instanserna kan startas igen</li>
@@ -1807,7 +1996,7 @@
                     const hasBadge = card.querySelector('.teacher-access-badge');
                     if (hasBadge) {
                         document.getElementById('teacherAccessStatus').innerHTML = 
-                            '<div style="background: #d6bcfa; color: #553c9a; padding: 10px; border-radius: 5px; margin: 10px 0;">' +
+                            '<div class="teacher-badge-box">' +
                             '✓ Läraråtkomst har redan lagts till för denna instans' +
                             '</div>';
                     } else {
@@ -2164,7 +2353,7 @@
             
             submitBtn.disabled = true;
             submitBtn.textContent = 'Bearbetar...';
-            messageDiv.innerHTML = '<div style="color: #2563eb;">Lägger till läraråtkomst på alla instanser...</div>';
+            messageDiv.innerHTML = '<div style="color: var(--color-primary);">Lägger till läraråtkomst på alla instanser...</div>';
             
             try {
                 const response = await fetch(`${basePath}/api/instances/add-teacher-access-all`, {
@@ -2423,8 +2612,8 @@
         checkMustChangePassword();
     </script>
     
-    <footer style="text-align: center; padding: 30px 20px 20px; color: rgba(0, 0, 0, 0.9); font-size: 0.9em;">
-        <div style="border-top: 1px solid rgba(255, 255, 255, 0.3); padding-top: 20px; max-width: 1200px; margin: 0 auto;">
+    <footer class="site-footer">
+        <div class="footer-inner">
             © 2025 Thomas Wredlund
         </div>
     </footer>
