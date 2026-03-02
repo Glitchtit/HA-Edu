@@ -104,7 +104,7 @@ _onboarding_cache_lock = threading.Lock()
 # Key: ha_user_name, Value: (timestamp, role_string)
 _ha_role_cache = {}
 _ha_role_cache_lock = threading.Lock()
-HA_ROLE_CACHE_TTL = 300  # seconds
+HA_ROLE_CACHE_TTL = 30  # seconds
 
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
