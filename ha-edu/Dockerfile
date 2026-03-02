@@ -3,7 +3,8 @@ FROM ${BUILD_FROM}
 
 WORKDIR /app
 
-# Ensure Python3 and pip are available (needed if base image is Alpine without Python)
+# Fallback: install Python3/pip via apk if the HA Alpine base image is used
+# (happens when HA Supervisor resets build.yaml and falls back to its default base)
 RUN if ! command -v pip3 >/dev/null 2>&1 && ! command -v pip >/dev/null 2>&1; then \
       apk add --no-cache python3 py3-pip; \
     fi
