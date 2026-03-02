@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0
+
+- Remove the forced password-change prompt that appeared on first login with the default admin account; Home Assistant Ingress now handles authentication so the separate credential setup is no longer needed
+
 ## 1.3.1
 
 - Remove the login/register overlay and logout button when running inside Home Assistant Ingress, since the Supervisor already authenticates users before forwarding requests
