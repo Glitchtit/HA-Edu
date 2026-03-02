@@ -238,18 +238,23 @@ def pull_and_retag_image():
     except docker.errors.APIError as e:
         logger.warning(f'Failed to pull latest image, using cached version: {e}')
     
+    # Try to re-tag the pulled/cached image
     try:
         image = client.images.get(HA_IMAGE)
         image.tag(STUDENT_IMAGE_REPO, tag)
         logger.info(f'Re-tagged image as: {student_image}')
         return student_image
     except docker.errors.ImageNotFound:
-        try:
-            client.images.get(student_image)
-            return student_image
-        except docker.errors.ImageNotFound:
-            logger.warning(f'Could not re-tag image, using original: {HA_IMAGE}')
-            return HA_IMAGE
+        logger.warning(f'Original image {HA_IMAGE} not found locally')
+    
+    # Fall back to a previously re-tagged image if available
+    try:
+        client.images.get(student_image)
+        logger.info(f'Using previously re-tagged image: {student_image}')
+        return student_image
+    except docker.errors.ImageNotFound:
+        logger.warning(f'Could not re-tag image, using original: {HA_IMAGE}')
+        return HA_IMAGE
 
 def get_available_port():
     """Get next available port for a new instance
