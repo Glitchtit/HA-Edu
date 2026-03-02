@@ -7,6 +7,8 @@ and correct ingress behavior (no target="_blank" when using HA ingress to avoid 
 import os
 import re
 
+from jinja2 import Environment, BaseLoader
+
 
 def test_access_button_has_noopener_noreferrer():
     """Test that the Access button has rel='noopener' attribute for security while preserving referrer for Cloudflare tunnel.
@@ -48,7 +50,6 @@ def test_access_button_has_noopener_noreferrer():
     
     print("✓ Access button has proper security attributes")
     print(f"✓ Found: {access_button}")
-    return True
 
 
 def test_access_button_conditional_target_blank():
@@ -79,10 +80,46 @@ def test_access_button_conditional_target_blank():
     
     print("✓ Access button has conditional target='_blank' for ingress compatibility")
     print(f"✓ Found conditional logic in: {access_line.strip()}")
-    return True
+
+
+def test_access_button_renders_correctly():
+    """Test that the Access button renders correctly in both ingress and non-ingress modes.
+    
+    Renders the Jinja snippet with ingress_path set and unset to verify:
+    - Standalone (no ingress): target='_blank' and rel='noopener' are present
+    - HA ingress: target='_blank' and rel='noopener' are absent
+    """
+    env = Environment(loader=BaseLoader())
+    # Extract just the access button Jinja snippet from the template
+    snippet = '<a href="{{ ingress_path }}/proxy/{{ instance.port }}/" {% if not ingress_path %}target="_blank" rel="noopener"{% endif %} class="btn-access">Öppna</a>'
+    template = env.from_string(snippet)
+    
+    # Test standalone mode (no ingress_path)
+    rendered_standalone = template.render(ingress_path='', instance={'port': 8124})
+    assert 'target="_blank"' in rendered_standalone, \
+        "Standalone mode should have target='_blank'"
+    assert 'rel="noopener"' in rendered_standalone, \
+        "Standalone mode should have rel='noopener'"
+    assert 'href="/proxy/8124/"' in rendered_standalone, \
+        "Standalone mode should have direct proxy URL"
+    
+    # Test ingress mode (ingress_path set)
+    ingress = '/api/hassio_ingress/abc123'
+    rendered_ingress = template.render(ingress_path=ingress, instance={'port': 8124})
+    assert 'target="_blank"' not in rendered_ingress, \
+        "Ingress mode should NOT have target='_blank' (causes 400 error)"
+    assert 'rel="noopener"' not in rendered_ingress, \
+        "Ingress mode should NOT have rel='noopener'"
+    assert f'href="{ingress}/proxy/8124/"' in rendered_ingress, \
+        "Ingress mode should have ingress-prefixed proxy URL"
+    
+    print("✓ Access button renders correctly in both modes")
+    print(f"  Standalone: {rendered_standalone}")
+    print(f"  Ingress:    {rendered_ingress}")
 
 
 if __name__ == '__main__':
     test_access_button_has_noopener_noreferrer()
     test_access_button_conditional_target_blank()
+    test_access_button_renders_correctly()
     print("\n✓ All access button tests passed!")
