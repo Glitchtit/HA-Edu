@@ -2362,7 +2362,7 @@ def proxy(port, path):
                 if key.lower() == 'location':
                     original_value = value
                     # Check if this is a relative path (starts with /) and not already prefixed
-                    if value.startswith('/') and not value.startswith(f'{ingress_path}/proxy/{port}/'):
+                    if value.startswith('/') and not value.startswith(f'{ingress_path}/proxy/{port}/') and not value.startswith(f'/proxy/{port}/'):
                         # Rewrite to include ingress path and /proxy/{port}/ prefix
                         value = f'{ingress_path}/proxy/{port}{value}'
                         logger.debug(f'Rewrote Location header to: {value}')
