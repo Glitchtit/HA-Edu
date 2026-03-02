@@ -215,7 +215,6 @@ def ensure_admin_account():
             'password_hash': hash_password('admin'),
             'role': 'admin',
             'created_at': datetime.now().isoformat(),
-            'must_change_password': True,
         }
         save_users(users)
         logger.info('Auto-created default admin account (admin / admin)')
@@ -1095,13 +1094,6 @@ def index():
         else:
             create_button_tooltip = "Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."
     
-    # Check if user must change default credentials
-    must_change_password = False
-    if user_id:
-        users = load_users()
-        user = users.get(user_id, {})
-        must_change_password = user.get('must_change_password', False)
-    
     # Pass admin status, user_has_instance, and max instances info to template
     # X-Ingress-Path is set by Home Assistant when the add-on is accessed through ingress
     ingress_path = request.headers.get('X-Ingress-Path', '')
@@ -1111,7 +1103,7 @@ def index():
                          is_admin=is_admin,
                          logged_in=user_id is not None,
                          username=user_id or '',
-                         must_change_password=must_change_password,
+                         must_change_password=False,
                          user_has_instance=user_has_instance,
                          max_instances=max_allowed,
                          user_instance_count=user_count,
@@ -1622,7 +1614,6 @@ def auth_login():
         'message': 'Login successful',
         'username': username,
         'role': user.get('role', 'user'),
-        'must_change_password': user.get('must_change_password', False),
     }), 200
 
 @app.route('/api/auth/register', methods=['POST'])
@@ -1682,7 +1673,6 @@ def auth_status():
         'logged_in': True,
         'username': username,
         'role': user.get('role', 'user'),
-        'must_change_password': user.get('must_change_password', False),
     }), 200
 
 @app.route('/api/auth/change-password', methods=['POST'])
@@ -1718,7 +1708,6 @@ def auth_change_password():
         username = new_username
     
     user['password_hash'] = hash_password(new_password)
-    user['must_change_password'] = False
     users[username] = user
     save_users(users)
     
@@ -1743,15 +1732,9 @@ def check_admin_access():
     """
     has_access = is_admin_user(request)
     logged_in = session.get('username') is not None
-    must_change = False
-    if logged_in:
-        users = load_users()
-        user = users.get(session.get('username'), {})
-        must_change = user.get('must_change_password', False)
     return jsonify({
         'has_admin_access': has_access,
         'logged_in': logged_in,
-        'must_change_password': must_change,
     }), 200
 
 @app.route('/api/instances/delete-all', methods=['POST'])

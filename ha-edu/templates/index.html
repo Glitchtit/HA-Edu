@@ -1786,10 +1786,6 @@
         }
         
         function closeChangePasswordModal() {
-            // Don't allow closing if must_change_password
-            {% if must_change_password %}
-            return;
-            {% endif %}
             document.getElementById('changePasswordModal').style.display = 'none';
         }
         
@@ -1826,11 +1822,8 @@
         });
         
         function checkMustChangePassword() {
-            {% if must_change_password %}
-            openChangePasswordModal();
-            // Hide cancel button when forced
-            document.getElementById('changePasswordCancelBtn').style.display = 'none';
-            {% endif %}
+            // No-op: forced password change on first login has been removed;
+            // Home Assistant Ingress handles authentication.
         }
         
         // Teacher settings modal
