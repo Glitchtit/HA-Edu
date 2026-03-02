@@ -100,6 +100,12 @@ _temp_container_semaphore = threading.Semaphore(5)
 _onboarding_cache = {}
 _onboarding_cache_lock = threading.Lock()
 
+# Cache for HA user role lookups via Supervisor API
+# Key: ha_user_id, Value: (timestamp, role_string)
+_ha_role_cache = {}
+_ha_role_cache_lock = threading.Lock()
+HA_ROLE_CACHE_TTL = 300  # seconds
+
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
 BASE_PORT = int(os.getenv('BASE_PORT', '8124'))
@@ -1019,6 +1025,59 @@ def can_create_instance(request, instances):
     can_create = user_instance_count < MAX_INSTANCES
     return can_create, user_instance_count, MAX_INSTANCES
 
+def _fetch_ha_user_role(ha_user_name):
+    """Determine the app role for an HA user by querying the Supervisor API.
+
+    Calls ``GET /auth/list`` on the Supervisor to retrieve the list of HA
+    users and checks whether *ha_user_name* is an Owner or belongs to the
+    Administrators group (``system-admin``).
+
+    Results are cached in memory for ``HA_ROLE_CACHE_TTL`` seconds to avoid
+    calling the Supervisor API on every request.
+
+    Returns:
+        str: ``'admin'`` if the user is an Owner or Administrator,
+             ``'user'`` otherwise (including on API errors).
+    """
+    if not ha_user_name:
+        return 'user'
+
+    # Check cache first
+    now = time.time()
+    with _ha_role_cache_lock:
+        if ha_user_name in _ha_role_cache:
+            cached_time, cached_role = _ha_role_cache[ha_user_name]
+            if now - cached_time < HA_ROLE_CACHE_TTL:
+                return cached_role
+
+    supervisor_token = os.environ.get('SUPERVISOR_TOKEN')
+    if not supervisor_token:
+        return 'user'
+
+    role = 'user'
+    try:
+        resp = requests.get(
+            'http://supervisor/auth/list',
+            headers={'Authorization': f'Bearer {supervisor_token}'},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            data = resp.json().get('data', {})
+            for u in data.get('users', []):
+                if u.get('username') == ha_user_name:
+                    group_ids = u.get('group_ids') or []
+                    if u.get('is_owner') or 'system-admin' in group_ids:
+                        role = 'admin'
+                    break
+    except Exception:
+        logger.debug('Failed to fetch HA user list from Supervisor API')
+
+    with _ha_role_cache_lock:
+        _ha_role_cache[ha_user_name] = (now, role)
+
+    return role
+
+
 def _resolve_ha_user(ha_user_id, ha_user_name, ha_display_name):
     """Map a Home Assistant user to an app user account.
 
@@ -1026,14 +1085,30 @@ def _resolve_ha_user(ha_user_id, ha_user_name, ha_display_name):
     found a new account is created automatically.  The HA display-name is
     used to derive a human-friendly app username.
 
+    When running inside the HA Supervisor environment the function also
+    queries the Supervisor API to check whether the HA user is an Owner or
+    belongs to the Administrators group.  If so the app account is given the
+    ``admin`` role so that admin tools are accessible.
+
     Returns:
         str: The app username that corresponds to the HA user.
     """
     users = load_users()
 
+    # Determine the correct role based on HA group membership
+    ha_role = _fetch_ha_user_role(ha_user_name)
+
     # 1. Check if an existing app user is already linked to this HA user ID
     for uname, u in users.items():
         if u.get('ha_user_id') == ha_user_id:
+            # Update role if it has changed (e.g. user was promoted/demoted in HA)
+            if u.get('created_via') == 'ingress_auto' and u.get('role') != ha_role:
+                u['role'] = ha_role
+                save_users(users)
+                logger.info(
+                    'Updated role for app user "%s" to "%s" based on HA groups',
+                    uname, ha_role,
+                )
             return uname
 
     # 2. No mapping yet – create a new app account
@@ -1056,7 +1131,7 @@ def _resolve_ha_user(ha_user_id, ha_user_name, ha_display_name):
 
     users[username] = {
         'password_hash': hash_password(secrets.token_urlsafe(32)),
-        'role': 'user',
+        'role': ha_role,
         'ha_user_id': ha_user_id,
         'ha_user_name': ha_user_name,
         'ha_display_name': ha_display_name,
@@ -1065,8 +1140,8 @@ def _resolve_ha_user(ha_user_id, ha_user_name, ha_display_name):
     }
     save_users(users)
     logger.info(
-        'Created app user "%s" for HA user %s (id=%s)',
-        username, ha_display_name or ha_user_name, ha_user_id,
+        'Created app user "%s" (role=%s) for HA user %s (id=%s)',
+        username, ha_role, ha_display_name or ha_user_name, ha_user_id,
     )
     return username
 
