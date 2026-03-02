@@ -10,6 +10,7 @@ http:
     - 172.17.0.0/16    # Trust the entire Docker bridge network
     - 172.30.0.0/16    # Trust the HA supervisor/add-on network
     - 192.168.50.0/24  # Trust your LAN
+    - 192.168.0.0/24
 # Enable demo mode with predefined entities
 # This automatically creates lights, climate, weather, camera, and other demo entities
 demo:
