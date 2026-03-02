@@ -1168,6 +1168,13 @@ def create_instance():
         # Copy master configuration to the volume before starting the container
         copy_master_config_to_volume(volume_name)
         
+        # Pull the latest HA image to ensure new instances use the newest version
+        try:
+            logger.info(f'Pulling latest image: {HA_IMAGE}')
+            client.images.pull(HA_IMAGE)
+        except docker.errors.APIError as e:
+            logger.warning(f'Failed to pull latest image, using cached version: {e}')
+        
         # Network configuration: Create container with bridge network for internet access
         # but isolated from host LAN. This works with Cloudflare tunnel setup.
         container = client.containers.run(
@@ -1401,6 +1408,13 @@ def reset_instance(server_name):
         
         # Copy master configuration to the volume before starting the container
         copy_master_config_to_volume(volume_name)
+        
+        # Pull the latest HA image to ensure reset instances use the newest version
+        try:
+            logger.info(f'Pulling latest image: {HA_IMAGE}')
+            client.images.pull(HA_IMAGE)
+        except docker.errors.APIError as e:
+            logger.warning(f'Failed to pull latest image, using cached version: {e}')
         
         # Create a new container with the same configuration
         # Network configuration: Use bridge network for isolation from host LAN
