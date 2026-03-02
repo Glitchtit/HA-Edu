@@ -24,7 +24,7 @@ ports:
 ports_description:
   5000/tcp: "Web interface (not needed when using ingress)"
 options:
-  BASE_PORT: 8123
+  BASE_PORT: 8124
   HA_IMAGE: "ghcr.io/home-assistant/home-assistant:stable"
   LOG_RETENTION_DAYS: 90
   DOCKER_HOST_IP: "172.30.32.1"

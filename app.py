@@ -102,7 +102,7 @@ _onboarding_cache_lock = threading.Lock()
 
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
-BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
+BASE_PORT = int(os.getenv('BASE_PORT', '8124'))
 # MAX_INSTANCES removed - no limit on instances, ports assigned dynamically
 HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 # Maximum instances for non-admin users (0 or None means unlimited)

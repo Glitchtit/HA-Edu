@@ -14,7 +14,7 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 - 📝 **Interaction Logging**: Comprehensive logging of all user and admin interactions (create, delete, access, etc.)
 - 🔒 **GDPR Compliance**: Automatic log retention with 90-day maximum (configurable)
 - 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
-- 🔄 **Automatic Port Assignment**: Dynamically assigns ports starting from BASE_PORT (default: 8123)
+- 🔄 **Automatic Port Assignment**: Dynamically assigns ports starting from BASE_PORT (default: 8124)
 - ♻️ **Port Reuse**: Automatically reuses ports from deleted instances
 - 🌐 **Network Isolation**: Instances have internet access but are isolated from host LAN
 - 📱 **Responsive UI**: Clean, modern interface that works on all devices
@@ -80,7 +80,7 @@ docker-compose up -d
      - Container Path: `/var/run/docker.sock` → Host Path: `/var/run/docker.sock`
      - Container Path: `/data` → Host Path: `/mnt/user/appdata/ha-edu`
    - **Environment Variables**:
-     - `BASE_PORT`: `8123` (starting port for instances, assigned dynamically)
+     - `BASE_PORT`: `8124` (starting port for instances, assigned dynamically)
      - `HA_IMAGE`: `ghcr.io/home-assistant/home-assistant:stable`
      - `ADMIN_PASSWORD`: (optional) Admin password for reset functionality
      - `ADMINS`: (optional) Comma-separated list of email addresses for admin access via Cloudflare Zero Trust
@@ -156,7 +156,7 @@ docker run -d \
   -p 5000:5000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v $(pwd)/data:/data \
-  -e BASE_PORT=8123 \
+  -e BASE_PORT=8124 \
   ha-edu-portal
 ```
 
@@ -219,7 +219,7 @@ Environment variables can be configured to customize the portal:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_PORT` | `8123` | Starting port number for HA instances (dynamically assigned) |
+| `BASE_PORT` | `8124` | Starting port number for HA instances (dynamically assigned) |
 | `DATA_FILE` | `/data/instances.json` | Path to store instance data |
 | `LOG_DIR` | `/logs` | Path to store interaction logs |
 | `LOG_RETENTION_DAYS` | `90` | **GDPR Compliance**: Maximum days to retain logs. Set to `0` for unlimited retention |
@@ -278,9 +278,9 @@ When an instance is created or reset, this master configuration is automatically
 
 Ports are assigned dynamically for internal container communication:
 - Portal UI: `5000` (exposed externally)
-- HA Instance 1: `8123` (BASE_PORT, internal only)
-- HA Instance 2: `8124` (BASE_PORT + 1, internal only)
-- HA Instance 3: `8125` (BASE_PORT + 2, internal only)
+- HA Instance 1: `8124` (BASE_PORT, internal only)
+- HA Instance 2: `8125` (BASE_PORT + 1, internal only)
+- HA Instance 3: `8126` (BASE_PORT + 2, internal only)
 - ... and so on
 
 When an instance is deleted, its port becomes available for reuse by new instances.

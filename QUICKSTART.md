@@ -39,7 +39,7 @@ docker-compose up -d
 - Container Path: `/data` → Host Path: `/mnt/user/appdata/ha-edu/data`
 
 **Environment Variables:**
-- `BASE_PORT`: `8123` (starting port for dynamic assignment)
+- `BASE_PORT`: `8124` (starting port for dynamic assignment)
 - `HA_IMAGE`: `ghcr.io/home-assistant/home-assistant:stable`
 - `ADMIN_PASSWORD`: (optional) For admin reset functionality
 
@@ -61,7 +61,7 @@ docker run -d \
   -p 5000:5000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v $(pwd)/data:/data \
-  -e BASE_PORT=8123 \
+  -e BASE_PORT=8124 \
   -e HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable \
   ha-edu-portal
 ```
@@ -108,11 +108,11 @@ If the teacher access feature is enabled (by setting `TEACHER_USERNAME` and `TEA
 
 ## Port Management
 
-The portal dynamically assigns ports starting from BASE_PORT (default: 8123):
+The portal dynamically assigns ports starting from BASE_PORT (default: 8124):
 - **Portal UI**: Port 5000
-- **Instance 1**: Port 8123
-- **Instance 2**: Port 8124
-- **Instance 3**: Port 8125
+- **Instance 1**: Port 8124
+- **Instance 2**: Port 8125
+- **Instance 3**: Port 8126
 - **... and so on**
 
 When an instance is deleted, its port becomes available for reuse by new instances.
@@ -128,7 +128,7 @@ When an instance is deleted, its port becomes available for reuse by new instanc
 
 Ensure the following ports are accessible:
 - Port 5000 (Portal UI)
-- Ports starting from 8123 onwards (dynamically assigned HA instances)
+- Ports starting from 8124 onwards (dynamically assigned HA instances)
 - For Cloudflare tunnel: Only port 5000 needs to be accessible to cloudflared
 
 ## Troubleshooting
@@ -155,7 +155,7 @@ Ensure the following ports are accessible:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_PORT` | `8123` | Starting port for dynamic instance assignment |
+| `BASE_PORT` | `8124` | Starting port for dynamic instance assignment |
 | `DATA_FILE` | `/data/instances.json` | Instance metadata storage path |
 | `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant image |
 | `ADMIN_PASSWORD` | (empty) | Optional admin password for reset functionality |
