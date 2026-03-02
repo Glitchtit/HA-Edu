@@ -28,16 +28,16 @@ options:
   HA_IMAGE: "ghcr.io/home-assistant/home-assistant:stable"
   LOG_RETENTION_DAYS: 90
   DOCKER_HOST_IP: "172.30.32.1"
+  MAX_INSTANCES: 0
+  ONBOARDING_CACHE_TTL: 60
 schema:
   BASE_PORT: int
   HA_IMAGE: str
   LOG_RETENTION_DAYS: int
   DOCKER_HOST_IP: str
-  ADMIN_PASSWORD: "str?"
-  TEACHER_USERNAME: "str?"
-  TEACHER_PASSWORD: "str?"
-  MAX_INSTANCES: "int?"
-  ONBOARDING_CACHE_TTL: "int?"
+  MAX_INSTANCES: int
+  ONBOARDING_CACHE_TTL: int
+  SECRET_KEY: "str?"
 environment:
   DATA_FILE: /data/instances.json
   LOG_DIR: /data/logs

@@ -6,30 +6,28 @@ set -e
 # Reads options from the HA Supervisor and starts Gunicorn
 # -------------------------------------------------------
 
-# Export add-on options as environment variables
-export BASE_PORT
-export HA_IMAGE
-export LOG_RETENTION_DAYS
-export DOCKER_HOST_IP
 export DATA_FILE="${DATA_FILE:-/data/instances.json}"
 export LOG_DIR="${LOG_DIR:-/data/logs}"
 
 CONFIG_PATH="/data/options.json"
 
 if [ -f "$CONFIG_PATH" ]; then
-    BASE_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('BASE_PORT', 8123))")
-    HA_IMAGE=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable'))")
-    LOG_RETENTION_DAYS=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('LOG_RETENTION_DAYS', 90))")
-    DOCKER_HOST_IP=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('DOCKER_HOST_IP', '172.30.32.1'))")
-
-    # Optional settings
-    ADMIN_PASSWORD=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('ADMIN_PASSWORD', ''))")
-    TEACHER_USERNAME=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('TEACHER_USERNAME', ''))")
-    TEACHER_PASSWORD=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('TEACHER_PASSWORD', ''))")
-    MAX_INSTANCES=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('MAX_INSTANCES', 0))")
-    ONBOARDING_CACHE_TTL=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('ONBOARDING_CACHE_TTL', 60))")
-
-    export ADMIN_PASSWORD TEACHER_USERNAME TEACHER_PASSWORD MAX_INSTANCES ONBOARDING_CACHE_TTL
+    export BASE_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('BASE_PORT', 8123))")
+    export HA_IMAGE=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable'))")
+    export LOG_RETENTION_DAYS=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('LOG_RETENTION_DAYS', 90))")
+    export DOCKER_HOST_IP=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('DOCKER_HOST_IP', '172.30.32.1'))")
+    export MAX_INSTANCES=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('MAX_INSTANCES', 0))")
+    export ONBOARDING_CACHE_TTL=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('ONBOARDING_CACHE_TTL', 60))")
+    export SECRET_KEY=$(python3 -c "import json; print(json.load(open('$CONFIG_PATH')).get('SECRET_KEY', ''))")
+else
+    # Fallback defaults when no options.json exists
+    export BASE_PORT="${BASE_PORT:-8123}"
+    export HA_IMAGE="${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:stable}"
+    export LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-90}"
+    export DOCKER_HOST_IP="${DOCKER_HOST_IP:-172.30.32.1}"
+    export MAX_INSTANCES="${MAX_INSTANCES:-0}"
+    export ONBOARDING_CACHE_TTL="${ONBOARDING_CACHE_TTL:-60}"
+    export SECRET_KEY="${SECRET_KEY:-}"
 fi
 
 # Ensure data directories exist
