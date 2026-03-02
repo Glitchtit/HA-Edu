@@ -1570,7 +1570,7 @@ def auth_register():
         return jsonify({'error': 'Password must be at least 4 characters'}), 400
     
     if not re.match(r'^[a-zA-Z0-9_\-]+$', username):
-        return jsonify({'error': 'Username may only contain letters, numbers, hyphens and underscores'}), 400
+        return jsonify({'error': 'Username may only contain letters, numbers, underscores, and hyphens'}), 400
     
     users = load_users()
     
@@ -1638,7 +1638,7 @@ def auth_change_password():
     # If a new username is provided and it differs, rename the account
     if new_username and new_username != username:
         if not re.match(r'^[a-zA-Z0-9_\-]+$', new_username):
-            return jsonify({'error': 'Username may only contain letters, numbers, hyphens and underscores'}), 400
+            return jsonify({'error': 'Username may only contain letters, numbers, underscores, and hyphens'}), 400
         if new_username in users:
             return jsonify({'error': 'Username already taken'}), 409
         # Move the user entry to the new key
