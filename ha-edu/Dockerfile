@@ -3,9 +3,14 @@ FROM ${BUILD_FROM}
 
 WORKDIR /app
 
+# Ensure Python3 and pip are available (needed if base image is Alpine without Python)
+RUN if ! command -v pip3 >/dev/null 2>&1 && ! command -v pip >/dev/null 2>&1; then \
+      apk add --no-cache python3 py3-pip; \
+    fi
+
 # Install required packages
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt || pip3 install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY wsgi.py .
