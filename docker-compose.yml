@@ -14,12 +14,13 @@ services:
       - ./logs:/logs
     environment:
       - BASE_PORT=8123
-      # MAX_INSTANCES removed - no limit, ports assigned dynamically
       - DATA_FILE=/data/instances.json
       - LOG_DIR=/logs
       - LOG_RETENTION_DAYS=90  # GDPR compliance: automatic log cleanup after 90 days
       - HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - MAX_INSTANCES=${MAX_INSTANCES:-0}
+      - ONBOARDING_CACHE_TTL=${ONBOARDING_CACHE_TTL:-60}
+      - SECRET_KEY=${SECRET_KEY:-}
       # Docker host IP for accessing instance containers
       # Use 'host.docker.internal' on Docker Desktop (Mac/Windows)
       # Use 'localhost' when running portal directly on host (not in Docker)
@@ -34,7 +35,6 @@ services:
     # Network isolation: Portal can access Docker socket to manage containers
     # Created HA containers use bridge network (isolated from host LAN)
     # Internet access via NAT, LAN devices not accessible
-    # Access via Cloudflare tunnel (edu.wredlund.fi) for external connectivity
 
 networks:
   ha-edu-network:

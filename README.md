@@ -21,7 +21,21 @@ A web-based portal for managing multiple Home Assistant demo instances for educa
 - ☁️ **Cloudflare Tunnel Ready**: Designed to work with Cloudflare tunnel for secure external access
 - 🔀 **Built-in Proxy**: Access all instances through a single endpoint without exposing individual ports
 
-## Quick Start
+## Installation on Home Assistant OS (Recommended)
+
+The portal runs as a native Home Assistant add-on and appears in the sidebar as **HA-Edu**.
+
+1. In Home Assistant go to **Settings → Add-ons → Add-on Store**.
+2. Click the three-dot menu (⋮) in the top-right corner and choose **Repositories**.
+3. Paste the repository URL and click **Add**:
+   ```
+   https://github.com/Glitchtit/HA-Edu
+   ```
+4. The **HA-Edu** add-on will appear in the store – click it, then click **Install**.
+5. After installation, open the **Configuration** tab to set options (admin password, HA image, etc.).
+6. Start the add-on. It will be available in the sidebar as **HA-Edu**.
+
+## Quick Start (Standalone Docker)
 
 ### Prerequisites
 
@@ -323,19 +337,25 @@ python app.py
 
 ```
 HA-Edu/
-├── app.py                        # Main Flask application with proxy
-├── master_configuration.yaml     # Master HA config with demo entities
-├── templates/
-│   └── index.html               # Web UI template
-├── static/                      # Static assets (if needed)
-├── Dockerfile                   # Container definition
-├── docker-compose.yml           # Compose configuration
-├── requirements.txt             # Python dependencies
-├── test_app.py                  # Application tests
-├── test_proxy.py                # Proxy functionality tests
-├── test_proxy_integration.py    # Proxy integration tests
-├── test_master_config.py        # Master configuration tests
-└── README.md                    # This file
+├── repository.yaml               # HA add-on repository metadata
+├── ha-edu/                       # Home Assistant add-on package
+│   ├── config.yaml               # Add-on configuration (ingress, sidebar)
+│   ├── Dockerfile                # Add-on Docker build
+│   ├── build.yaml                # Multi-architecture build config
+│   ├── run.sh                    # Add-on entrypoint
+│   ├── CHANGELOG.md              # Add-on version history
+│   ├── app.py                    # Main Flask application
+│   ├── wsgi.py                   # WSGI entry point
+│   ├── interaction_logger.py     # Audit logging
+│   ├── requirements.txt          # Python dependencies
+│   ├── master_configuration.yaml # Master HA demo config
+│   └── templates/                # HTML templates
+├── app.py                        # Main Flask application (standalone)
+├── Dockerfile                    # Standalone Docker build
+├── docker-compose.yml            # Standalone Compose configuration
+├── requirements.txt              # Python dependencies
+├── test_*.py                     # Test files
+└── README.md                     # This file
 ```
 
 ## License
