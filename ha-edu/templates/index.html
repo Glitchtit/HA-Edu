@@ -1168,7 +1168,7 @@
                     {% endif %}
                     <div class="instance-actions">
                         <div class="instance-actions-row">
-                            <a href="{{ ingress_path }}/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                            <a href="{{ ingress_path }}/proxy/{{ instance.port }}/" onclick="openInstance(event, {{ instance.port }})" target="_blank" rel="noopener" class="btn-access">Öppna</a>
                             <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">Starta om</button>
                             {% if is_admin %}
                             <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
@@ -1495,6 +1495,17 @@
         // Derive base path from the current page URL so API calls work both
         // when running standalone and through Home Assistant ingress proxy.
         const basePath = window.location.pathname.replace(/\/$/, '');
+
+        // Open student HA instance directly at its host port in a new tab.
+        // This bypasses the ingress/proxy path so the HA frontend's client-side
+        // routing (history.pushState to /home/overview etc.) stays within the
+        // student instance origin instead of escaping to the main HA UI.
+        function openInstance(event, port) {
+            event.preventDefault();
+            port = Number(port);
+            if (!Number.isInteger(port) || port < 1 || port > 65535) return;
+            window.open(window.location.protocol + '//' + window.location.hostname + ':' + port + '/', '_blank');
+        }
 
         let currentResetServer = null;
         let currentDeleteServer = null;

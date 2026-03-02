@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- Fix "Öppna" button redirecting to the main Home Assistant dashboard (`/home/overview`) instead of showing the student instance. The button now opens the student HA directly at its host port, bypassing the ingress proxy so that the HA frontend's client-side routing stays within the student instance.
+
 ## 1.1.1
 
 - Fix proxy 400 Bad Request error by not forwarding `X-Forwarded-*` and `X-Ingress-Path` headers to downstream Home Assistant instances (HA rejects these from untrusted proxies)
