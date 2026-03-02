@@ -101,7 +101,7 @@ _onboarding_cache = {}
 _onboarding_cache_lock = threading.Lock()
 
 # Cache for HA user role lookups via Supervisor API
-# Key: ha_user_id, Value: (timestamp, role_string)
+# Key: ha_user_name, Value: (timestamp, role_string)
 _ha_role_cache = {}
 _ha_role_cache_lock = threading.Lock()
 HA_ROLE_CACHE_TTL = 300  # seconds
