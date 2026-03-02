@@ -82,7 +82,7 @@ services:
     environment:
       - ADMIN_PASSWORD=SecurePassword123
       - ADMINS=admin@school.edu,teacher1@school.edu,teacher2@school.edu
-      - BASE_PORT=8123
+      - BASE_PORT=8124
     ports:
       - "5000:5000"
     volumes:
