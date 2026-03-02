@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1
+
+- Reduce HA role cache TTL from 300s to 30s so admin promotions and demotions in Home Assistant propagate to the app more quickly
+
 ## 1.6.0
 
 - Grant admin access to HA users in the Owner or Administrators group: on each Ingress login the add-on queries the Supervisor API (`GET /auth/list`) and sets the app role to `admin` for users whose HA account is Owner or belongs to the `system-admin` group

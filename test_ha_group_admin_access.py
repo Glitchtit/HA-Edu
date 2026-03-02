@@ -247,6 +247,73 @@ def test_role_updated_on_subsequent_login():
         _teardown(data_file)
 
 
+def test_role_demoted_on_subsequent_login():
+    """If an admin user is demoted in HA, their app role should revert to user."""
+    print('Test: Role demoted on subsequent login …')
+    data_file = _setup()
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+        app_mod._ha_role_cache.clear()
+
+        # First login: admin user
+        supervisor_users_admin = [
+            {'username': 'DemotedUser', 'is_owner': False, 'is_active': True,
+             'group_ids': ['system-admin'], 'name': 'Demoted User'},
+        ]
+        with patch('app.requests.get', return_value=_mock_supervisor_response(supervisor_users_admin)):
+            client = app_mod.app.test_client()
+            client.get(
+                '/',
+                headers={
+                    'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                    'X-Remote-User-Id': 'ha-demoted-001',
+                    'X-Remote-User-Name': 'DemotedUser',
+                    'X-Remote-User-Display-Name': 'Demoted User',
+                },
+            )
+
+        users = app_mod.load_users()
+        demoted_user = next(
+            (u for u in users.values() if u.get('ha_user_id') == 'ha-demoted-001'),
+            None,
+        )
+        assert demoted_user['role'] == 'admin', 'Should start as admin'
+
+        # Second login: now demoted to regular user
+        app_mod._ha_role_cache.clear()
+        supervisor_users_regular = [
+            {'username': 'DemotedUser', 'is_owner': False, 'is_active': True,
+             'group_ids': ['system-users'], 'name': 'Demoted User'},
+        ]
+        with patch('app.requests.get', return_value=_mock_supervisor_response(supervisor_users_regular)):
+            client2 = app_mod.app.test_client()
+            client2.get(
+                '/',
+                headers={
+                    'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                    'X-Remote-User-Id': 'ha-demoted-001',
+                    'X-Remote-User-Name': 'DemotedUser',
+                    'X-Remote-User-Display-Name': 'Demoted User',
+                },
+            )
+
+        users = app_mod.load_users()
+        demoted_user = next(
+            (u for u in users.values() if u.get('ha_user_id') == 'ha-demoted-001'),
+            None,
+        )
+        assert demoted_user['role'] == 'user', (
+            f'Role should be demoted to user, got "{demoted_user["role"]}"'
+        )
+        print('  ✓ Role demoted from admin to user on subsequent login')
+    finally:
+        _teardown(data_file)
+
+
 def test_api_failure_defaults_to_user_role():
     """If the Supervisor API call fails, default to user role."""
     print('Test: API failure defaults to user role …')
@@ -317,6 +384,7 @@ if __name__ == '__main__':
         test_administrator_gets_admin_role,
         test_regular_user_gets_user_role,
         test_role_updated_on_subsequent_login,
+        test_role_demoted_on_subsequent_login,
         test_api_failure_defaults_to_user_role,
         test_no_supervisor_token_defaults_to_user,
     ]:
