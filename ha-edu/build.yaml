@@ -1,4 +1,4 @@
 build_from:
-  amd64: "python:3.11-slim"
-  aarch64: "python:3.11-slim"
-  armv7: "python:3.11-slim"
+  amd64: "docker.io/library/python:3.11-slim"
+  aarch64: "docker.io/library/python:3.11-slim"
+  armv7: "docker.io/library/python:3.11-slim"
