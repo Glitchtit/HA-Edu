@@ -1025,13 +1025,12 @@ def _ingress_auto_auth():
     """Auto-authenticate users coming through Home Assistant Ingress.
 
     When the add-on is accessed via Ingress the HA Supervisor has already
-    authenticated the user and injects an ``Authorization: Bearer <token>``
-    header.  We trust this combination of headers **only** when the
-    ``SUPERVISOR_TOKEN`` environment variable is present, which proves we
-    are running inside the HA Supervisor environment where the ingress
-    proxy is the sole entry-point.  The add-on port is not exposed by
-    default (``5000/tcp: null``), so external clients cannot reach the
-    application to spoof these headers.
+    authenticated the user.  We trust the ``X-Ingress-Path`` header
+    **only** when the ``SUPERVISOR_TOKEN`` environment variable is present,
+    which proves we are running inside the HA Supervisor environment where
+    the ingress proxy is the sole entry-point.  The add-on port is not
+    exposed by default (``5000/tcp: null``), so external clients cannot
+    reach the application to spoof these headers.
     """
     # Only apply when running inside the HA Supervisor environment
     if not os.environ.get('SUPERVISOR_TOKEN'):
@@ -1043,11 +1042,6 @@ def _ingress_auto_auth():
 
     # Already logged in – nothing to do
     if session.get('username'):
-        return
-
-    # Supervisor injects 'Authorization: Bearer <token>'
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
         return
 
     # HA has already validated the user; auto-login as the first admin account
@@ -1111,6 +1105,7 @@ def index():
     # Pass admin status, user_has_instance, and max instances info to template
     # X-Ingress-Path is set by Home Assistant when the add-on is accessed through ingress
     ingress_path = request.headers.get('X-Ingress-Path', '')
+    ingress_mode = bool(os.environ.get('SUPERVISOR_TOKEN') and ingress_path)
     return render_template('index.html', 
                          instances=instances, 
                          is_admin=is_admin,
@@ -1121,7 +1116,8 @@ def index():
                          max_instances=max_allowed,
                          user_instance_count=user_count,
                          create_button_tooltip=create_button_tooltip,
-                         ingress_path=ingress_path)
+                         ingress_path=ingress_path,
+                         ingress_mode=ingress_mode)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():

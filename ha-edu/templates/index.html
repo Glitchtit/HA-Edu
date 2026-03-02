@@ -1233,7 +1233,7 @@
 </head>
 <body>
     <div class="container">
-        {% if not logged_in %}
+        {% if not logged_in and not ingress_mode %}
         <!-- Login/Register Overlay -->
         <div id="loginOverlay" class="login-overlay">
             <div class="login-card">
@@ -1285,7 +1285,7 @@
             <div class="user-bar">
                 <span>👤 {{ username }}</span>
                 {% if is_admin %}<span style="background:var(--color-primary);color:white;padding:0.2rem 0.5rem;border-radius:9999px;font-size:0.75rem;">Admin</span>{% endif %}
-                <button onclick="logout()">Logga ut</button>
+                {% if not ingress_mode %}<button onclick="logout()">Logga ut</button>{% endif %}
             </div>
             {% endif %}
         </header>
@@ -1716,7 +1716,7 @@
             }
         }
         
-        {% if not logged_in %}
+        {% if not logged_in and not ingress_mode %}
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const msgDiv = document.getElementById('loginMessage');
