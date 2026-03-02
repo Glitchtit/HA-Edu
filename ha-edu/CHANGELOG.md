@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+
+- Auto-authenticate users arriving through Home Assistant Ingress by reading the `Authorization: Bearer` token that the Supervisor injects, removing the need for a separate login step
+- Enable `auth_api` in the add-on manifest so the Supervisor validates users before forwarding requests
+
 ## 1.2.1
 
 - Make the add-on sidebar panel visible to non-admin Home Assistant users by setting `panel_admin: false`
