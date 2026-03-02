@@ -1028,6 +1028,8 @@ def index():
         must_change_password = user.get('must_change_password', False)
     
     # Pass admin status, user_has_instance, and max instances info to template
+    # X-Ingress-Path is set by Home Assistant when the add-on is accessed through ingress
+    ingress_path = request.headers.get('X-Ingress-Path', '')
     return render_template('index.html', 
                          instances=instances, 
                          is_admin=is_admin,
@@ -1037,7 +1039,8 @@ def index():
                          user_has_instance=user_has_instance,
                          max_instances=max_allowed,
                          user_instance_count=user_count,
-                         create_button_tooltip=create_button_tooltip)
+                         create_button_tooltip=create_button_tooltip,
+                         ingress_path=ingress_path)
 
 @app.route('/api/instances', methods=['GET'])
 def get_instances():
@@ -2223,6 +2226,9 @@ def proxy(port, path):
     exposing individual instance ports. All traffic goes through the 
     portal's single endpoint (port 5000).
     """
+    # X-Ingress-Path is set by Home Assistant when the add-on is accessed through ingress
+    ingress_path = request.headers.get('X-Ingress-Path', '')
+    
     # Store the port in session for fallback requests
     session['proxy_port'] = port
     
@@ -2356,9 +2362,9 @@ def proxy(port, path):
                 if key.lower() == 'location':
                     original_value = value
                     # Check if this is a relative path (starts with /) and not already prefixed
-                    if value.startswith('/') and not value.startswith(f'/proxy/{port}/'):
-                        # Rewrite to include /proxy/{port}/ prefix
-                        value = f'/proxy/{port}{value}'
+                    if value.startswith('/') and not value.startswith(f'{ingress_path}/proxy/{port}/'):
+                        # Rewrite to include ingress path and /proxy/{port}/ prefix
+                        value = f'{ingress_path}/proxy/{port}{value}'
                         logger.debug(f'Rewrote Location header to: {value}')
                     # Handle absolute URLs that point to the backend instance
                     # This prevents users from being kicked back to the app index after onboarding
@@ -2394,7 +2400,7 @@ def proxy(port, path):
                             if parsed.fragment:
                                 path_to_rewrite += f'#{parsed.fragment}'
                             # Rewrite to proxy path
-                            value = f'/proxy/{port}{path_to_rewrite}'
+                            value = f'{ingress_path}/proxy/{port}{path_to_rewrite}'
                             logger.debug(f'Rewrote absolute URL Location header from {original_value} to: {value}')
                 response_headers.append((key, value))
         
@@ -2437,7 +2443,8 @@ def proxy(port, path):
                 
                 # Inject a <base> tag right after <head> to set the base URL for relative paths
                 # This tells the browser that all relative URLs should be resolved relative to /proxy/{port}/
-                base_tag = f'<base href="/proxy/{port}/">'
+                # When running through Home Assistant ingress, include the ingress path prefix
+                base_tag = f'<base href="{ingress_path}/proxy/{port}/">'
                 
                 # Use a simple string search and replace to avoid ReDoS
                 # Look for <head> or <head attributes> (case-insensitive)
