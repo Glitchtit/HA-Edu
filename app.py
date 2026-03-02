@@ -1532,7 +1532,7 @@ def restart_instance(server_name):
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
     """Log in with username and password"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     username = data.get('username', '').strip()
     password = data.get('password', '')
     
@@ -1556,7 +1556,7 @@ def auth_login():
 @app.route('/api/auth/register', methods=['POST'])
 def auth_register():
     """Create a new user account"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     username = data.get('username', '').strip()
     password = data.get('password', '')
     
@@ -1620,7 +1620,7 @@ def auth_change_password():
     if not username:
         return jsonify({'error': 'Not logged in'}), 401
     
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     new_username = data.get('new_username', '').strip()
     new_password = data.get('new_password', '')
     
