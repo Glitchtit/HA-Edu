@@ -1,0 +1,46 @@
+name: "HA-Edu"
+description: "Educational portal for Home Assistant – manage student HA instances"
+version: "1.0.0"
+slug: "ha-edu"
+url: "https://github.com/Glitchtit/HA-Edu"
+arch:
+  - amd64
+  - aarch64
+  - armv7
+startup: application
+boot: auto
+ingress: true
+ingress_port: 5000
+panel_icon: "mdi:school"
+panel_title: "HA-Edu"
+homeassistant_api: false
+hassio_api: false
+auth_api: false
+map:
+  - share:rw
+  - ssl:ro
+ports:
+  5000/tcp: null
+ports_description:
+  5000/tcp: "Web interface (not needed when using ingress)"
+options:
+  BASE_PORT: 8123
+  HA_IMAGE: "ghcr.io/home-assistant/home-assistant:stable"
+  LOG_RETENTION_DAYS: 90
+  DOCKER_HOST_IP: "172.30.32.1"
+schema:
+  BASE_PORT: int
+  HA_IMAGE: str
+  LOG_RETENTION_DAYS: int
+  DOCKER_HOST_IP: str
+  ADMIN_PASSWORD: "str?"
+  TEACHER_USERNAME: "str?"
+  TEACHER_PASSWORD: "str?"
+  MAX_INSTANCES: "int?"
+  ONBOARDING_CACHE_TTL: "int?"
+environment:
+  DATA_FILE: /data/instances.json
+  LOG_DIR: /data/logs
+privileged:
+  - SYS_ADMIN
+docker_api: true

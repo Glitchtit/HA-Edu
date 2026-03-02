@@ -1,0 +1,2220 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HA-Edu - Utbildningsportal för Home Assistant</title>
+    <style>
+        :root {
+            /* Brand Colors - Orange to Pink Gradient Palette */
+            --color-primary: oklch(0.65 0.22 35);        /* Vibrant orange */
+            --color-secondary: oklch(0.58 0.24 340);     /* Pink/Magenta */
+            --color-tertiary: oklch(0.70 0.18 25);       /* Lighter orange accent */
+            
+            /* Neutral Palette */
+            --color-black: oklch(0.20 0.02 265);
+            --color-gray-900: oklch(0.25 0.02 265);
+            --color-gray-800: oklch(0.35 0.01 265);
+            --color-gray-700: oklch(0.45 0.01 265);
+            --color-gray-300: oklch(0.90 0.01 265);
+            --color-gray-100: oklch(0.96 0.01 265);
+            
+            /* Semantic Colors */
+            --background: oklch(0.98 0.01 265);          /* Light neutral background */
+            --foreground: oklch(0.20 0.02 265);          /* Dark text */
+            --card: oklch(1.00 0 0);                     /* White cards */
+            --card-foreground: oklch(0.20 0.02 265);
+            
+            --border: oklch(0.90 0.01 265);
+            --input: oklch(0.90 0.01 265);
+            --ring: oklch(0.65 0.22 35);                 /* Orange focus ring */
+            
+            /* Sidebar */
+            --sidebar: oklch(0.98 0.01 265);
+            --sidebar-foreground: oklch(0.20 0.02 265);
+            --sidebar-primary: oklch(0.65 0.22 35);
+            --sidebar-accent: oklch(0.96 0.01 265);
+            --sidebar-border: oklch(0.90 0.01 265);
+            
+            /* Shadows with orange tint */
+            --shadow-color: oklch(0.65 0.22 35 / 0.15);
+            
+            /* Border Radius */
+            --radius: 1rem;
+            --radius-sm: 0.5rem;
+            --radius-lg: 1.5rem;
+        }
+        
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background: oklch(0.20 0.02 265);
+                --foreground: oklch(0.98 0.01 265);
+                --card: oklch(0.25 0.02 265);
+                --card-foreground: oklch(0.98 0.01 265);
+                --border: oklch(0.35 0.01 265);
+                --sidebar: oklch(0.25 0.02 265);
+                --sidebar-foreground: oklch(0.98 0.01 265);
+                --sidebar-accent: oklch(0.30 0.02 265);
+                --sidebar-border: oklch(0.35 0.01 265);
+            }
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+            background: linear-gradient(135deg, 
+                var(--color-black) 0%, 
+                var(--color-gray-900) 100%
+            );
+            padding: 2.5rem 1.5rem;
+            border-radius: var(--radius);
+        }
+        
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, 
+                var(--color-primary) 0%, 
+                var(--color-tertiary) 100%
+            );
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+        
+        header p {
+            font-size: 1rem;
+            color: var(--color-gray-300);
+        }
+        
+        /* Cards */
+        .controls {
+            background: var(--card);
+            color: var(--card-foreground);
+            padding: 1.25rem;
+            border-radius: var(--radius);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+        
+        .controls h2 {
+            margin-bottom: 1rem;
+            color: var(--foreground);
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+        
+        .controls-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        /* Button group for related actions */
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.5rem 0;
+        }
+        
+        /* Separator between button groups */
+        .btn-separator {
+            width: 1px;
+            height: 2rem;
+            background: var(--border);
+            margin: 0 0.5rem;
+        }
+        
+        /* Modern Button System */
+        
+        /* Base button styles */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-family: inherit;
+            font-size: 0.875rem;
+            font-weight: 500;
+            line-height: 1.25;
+            padding: 0.625rem 1.25rem;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        
+        .btn:focus-visible {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        
+        /* Primary Button - Main CTA */
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: oklch(0.58 0.22 35);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.65 0.22 35 / 0.35);
+        }
+        
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        /* Secondary Button - Supporting actions */
+        .btn-secondary {
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--color-gray-300);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        /* Success Button - Positive actions (Start, Open) */
+        .btn-success {
+            background: oklch(0.55 0.18 150);
+            color: white;
+        }
+        
+        .btn-success:hover:not(:disabled) {
+            background: oklch(0.48 0.18 150);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.55 0.18 150 / 0.35);
+        }
+        
+        /* Warning Button - Caution actions (Stop) */
+        .btn-warning {
+            background: oklch(0.70 0.15 75);
+            color: oklch(0.30 0.10 75);
+        }
+        
+        .btn-warning:hover:not(:disabled) {
+            background: oklch(0.65 0.15 75);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.70 0.15 75 / 0.35);
+        }
+        
+        /* Danger Button - Destructive actions */
+        .btn-danger {
+            background: oklch(0.55 0.20 25);
+            color: white;
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            background: oklch(0.48 0.22 25);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.55 0.20 25 / 0.35);
+        }
+        
+        /* Accent Button - Special actions (Teacher access) */
+        .btn-accent {
+            background: var(--color-secondary);
+            color: white;
+        }
+        
+        .btn-accent:hover:not(:disabled) {
+            background: oklch(0.52 0.24 340);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.58 0.24 340 / 0.35);
+        }
+        
+        /* Ghost Button - Minimal visual presence */
+        .btn-ghost {
+            background: transparent;
+            color: var(--foreground);
+            border: 1px solid transparent;
+        }
+        
+        .btn-ghost:hover:not(:disabled) {
+            background: var(--color-gray-100);
+            border-color: var(--border);
+        }
+        
+        /* Icon Button */
+        .btn-icon {
+            padding: 0.625rem;
+            min-width: 2.5rem;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--foreground);
+        }
+        
+        .btn-icon:hover:not(:disabled) {
+            background: var(--color-gray-100);
+            border-color: var(--color-gray-300);
+        }
+        
+        /* Button sizes */
+        .btn-sm {
+            font-size: 0.8125rem;
+            padding: 0.5rem 1rem;
+        }
+        
+        .btn-lg {
+            font-size: 1rem;
+            padding: 0.75rem 1.5rem;
+        }
+        
+        /* Legacy button mappings for compatibility */
+        .add-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--color-primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .add-button:hover:not(:disabled) {
+            background: oklch(0.58 0.22 35);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.65 0.22 35 / 0.35);
+        }
+        
+        .add-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-unlock {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+            font-size: 1.25rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .btn-unlock:hover {
+            background: var(--color-gray-300);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .btn-delete-all {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: oklch(0.55 0.20 25);
+            color: white;
+            border: none;
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+            border-radius: var(--radius-sm);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .btn-delete-all:hover:not(:disabled) {
+            background: oklch(0.48 0.22 25);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.55 0.20 25 / 0.35);
+        }
+        
+        .btn-start-all {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: oklch(0.55 0.18 150);
+            color: white;
+            border: none;
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+            border-radius: var(--radius-sm);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .btn-start-all:hover:not(:disabled) {
+            background: oklch(0.48 0.18 150);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.55 0.18 150 / 0.35);
+        }
+        
+        .btn-stop-all {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: oklch(0.70 0.15 75);
+            color: oklch(0.30 0.10 75);
+            border: none;
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+            border-radius: var(--radius-sm);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .btn-stop-all:hover:not(:disabled) {
+            background: oklch(0.65 0.15 75);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.70 0.15 75 / 0.35);
+        }
+        
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            cursor: pointer;
+            padding: 0.375rem 0.75rem;
+            background: var(--color-gray-100);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+        
+        .toggle-label {
+            color: var(--foreground);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .toggle-container input[type="checkbox"] {
+            display: none;
+        }
+        
+        .toggle-slider {
+            position: relative;
+            width: 2.75rem;
+            height: 1.5rem;
+            background: var(--color-gray-300);
+            border-radius: 9999px;
+            transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 1.125rem;
+            height: 1.125rem;
+            border-radius: 50%;
+            background: white;
+            top: 0.1875rem;
+            left: 0.1875rem;
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .toggle-container input[type="checkbox"]:checked + .toggle-slider {
+            background: var(--color-primary);
+        }
+        
+        .toggle-container input[type="checkbox"]:checked + .toggle-slider::before {
+            transform: translateX(1.25rem);
+        }
+        
+        .instance-count {
+            margin-top: 0.75rem;
+            color: var(--color-gray-700);
+            font-size: 0.875rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        .instances-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 1.25rem;
+            align-items: start;
+        }
+        
+        .instance-card {
+            background: var(--card);
+            color: var(--card-foreground);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--border);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        
+        .instance-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+            border-color: var(--color-gray-300);
+        }
+        
+        .instance-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+        
+        .instance-card h3 {
+            color: var(--foreground);
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+        
+        .btn-lock {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-gray-100);
+            border: 1px solid var(--border);
+            font-size: 1.125rem;
+            width: 2.25rem;
+            height: 2.25rem;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 0.5rem;
+            border-radius: var(--radius-sm);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            line-height: 1;
+        }
+        
+        .btn-lock:hover {
+            background: var(--color-gray-300);
+            transform: scale(1.05);
+        }
+        
+        .btn-lock.locked {
+            background: oklch(0.90 0.08 35);
+            border-color: oklch(0.70 0.15 35);
+        }
+        
+        .instance-info {
+            color: var(--color-gray-700);
+            font-size: 0.8125rem;
+            margin-bottom: 0.375rem;
+        }
+        
+        .instance-info strong {
+            color: var(--foreground);
+            font-weight: 500;
+        }
+        
+        .instance-actions {
+            margin-top: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .instance-actions-row {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .btn-access {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            background: oklch(0.55 0.18 150);
+            color: white;
+            border: none;
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            font-size: 0.8125rem;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
+        }
+        
+        .btn-access:hover:not(:disabled) {
+            background: oklch(0.48 0.18 150);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.55 0.18 150 / 0.35);
+        }
+        
+        .btn-delete {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            background: oklch(0.55 0.20 25);
+            color: white;
+            border: none;
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            font-size: 0.8125rem;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
+        }
+        
+        .btn-delete:hover:not(:disabled) {
+            background: oklch(0.48 0.22 25);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.55 0.20 25 / 0.35);
+        }
+        
+        .btn-reset {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            font-size: 0.8125rem;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
+        }
+        
+        .btn-reset:hover:not(:disabled) {
+            background: var(--color-gray-300);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .btn-reset:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-restart {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            font-size: 0.8125rem;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
+        }
+        
+        .btn-restart:hover:not(:disabled) {
+            background: var(--color-gray-300);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .btn-restart:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-teacher-access {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            background: var(--color-secondary);
+            color: white;
+            border: none;
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            font-size: 0.8125rem;
+            flex: 1;
+            text-align: center;
+            min-width: 0;
+        }
+        
+        /* Teacher access button in main controls (not in instance cards) */
+        .controls-row .btn-teacher-access {
+            flex: 0 0 auto;
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+        }
+        
+        .btn-teacher-access:hover:not(:disabled) {
+            background: oklch(0.52 0.24 340);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(0.58 0.24 340 / 0.35);
+        }
+        
+        .btn-teacher-access:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .teacher-access-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: oklch(0.92 0.08 340);
+            color: oklch(0.40 0.20 340);
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            margin-left: 0.5rem;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+        
+        .status-running {
+            background: oklch(0.92 0.10 145);
+            color: oklch(0.35 0.15 145);
+        }
+        
+        .status-stopped {
+            background: oklch(0.92 0.08 25);
+            color: oklch(0.45 0.15 25);
+        }
+        
+        .status-exited {
+            background: oklch(0.92 0.08 25);
+            color: oklch(0.45 0.15 25);
+        }
+        
+        .status-restarting {
+            background: oklch(0.92 0.10 75);
+            color: oklch(0.45 0.15 75);
+        }
+        
+        .status-paused {
+            background: oklch(0.92 0.04 265);
+            color: oklch(0.45 0.04 265);
+        }
+        
+        .status-created {
+            background: oklch(0.92 0.08 230);
+            color: oklch(0.45 0.12 230);
+        }
+        
+        .status-removing {
+            background: oklch(0.92 0.10 340);
+            color: oklch(0.45 0.15 340);
+        }
+        
+        .status-removed {
+            background: oklch(0.92 0.02 265);
+            color: oklch(0.50 0.02 265);
+        }
+        
+        .status-unknown {
+            background: oklch(0.92 0.02 265);
+            color: oklch(0.50 0.02 265);
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+        }
+        
+        .modal-content {
+            background: var(--card);
+            color: var(--card-foreground);
+            margin: 8% auto;
+            padding: 1.75rem;
+            border-radius: var(--radius);
+            max-width: 480px;
+            width: calc(100% - 2rem);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            border: 1px solid var(--border);
+        }
+        
+        .modal h2 {
+            margin-bottom: 1rem;
+            color: var(--foreground);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.375rem;
+            color: var(--foreground);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 0.625rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            background: var(--card);
+            color: var(--foreground);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        /* Focus States */
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px oklch(0.65 0.22 35 / 0.15);
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 0.625rem;
+            justify-content: flex-end;
+            margin-top: 1.25rem;
+        }
+        
+        .btn-cancel {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+            padding: 0.625rem 1.25rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .btn-cancel:hover {
+            background: var(--color-gray-300);
+        }
+        
+        .btn-submit {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-primary);
+            color: white;
+            border: none;
+            padding: 0.625rem 1.25rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .btn-submit:hover:not(:disabled) {
+            background: oklch(0.58 0.22 35);
+            box-shadow: 0 4px 12px oklch(0.65 0.22 35 / 0.35);
+        }
+        
+        .btn-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            background: oklch(0.95 0.06 25);
+            color: oklch(0.45 0.18 25);
+            padding: 0.75rem;
+            border-radius: var(--radius-sm);
+            margin-top: 0.75rem;
+            border-left: 3px solid oklch(0.55 0.22 25);
+            font-size: 0.875rem;
+        }
+        
+        .success-message {
+            background: oklch(0.95 0.06 145);
+            color: oklch(0.40 0.15 145);
+            padding: 0.75rem;
+            border-radius: var(--radius-sm);
+            margin-top: 0.75rem;
+            border-left: 3px solid oklch(0.55 0.18 145);
+            font-size: 0.875rem;
+        }
+        
+        .no-instances {
+            text-align: center;
+            color: var(--color-gray-700);
+            font-size: 1rem;
+            padding: 3rem;
+            background: var(--card);
+            border-radius: var(--radius);
+            border: 2px dashed var(--border);
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 HA-Edu</h1>
+            <p>Utbildningsportal för Home Assistant</p>
+        </header>
+        
+        <div class="controls">
+            <h2>Hantera instanser</h2>
+            <div class="controls-row">
+                <button id="addNewBtn" class="add-button" onclick="openModal()" 
+                        {% if user_has_instance %}disabled title="{{ create_button_tooltip }}"{% endif %}>+ Skapa ny instans</button>
+                <button id="unlockAdminBtn" class="btn-unlock hidden" onclick="openUnlockModal()" title="Lås upp adminfunktioner">🔑</button>
+                <button id="startAllBtn" class="btn-start-all {% if not is_admin %}hidden{% endif %}" onclick="openStartAllModal()">Starta alla</button>
+                <button id="stopAllBtn" class="btn-stop-all {% if not is_admin %}hidden{% endif %}" onclick="openStopAllModal()">Stoppa alla</button>
+                <button id="deleteAllBtn" class="btn-delete-all {% if not is_admin %}hidden{% endif %}" onclick="openDeleteAllModal()">Ta bort alla</button>
+                <button id="teacherAccessAllBtn" class="btn-teacher-access {% if not is_admin %}hidden{% endif %}" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
+                <label class="toggle-container {% if not is_admin %}hidden{% endif %}" id="toggleContainer">
+                    <span class="toggle-label">Skapa instanser:</span>
+                    <input type="checkbox" id="instanceCreationToggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="instance-count">
+                <span id="instanceCount">{{ instances|length }}</span> aktiva instanser
+                {% if not is_admin and max_instances > 0 %}
+                <span style="margin-left: 10px; color: var(--color-gray-700);">(Gräns: {{ user_instance_count }}/{{ max_instances }})</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="instances-grid" id="instancesGrid">
+            {% if instances %}
+                {% for name, instance in instances.items() %}
+                <div class="instance-card" data-server-name="{{ name }}" data-locked="{{ 'true' if instance.get('locked', False) else 'false' }}">
+                    <div class="instance-card-header">
+                        <h3>
+                            {{ name }}
+                            {% if instance.get('teacher_access_added', False) %}
+                            <span class="teacher-access-badge">Läraråtkomst</span>
+                            {% endif %}
+                        </h3>
+                        <button class="btn-lock {% if instance.get('locked', False) %}locked{% endif %}" 
+                                onclick="toggleLock('{{ name }}')" 
+                                title="{% if instance.get('locked', False) %}Låst - klicka för att låsa upp{% else %}Olåst - klicka för att låsa{% endif %}">
+                            {% if instance.get('locked', False) %}🔒{% else %}🔓{% endif %}
+                        </button>
+                    </div>
+                    <div class="instance-info">
+                        <strong>Port:</strong> {{ instance.port }}
+                    </div>
+                    <div class="instance-info">
+                        <strong>Status:</strong> <span class="status-badge status-{{ instance.status }}">{{ instance.status }}</span>
+                    </div>
+                    <div class="instance-info">
+                        <strong>Skapad:</strong> {{ instance.created_at.split('T')[0] }}
+                    </div>
+                    {% if is_admin and instance.get('created_by') %}
+                    <div class="instance-info">
+                        <strong>Skapad av:</strong> {{ instance.created_by }}
+                    </div>
+                    {% endif %}
+                    {% if is_admin %}
+                    <div class="instance-info">
+                        <strong>Onboarded:</strong> 
+                        {% if instance.get('onboarded') %}
+                        <span class="status-badge status-running">Ja</span>
+                        {% else %}
+                        <span class="status-badge status-created">Nej</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <div class="instance-actions">
+                        <div class="instance-actions-row">
+                            <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                            <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">Starta om</button>
+                            {% if is_admin %}
+                            <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
+                            {% else %}
+                            <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Nollställ</button>
+                            {% endif %}
+                        </div>
+                        <div class="instance-actions-row">
+                            {% if is_admin %}
+                            <button class="btn-teacher-access" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
+                                    {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
+                                Lärare
+                            </button>
+                            {% else %}
+                            <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
+                                    {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
+                                Lärare
+                            </button>
+                            {% endif %}
+                            <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-instances">
+                    Inga instanser skapade än. Klicka på "Skapa ny instans" för att komma igång!
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Add Instance Modal -->
+    <div id="addModal" class="modal">
+        <div class="modal-content">
+            <h2>Skapa ny instans</h2>
+            <form id="addInstanceForm">
+                <div class="form-group">
+                    <label for="serverName">Servernamn:</label>
+                    <input type="text" id="serverName" name="serverName" required 
+                           placeholder="t.ex. Student-Lab-01">
+                </div>
+                <div class="form-group">
+                    <label for="instancePassword">Instanslösenord (valfritt):</label>
+                    <input type="password" id="instancePassword" name="instancePassword" 
+                           placeholder="Ange ett lösenord för att tillåta omstart">
+                    <small style="color: var(--color-gray-700); display: block; margin-top: 5px;">
+                        Om du anger det kan detta lösenord användas för att starta om instansen. Adminlösenordet fungerar också.
+                    </small>
+                </div>
+                <div id="modalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="submitBtn">Skapa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Unlock Admin Features Modal -->
+    <div id="unlockModal" class="modal">
+        <div class="modal-content">
+            <h2>Lås upp adminfunktioner</h2>
+            <p>Ange adminlösenordet för att visa administrationskontroller.</p>
+            <form id="unlockAdminForm">
+                <div class="form-group">
+                    <label for="unlockAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="unlockAdminPassword" name="unlockAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="unlockModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeUnlockModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="unlockSubmitBtn">Lås upp</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Reset Instance Modal -->
+    <div id="resetModal" class="modal">
+        <div class="modal-content">
+            <h2>Nollställ instans</h2>
+            <p>Ange lösenord för att nollställa <strong id="resetServerName"></strong> till standard HA-avbildning.</p>
+            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att radera all data och alla konfigurationer för denna instans!</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Lösenordsalternativ:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
+                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
+                </ul>
+            </div>
+            <form id="resetInstanceForm">
+                <div class="form-group">
+                    <label for="resetPassword">Lösenord:</label>
+                    <input type="password" id="resetPassword" name="resetPassword" required 
+                           placeholder="Ange instans- eller adminlösenord">
+                </div>
+                <div id="resetModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeResetModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="resetSubmitBtn">Nollställ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Delete Instance Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <h2>Ta bort instans</h2>
+            <p>Ange lösenord för att ta bort <strong id="deleteServerName"></strong>.</p>
+            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort instansen och all dess data!</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Lösenordsalternativ:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
+                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
+                </ul>
+            </div>
+            <form id="deleteInstanceForm">
+                <div class="form-group">
+                    <label for="deletePassword">Lösenord:</label>
+                    <input type="password" id="deletePassword" name="deletePassword" required 
+                           placeholder="Ange instans- eller adminlösenord">
+                </div>
+                <div id="deleteModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeDeleteModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="deleteSubmitBtn">Ta bort</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Delete All Instances Modal -->
+    <div id="deleteAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Ta bort alla instanser</h2>
+            <p>Ange adminlösenord för att ta bort <strong>alla instanser</strong>.</p>
+            <p style="color: #e53e3e; margin: 10px 0;"><strong>Varning:</strong> Detta kommer att permanent ta bort ALLA instanser och all deras data!</p>
+            <form id="deleteAllInstancesForm">
+                <div class="form-group">
+                    <label for="deleteAllAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="deleteAllAdminPassword" name="deleteAllAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="deleteAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeDeleteAllModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="deleteAllSubmitBtn">Ta bort alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Toggle Instance Creation Modal -->
+    <div id="toggleModal" class="modal">
+        <div class="modal-content">
+            <h2>Växla instansskapande</h2>
+            <p>Ange adminlösenord för att <strong id="toggleAction"></strong> instansskapande.</p>
+            <form id="toggleInstanceCreationForm">
+                <div class="form-group">
+                    <label for="toggleAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="toggleAdminPassword" name="toggleAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="toggleModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeToggleModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="toggleSubmitBtn">Bekräfta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Teacher Access Modal -->
+    <div id="teacherAccessModal" class="modal">
+        <div class="modal-content">
+            <h2>Lägg till läraråtkomst</h2>
+            <p>Ange adminlösenord för att lägga till läraråtkomst till <strong id="teacherAccessServerName"></strong>.</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>Vad gör detta?</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Skapar ett sekundärt adminkonto för läraren (<strong id="teacherUsernameDisplay"></strong>)</li>
+                    <li>Studentens konto och data förblir oförändrade</li>
+                    <li>Låter läraren övervaka studentens framsteg</li>
+                    <li>Kan endast användas efter att studenten slutfört onboarding</li>
+                </ul>
+            </div>
+            <div id="teacherAccessStatus" style="margin: 10px 0;"></div>
+            <form id="teacherAccessForm">
+                <div class="form-group">
+                    <label for="teacherAccessAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="teacherAccessAdminPassword" name="teacherAccessAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="teacherAccessModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeTeacherAccessModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="teacherAccessSubmitBtn">Lägg till läraråtkomst</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Restart Instance Modal -->
+    <div id="restartModal" class="modal">
+        <div class="modal-content">
+            <h2>Starta om instans</h2>
+            <p>Ange lösenord för att starta om <strong id="restartServerName"></strong>.</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Lösenordsalternativ:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Använd <strong>instanslösenordet</strong> (om det angavs när instansen skapades)</li>
+                    <li>Eller använd <strong>adminlösenordet</strong> (om det är konfigurerat)</li>
+                </ul>
+            </div>
+            <form id="restartInstanceForm">
+                <div class="form-group">
+                    <label for="restartPassword">Lösenord:</label>
+                    <input type="password" id="restartPassword" name="restartPassword" required 
+                           placeholder="Ange instans- eller adminlösenord">
+                </div>
+                <div id="restartModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeRestartModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="restartSubmitBtn">Starta om</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Teacher Access to All Instances Modal -->
+    <div id="teacherAccessAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Lägg till läraråtkomst på alla instanser</h2>
+            <p>Ange adminlösenord för att lägga till läraråtkomst till <strong>alla instanser</strong>.</p>
+            <div style="background: #bee3f8; color: #2c5282; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>Vad gör detta?</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Skapar ett läraradminkonto (<strong id="teacherUsernameDisplayAll"></strong>) på varje instans</li>
+                    <li>Hoppar över instanser som inte slutfört onboarding</li>
+                    <li>Studentkonton och data förblir oförändrade</li>
+                    <li>Instanser startas om automatiskt för att tillämpa ändringarna</li>
+                </ul>
+            </div>
+            <form id="teacherAccessAllForm">
+                <div class="form-group">
+                    <label for="teacherAccessAllAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="teacherAccessAllAdminPassword" name="teacherAccessAllAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="teacherAccessAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeTeacherAccessAllModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="teacherAccessAllSubmitBtn">Lägg till på alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Start All Instances Modal -->
+    <div id="startAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Starta alla instanser</h2>
+            <p>Ange adminlösenord för att starta <strong>alla instanser</strong>.</p>
+            <div style="background: #c6f6d5; color: #276749; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>ℹ️ Information:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Startar alla stoppade instanser</li>
+                    <li>Instanser som redan körs påverkas inte</li>
+                </ul>
+            </div>
+            <form id="startAllInstancesForm">
+                <div class="form-group">
+                    <label for="startAllAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="startAllAdminPassword" name="startAllAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="startAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeStartAllModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="startAllSubmitBtn">Starta alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Stop All Instances Modal -->
+    <div id="stopAllModal" class="modal">
+        <div class="modal-content">
+            <h2>Stoppa alla instanser</h2>
+            <p>Ange adminlösenord för att stoppa <strong>alla instanser</strong>.</p>
+            <div style="background: #feebc8; color: #c05621; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                <strong>⚠️ Varning:</strong>
+                <ul style="margin: 10px 0 0 20px; line-height: 1.6;">
+                    <li>Stoppar alla körande instanser</li>
+                    <li>Användare kommer att förlora anslutningen till sina instanser</li>
+                    <li>Data bevaras - instanserna kan startas igen</li>
+                </ul>
+            </div>
+            <form id="stopAllInstancesForm">
+                <div class="form-group">
+                    <label for="stopAllAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="stopAllAdminPassword" name="stopAllAdminPassword" required 
+                           placeholder="Ange adminlösenord">
+                </div>
+                <div id="stopAllModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeStopAllModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="stopAllSubmitBtn">Stoppa alla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        let currentResetServer = null;
+        let currentDeleteServer = null;
+        let currentTeacherAccessServer = null;
+        let currentRestartServer = null;
+        let pendingToggleState = null;
+        let adminUnlocked = {{ 'true' if is_admin else 'false' }};
+        let isAdmin = {{ 'true' if is_admin else 'false' }};
+        
+        // Check if admin password is enabled and if user has admin access
+        async function checkAdminEnabled() {
+            try {
+                const response = await fetch('/api/admin/check-access');
+                const data = await response.json();
+                
+                // If user is already admin, no need to show unlock button
+                if (isAdmin) {
+                    console.log('User has admin access - admin features already visible');
+                    return;
+                }
+                
+                // Only show unlock button if:
+                // 1. Admin password is enabled, AND
+                // 2. User has admin access (local IP or approved email), AND
+                // 3. User is not already identified as admin (fallback for non-admin users)
+                if (data.admin_password_enabled && data.has_admin_access && !isAdmin) {
+                    // Show the unlock button for users with admin access
+                    const unlockBtn = document.getElementById('unlockAdminBtn');
+                    if (unlockBtn) {
+                        unlockBtn.classList.remove('hidden');
+                    }
+                } else if (data.admin_password_enabled && !data.has_admin_access) {
+                    // Admin password is enabled but user doesn't have access
+                    console.log('Admin features are restricted to authorized users only');
+                }
+            } catch (error) {
+                console.error('Failed to check admin status:', error);
+            }
+        }
+        
+        // Show all admin buttons (only for non-admin users after unlock)
+        function showAdminButtons() {
+            // Show delete all button and toggle container
+            const deleteAllBtn = document.getElementById('deleteAllBtn');
+            const toggleContainer = document.getElementById('toggleContainer');
+            const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
+            const startAllBtn = document.getElementById('startAllBtn');
+            const stopAllBtn = document.getElementById('stopAllBtn');
+            if (deleteAllBtn) deleteAllBtn.classList.remove('hidden');
+            if (toggleContainer) toggleContainer.classList.remove('hidden');
+            if (teacherAccessAllBtn && window.teacherAccessEnabled) teacherAccessAllBtn.classList.remove('hidden');
+            if (startAllBtn) startAllBtn.classList.remove('hidden');
+            if (stopAllBtn) stopAllBtn.classList.remove('hidden');
+        }
+        
+        // Check if teacher access feature is enabled
+        async function checkTeacherAccessEnabled() {
+            try {
+                const response = await fetch('/api/settings/teacher-access');
+                const data = await response.json();
+                
+                if (data.teacher_access_enabled) {
+                    // Store teacher info
+                    window.teacherAccessEnabled = true;
+                    window.teacherUsername = data.teacher_username;
+                    
+                    // If user is admin, teacher access buttons are already visible
+                    // If not admin but has admin access, show buttons after unlock
+                    if (isAdmin) {
+                        // Teacher access buttons are already visible for admin users
+                        console.log('Teacher access enabled for admin user');
+                        // Show the teacher access all button for admins
+                        const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
+                        if (teacherAccessAllBtn) teacherAccessAllBtn.classList.remove('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check teacher access status:', error);
+            }
+        }
+        
+        // Show teacher access buttons (called after unlock for non-admin users)
+        function showTeacherAccessButtons() {
+            if (window.teacherAccessEnabled && !isAdmin) {
+                document.querySelectorAll('.btn-teacher-access').forEach(btn => {
+                    btn.classList.remove('hidden');
+                });
+                // Also show the teacher access all button
+                const teacherAccessAllBtn = document.getElementById('teacherAccessAllBtn');
+                if (teacherAccessAllBtn) teacherAccessAllBtn.classList.remove('hidden');
+            }
+        }
+        
+        // Check instance creation status
+        async function checkInstanceCreationStatus() {
+            try {
+                const response = await fetch('/api/settings/instance-creation');
+                const data = await response.json();
+                
+                const toggle = document.getElementById('instanceCreationToggle');
+                const addBtn = document.getElementById('addNewBtn');
+                toggle.checked = data.instance_creation_enabled;
+                addBtn.disabled = !data.instance_creation_enabled;
+                
+                if (!data.instance_creation_enabled) {
+                    addBtn.title = 'Skapande av instanser är för närvarande inaktiverat';
+                }
+            } catch (error) {
+                console.error('Failed to check instance creation status:', error);
+            }
+        }
+        
+        function openModal() {
+            document.getElementById('addModal').style.display = 'block';
+            document.getElementById('modalMessage').innerHTML = '';
+            document.getElementById('addInstanceForm').reset();
+        }
+        
+        function closeModal() {
+            document.getElementById('addModal').style.display = 'none';
+        }
+        
+        function openUnlockModal() {
+            document.getElementById('unlockModal').style.display = 'block';
+            document.getElementById('unlockModalMessage').innerHTML = '';
+            document.getElementById('unlockAdminForm').reset();
+        }
+        
+        function closeUnlockModal() {
+            document.getElementById('unlockModal').style.display = 'none';
+        }
+        
+        function openResetModal(serverName) {
+            currentResetServer = serverName;
+            document.getElementById('resetServerName').textContent = serverName;
+            document.getElementById('resetModal').style.display = 'block';
+            document.getElementById('resetModalMessage').innerHTML = '';
+            document.getElementById('resetInstanceForm').reset();
+        }
+        
+        function closeResetModal() {
+            document.getElementById('resetModal').style.display = 'none';
+            currentResetServer = null;
+        }
+        
+        function openDeleteModal(serverName) {
+            currentDeleteServer = serverName;
+            document.getElementById('deleteServerName').textContent = serverName;
+            document.getElementById('deleteModal').style.display = 'block';
+            document.getElementById('deleteModalMessage').innerHTML = '';
+            document.getElementById('deleteInstanceForm').reset();
+        }
+        
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+            currentDeleteServer = null;
+        }
+        
+        function openDeleteAllModal() {
+            document.getElementById('deleteAllModal').style.display = 'block';
+            document.getElementById('deleteAllModalMessage').innerHTML = '';
+            document.getElementById('deleteAllInstancesForm').reset();
+        }
+        
+        function closeDeleteAllModal() {
+            document.getElementById('deleteAllModal').style.display = 'none';
+        }
+        
+        function openToggleModal(enabled) {
+            pendingToggleState = enabled;
+            const action = enabled ? 'aktivera' : 'inaktivera';
+            document.getElementById('toggleAction').textContent = action;
+            document.getElementById('toggleModal').style.display = 'block';
+            document.getElementById('toggleModalMessage').innerHTML = '';
+            document.getElementById('toggleInstanceCreationForm').reset();
+        }
+        
+        function closeToggleModal() {
+            document.getElementById('toggleModal').style.display = 'none';
+            pendingToggleState = null;
+            // Revert toggle state if cancelled
+            checkInstanceCreationStatus();
+        }
+        
+        function openTeacherAccessModal(serverName) {
+            currentTeacherAccessServer = serverName;
+            document.getElementById('teacherAccessServerName').textContent = serverName;
+            document.getElementById('teacherUsernameDisplay').textContent = window.teacherUsername || 'teacher';
+            document.getElementById('teacherAccessModal').style.display = 'block';
+            document.getElementById('teacherAccessModalMessage').innerHTML = '';
+            document.getElementById('teacherAccessForm').reset();
+            
+            // Check if teacher access has already been added
+            const instances = document.querySelectorAll('.instance-card');
+            instances.forEach(card => {
+                if (card.dataset.serverName === serverName) {
+                    const hasBadge = card.querySelector('.teacher-access-badge');
+                    if (hasBadge) {
+                        document.getElementById('teacherAccessStatus').innerHTML = 
+                            '<div style="background: #d6bcfa; color: #553c9a; padding: 10px; border-radius: 5px; margin: 10px 0;">' +
+                            '✓ Läraråtkomst har redan lagts till för denna instans' +
+                            '</div>';
+                    } else {
+                        document.getElementById('teacherAccessStatus').innerHTML = '';
+                    }
+                }
+            });
+        }
+        
+        function closeTeacherAccessModal() {
+            document.getElementById('teacherAccessModal').style.display = 'none';
+            currentTeacherAccessServer = null;
+        }
+        
+        function openTeacherAccessAllModal() {
+            document.getElementById('teacherUsernameDisplayAll').textContent = window.teacherUsername || 'teacher';
+            document.getElementById('teacherAccessAllModal').style.display = 'block';
+            document.getElementById('teacherAccessAllModalMessage').innerHTML = '';
+            document.getElementById('teacherAccessAllForm').reset();
+        }
+        
+        function closeTeacherAccessAllModal() {
+            document.getElementById('teacherAccessAllModal').style.display = 'none';
+        }
+        
+        function openStartAllModal() {
+            document.getElementById('startAllModal').style.display = 'block';
+            document.getElementById('startAllModalMessage').innerHTML = '';
+            document.getElementById('startAllInstancesForm').reset();
+        }
+        
+        function closeStartAllModal() {
+            document.getElementById('startAllModal').style.display = 'none';
+        }
+        
+        function openStopAllModal() {
+            document.getElementById('stopAllModal').style.display = 'block';
+            document.getElementById('stopAllModalMessage').innerHTML = '';
+            document.getElementById('stopAllInstancesForm').reset();
+        }
+        
+        function closeStopAllModal() {
+            document.getElementById('stopAllModal').style.display = 'none';
+        }
+        
+        function openRestartModal(serverName) {
+            currentRestartServer = serverName;
+            document.getElementById('restartServerName').textContent = serverName;
+            document.getElementById('restartModal').style.display = 'block';
+            document.getElementById('restartModalMessage').innerHTML = '';
+            document.getElementById('restartInstanceForm').reset();
+        }
+        
+        function closeRestartModal() {
+            document.getElementById('restartModal').style.display = 'none';
+            currentRestartServer = null;
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const addModal = document.getElementById('addModal');
+            const unlockModal = document.getElementById('unlockModal');
+            const resetModal = document.getElementById('resetModal');
+            const deleteModal = document.getElementById('deleteModal');
+            const deleteAllModal = document.getElementById('deleteAllModal');
+            const toggleModal = document.getElementById('toggleModal');
+            const teacherAccessModal = document.getElementById('teacherAccessModal');
+            const restartModal = document.getElementById('restartModal');
+            const startAllModal = document.getElementById('startAllModal');
+            const stopAllModal = document.getElementById('stopAllModal');
+            if (event.target === addModal) {
+                closeModal();
+            } else if (event.target === unlockModal) {
+                closeUnlockModal();
+            } else if (event.target === resetModal) {
+                closeResetModal();
+            } else if (event.target === deleteModal) {
+                closeDeleteModal();
+            } else if (event.target === deleteAllModal) {
+                closeDeleteAllModal();
+            } else if (event.target === toggleModal) {
+                closeToggleModal();
+            } else if (event.target === teacherAccessModal) {
+                closeTeacherAccessModal();
+            } else if (event.target === restartModal) {
+                closeRestartModal();
+            } else if (event.target === startAllModal) {
+                closeStartAllModal();
+            } else if (event.target === stopAllModal) {
+                closeStopAllModal();
+            }
+        }
+        
+        document.getElementById('addInstanceForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const messageDiv = document.getElementById('modalMessage');
+            
+            const serverName = document.getElementById('serverName').value;
+            const instancePassword = document.getElementById('instancePassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Skapar...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const requestBody = {
+                    server_name: serverName
+                };
+                
+                // Only include password if provided
+                if (instancePassword) {
+                    requestBody.instance_password = instancePassword;
+                }
+                
+                const response = await fetch('/api/instances', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Instansen skapades! Laddar om...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Skapa';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte skapa instans: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Skapa';
+            }
+        });
+        
+        document.getElementById('unlockAdminForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('unlockSubmitBtn');
+            const messageDiv = document.getElementById('unlockModalMessage');
+            
+            const adminPassword = document.getElementById('unlockAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Låser upp...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/admin/unlock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Adminfunktioner upplåsta!</div>`;
+                    adminUnlocked = true;
+                    showAdminButtons();
+                    showTeacherAccessButtons();
+                    // Hide the unlock button after unlocking
+                    document.getElementById('unlockAdminBtn').classList.add('hidden');
+                    setTimeout(() => {
+                        closeUnlockModal();
+                    }, 1000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Lås upp';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte låsa upp: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Lås upp';
+            }
+        });
+        
+        document.getElementById('resetInstanceForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('resetSubmitBtn');
+            const messageDiv = document.getElementById('resetModalMessage');
+            
+            const password = document.getElementById('resetPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Nollställer...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentResetServer)}/reset`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Instansen nollställdes! Laddar om...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Nollställ';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte nollställa instans: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Nollställ';
+            }
+        });
+        
+        document.getElementById('deleteInstanceForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('deleteSubmitBtn');
+            const messageDiv = document.getElementById('deleteModalMessage');
+            
+            const password = document.getElementById('deletePassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Tar bort...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentDeleteServer)}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Instansen togs bort! Laddar om...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Ta bort';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte ta bort instans: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Ta bort';
+            }
+        });
+        
+        document.getElementById('deleteAllInstancesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('deleteAllSubmitBtn');
+            const messageDiv = document.getElementById('deleteAllModalMessage');
+            
+            const adminPassword = document.getElementById('deleteAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Tar bort...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/instances/delete-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">${data.message}. Laddar om...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Ta bort alla';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte ta bort alla instanser: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Ta bort alla';
+            }
+        });
+        
+        document.getElementById('toggleInstanceCreationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('toggleSubmitBtn');
+            const messageDiv = document.getElementById('toggleModalMessage');
+            
+            const adminPassword = document.getElementById('toggleAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Bearbetar...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/settings/instance-creation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword,
+                        enabled: pendingToggleState
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">${data.message}. Laddar om...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Bekräfta';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte uppdatera inställning: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Bekräfta';
+            }
+        });
+        
+        document.getElementById('teacherAccessForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('teacherAccessSubmitBtn');
+            const messageDiv = document.getElementById('teacherAccessModalMessage');
+            
+            const adminPassword = document.getElementById('teacherAccessAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Lägger till...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentTeacherAccessServer)}/add-teacher-access`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Läraråtkomst tillagd! Användarnamn: ${data.teacher_username}. Laddar om...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Lägg till läraråtkomst';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte lägga till läraråtkomst: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Lägg till läraråtkomst';
+            }
+        });
+        
+        document.getElementById('teacherAccessAllForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('teacherAccessAllSubmitBtn');
+            const messageDiv = document.getElementById('teacherAccessAllModalMessage');
+            
+            const adminPassword = document.getElementById('teacherAccessAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Bearbetar...';
+            messageDiv.innerHTML = '<div style="color: #2563eb;">Lägger till läraråtkomst på alla instanser...</div>';
+            
+            try {
+                const response = await fetch('/api/instances/add-teacher-access-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let message = '<div class="success-message">';
+                    message += `<strong>Resultat:</strong><br>`;
+                    message += `✓ Lyckades: ${data.success_count}<br>`;
+                    if (data.failed_count > 0) {
+                        message += `✗ Misslyckades: ${data.failed_count}<br>`;
+                    }
+                    if (data.skipped_count > 0) {
+                        message += `⊘ Hoppade över: ${data.skipped_count} (onboarding ej slutförd)<br>`;
+                    }
+                    message += '<br>Laddar om sidan...';
+                    message += '</div>';
+                    
+                    messageDiv.innerHTML = message;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Lägg till på alla';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte lägga till läraråtkomst: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Lägg till på alla';
+            }
+        });
+        
+        document.getElementById('startAllInstancesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('startAllSubmitBtn');
+            const messageDiv = document.getElementById('startAllModalMessage');
+            
+            const adminPassword = document.getElementById('startAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Startar...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/instances/start-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let message = '<div class="success-message">';
+                    message += `<strong>Resultat:</strong><br>`;
+                    message += `✓ Startade: ${data.started_count}<br>`;
+                    if (data.already_running_count > 0) {
+                        message += `⊘ Redan körande: ${data.already_running_count}<br>`;
+                    }
+                    if (data.failed_count > 0) {
+                        message += `✗ Misslyckades: ${data.failed_count}<br>`;
+                    }
+                    message += '<br>Laddar om sidan...';
+                    message += '</div>';
+                    
+                    messageDiv.innerHTML = message;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Starta alla';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte starta alla instanser: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Starta alla';
+            }
+        });
+        
+        document.getElementById('stopAllInstancesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('stopAllSubmitBtn');
+            const messageDiv = document.getElementById('stopAllModalMessage');
+            
+            const adminPassword = document.getElementById('stopAllAdminPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Stoppar...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/instances/stop-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        admin_password: adminPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let message = '<div class="success-message">';
+                    message += `<strong>Resultat:</strong><br>`;
+                    message += `✓ Stoppade: ${data.stopped_count}<br>`;
+                    if (data.already_stopped_count > 0) {
+                        message += `⊘ Redan stoppade: ${data.already_stopped_count}<br>`;
+                    }
+                    if (data.failed_count > 0) {
+                        message += `✗ Misslyckades: ${data.failed_count}<br>`;
+                    }
+                    message += '<br>Laddar om sidan...';
+                    message += '</div>';
+                    
+                    messageDiv.innerHTML = message;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Stoppa alla';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte stoppa alla instanser: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Stoppa alla';
+            }
+        });
+        
+        document.getElementById('restartInstanceForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('restartSubmitBtn');
+            const messageDiv = document.getElementById('restartModalMessage');
+            
+            const password = document.getElementById('restartPassword').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Startar om...';
+            messageDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentRestartServer)}/restart`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="success-message">Instansen startades om! Laddar om...</div>`;
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Starta om';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte starta om instans: ${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Starta om';
+            }
+        });
+        
+        // Handle toggle change
+        document.getElementById('instanceCreationToggle').addEventListener('change', function(e) {
+            openToggleModal(e.target.checked);
+        });
+        
+        async function resetInstance(serverName) {
+            openResetModal(serverName);
+        }
+        
+        async function deleteInstance(serverName) {
+            openDeleteModal(serverName);
+        }
+        
+        async function addTeacherAccess(serverName) {
+            openTeacherAccessModal(serverName);
+        }
+        
+        async function restartInstance(serverName) {
+            openRestartModal(serverName);
+        }
+        
+        // Toggle lock on an instance
+        async function toggleLock(serverName) {
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(serverName)}/toggle-lock`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Update the lock button in the UI
+                    const instanceCard = document.querySelector(`.instance-card[data-server-name="${serverName}"]`);
+                    if (instanceCard) {
+                        const lockBtn = instanceCard.querySelector('.btn-lock');
+                        if (lockBtn) {
+                            if (data.locked) {
+                                lockBtn.textContent = '🔒';
+                                lockBtn.classList.add('locked');
+                                lockBtn.title = 'Låst - klicka för att låsa upp';
+                            } else {
+                                lockBtn.textContent = '🔓';
+                                lockBtn.classList.remove('locked');
+                                lockBtn.title = 'Olåst - klicka för att låsa';
+                            }
+                        }
+                        instanceCard.dataset.locked = data.locked ? 'true' : 'false';
+                    }
+                } else {
+                    console.error('Failed to toggle lock:', data.error);
+                    alert(`Kunde inte ändra låsstatus: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Failed to toggle lock:', error);
+                alert(`Kunde inte ändra låsstatus: ${error.message}`);
+            }
+        }
+        
+        // Update instance count
+        function updateInstanceCount() {
+            const instanceCount = document.querySelectorAll('.instance-card').length;
+            document.getElementById('instanceCount').textContent = instanceCount;
+        }
+        
+        // Initialize page
+        updateInstanceCount();
+        checkAdminEnabled();
+        checkTeacherAccessEnabled();
+        checkInstanceCreationStatus();
+    </script>
+    
+    <footer style="text-align: center; padding: 30px 20px 20px; color: rgba(0, 0, 0, 0.9); font-size: 0.9em;">
+        <div style="border-top: 1px solid rgba(255, 255, 255, 0.3); padding-top: 20px; max-width: 1200px; margin: 0 auto;">
+            © 2025 Thomas Wredlund
+        </div>
+    </footer>
+</body>
+</html>
