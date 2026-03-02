@@ -108,7 +108,8 @@ HA_IMAGE = os.getenv('HA_IMAGE', 'ghcr.io/home-assistant/home-assistant:stable')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
 TEACHER_USERNAME = os.getenv('TEACHER_USERNAME', '')
 TEACHER_PASSWORD = os.getenv('TEACHER_PASSWORD', '')
-ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresses
+ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin usernames (local accounts)
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', '')  # Admin username for auto-created admin account
 # Maximum instances for non-admin users (0 or None means unlimited)
 MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
 MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
@@ -127,8 +128,8 @@ def is_admin_user(request):
     """Check if the current user has admin access
     
     Admin access is granted if:
-    1. The request comes from the local network (192.168.50.0/24 or 10.0.0.0/8), OR
-    2. The user is authenticated via Cloudflare Zero Trust with an email in the ADMINS list
+    1. The request comes from a local network (192.168.0.0/16, 10.0.0.0/8, or 127.0.0.0/8), OR
+    2. The user is logged in with an account that has the 'admin' role
     
     Args:
         request: Flask request object
@@ -138,15 +139,13 @@ def is_admin_user(request):
     """
     # Define the allowed local network subnets
     ALLOWED_SUBNETS = [
-        ipaddress.ip_network('192.168.50.0/24'),
-        ipaddress.ip_network('10.0.0.0/8'),  # Added 10.x.x.x range for local admin access
-        ipaddress.ip_network('127.0.0.0/8')  # Added localhost range
+        ipaddress.ip_network('192.168.0.0/16'),  # All 192.168.x.x addresses
+        ipaddress.ip_network('10.0.0.0/8'),       # All 10.x.x.x addresses
+        ipaddress.ip_network('127.0.0.0/8')       # Localhost range
     ]
     
-    # Check if the request is from the local network
+    # Check if the request is from a local network
     # First check X-Forwarded-For header (set by reverse proxies)
-    # Note: In production, you should validate the proxy is trusted before using this header
-    # For this application, we assume the Cloudflare tunnel is the only proxy
     client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
     if not client_ip:
         # Fall back to direct remote_addr
@@ -165,20 +164,16 @@ def is_admin_user(request):
             # Invalid IP address format
             logger.warning(f'Invalid IP address format: {client_ip}')
     
-    # Check if user is authenticated via Cloudflare Zero Trust
-    # Cloudflare Access sets the Cf-Access-Authenticated-User-Email header
-    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
-    
-    if user_email and ADMINS:
-        # Parse the ADMINS environment variable (comma-separated list)
-        admin_emails = [email.strip().lower() for email in ADMINS.split(',') if email.strip()]
-        
-        # Check if the user's email is in the admin list (case-insensitive)
-        if user_email.lower() in admin_emails:
-            logger.debug(f'Admin access granted for Cloudflare user: {user_email}')
+    # Check if the logged-in user has the admin role
+    username = session.get('username')
+    if username:
+        users = load_users()
+        user = users.get(username)
+        if user and user.get('role') == 'admin':
+            logger.debug(f'Admin access granted for admin user: {username}')
             return True
     
-    logger.debug(f'Admin access denied for IP: {client_ip}, Email: {user_email}')
+    logger.debug(f'Admin access denied for IP: {client_ip}, user: {session.get("username")}')
     return False
 
 
@@ -220,6 +215,45 @@ def save_settings(settings):
     data = load_data()
     data['settings'] = settings
     save_data(data)
+
+# ---------------------------------------------------------------------------
+# User account management
+# ---------------------------------------------------------------------------
+
+def load_users():
+    """Load user accounts from JSON file"""
+    data = load_data()
+    return data.get('users', {})
+
+def save_users(users):
+    """Save user accounts to JSON file"""
+    data = load_data()
+    data['users'] = users
+    save_data(data)
+
+def ensure_admin_account():
+    """Auto-create the admin account from ADMIN_USERNAME / ADMIN_PASSWORD env vars.
+
+    Called once at module load so the admin can always log in.
+    """
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        return
+    users = load_users()
+    if ADMIN_USERNAME not in users:
+        users[ADMIN_USERNAME] = {
+            'password_hash': hash_password(ADMIN_PASSWORD),
+            'role': 'admin',
+            'created_at': datetime.now().isoformat(),
+        }
+        save_users(users)
+        logger.info(f'Auto-created admin account: {ADMIN_USERNAME}')
+    else:
+        # Update password if it changed in env
+        if not verify_password(ADMIN_PASSWORD, users[ADMIN_USERNAME]['password_hash']):
+            users[ADMIN_USERNAME]['password_hash'] = hash_password(ADMIN_PASSWORD)
+            users[ADMIN_USERNAME]['role'] = 'admin'
+            save_users(users)
+            logger.info(f'Updated admin account password: {ADMIN_USERNAME}')
 
 def get_available_port():
     """Get next available port for a new instance
@@ -891,18 +925,17 @@ def restart_instance_container(container_id):
 def get_user_identifier(request):
     """Get a unique identifier for the current user
     
-    Returns the Cloudflare authenticated email. In classroom settings,
-    all students share the same IP address, so email-based tracking is required.
+    Returns the logged-in username from the session. In classroom settings,
+    all students share the same IP address, so account-based tracking is required.
     
     Args:
         request: Flask request object
         
     Returns:
-        str: User email identifier, or None if not authenticated
+        str: Username, or None if not logged in
     """
-    # Get Cloudflare authenticated email (required for user tracking)
-    user_email = request.headers.get('Cf-Access-Authenticated-User-Email', '').strip()
-    return user_email if user_email else None
+    username = session.get('username')
+    return username if username else None
 
 def get_user_info_for_logging(request):
     """Get user information for logging purposes
