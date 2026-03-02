@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- Map each Home Assistant user to a dedicated app account using `X-Remote-User-Id` / `X-Remote-User-Name` headers sent by the HA Ingress proxy, so different HA users get their own sessions instead of sharing a single admin account
+- Auto-create app accounts for HA users on first access via Ingress; accounts are linked by HA user ID for subsequent logins
+- Fall back to the previous admin auto-login behaviour when the identity headers are absent (older Home Assistant versions)
+
 ## 1.4.0
 
 - Remove the forced password-change prompt that appeared on first login with the default admin account; Home Assistant Ingress now handles authentication so the separate credential setup is no longer needed

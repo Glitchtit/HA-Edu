@@ -243,6 +243,227 @@ def test_login_overlay_hidden_in_ingress_mode():
         _teardown(data_file)
 
 
+# ---------------------------------------------------------------------------
+# Per-user ingress tests (X-Remote-User-* headers)
+# ---------------------------------------------------------------------------
+
+def test_per_user_ingress_creates_account():
+    """When X-Remote-User-Id is present, an app account is auto-created."""
+    print('Test: Per-user ingress creates account …')
+    data_file = _setup()
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+        client = app_mod.app.test_client()
+
+        with client.session_transaction() as sess:
+            sess.clear()
+
+        resp = client.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'X-Remote-User-Id': 'ha-user-id-001',
+                'X-Remote-User-Name': 'Alice',
+                'X-Remote-User-Display-Name': 'Alice',
+            },
+        )
+        assert resp.status_code == 200
+
+        with client.session_transaction() as sess:
+            username = sess.get('username')
+            assert username is not None, 'Session username should be set'
+            assert username != 'admin', 'Should NOT be logged in as admin'
+        # Verify the user was created in the data store
+        users = app_mod.load_users()
+        assert username in users, f'User "{username}" should exist in users'
+        assert users[username].get('ha_user_id') == 'ha-user-id-001'
+        assert users[username].get('role') == 'user'
+        print(f'  ✓ Auto-created app user "{username}" for HA user Alice')
+    finally:
+        _teardown(data_file)
+
+
+def test_different_ha_users_get_different_sessions():
+    """Two different HA users should be logged in as different app users."""
+    print('Test: Different HA users get different sessions …')
+    data_file = _setup()
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+
+        client_a = app_mod.app.test_client()
+        client_b = app_mod.app.test_client()
+
+        # User A accesses the add-on
+        resp_a = client_a.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'X-Remote-User-Id': 'ha-user-id-A',
+                'X-Remote-User-Name': 'UserA',
+            },
+        )
+        assert resp_a.status_code == 200
+
+        # User B accesses the add-on
+        resp_b = client_b.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'X-Remote-User-Id': 'ha-user-id-B',
+                'X-Remote-User-Name': 'UserB',
+            },
+        )
+        assert resp_b.status_code == 200
+
+        with client_a.session_transaction() as sess_a, \
+             client_b.session_transaction() as sess_b:
+            user_a = sess_a.get('username')
+            user_b = sess_b.get('username')
+            assert user_a is not None and user_b is not None
+            assert user_a != user_b, (
+                f'Users should be different but both got "{user_a}"'
+            )
+        print(f'  ✓ HA user A → "{user_a}", HA user B → "{user_b}"')
+    finally:
+        _teardown(data_file)
+
+
+def test_session_updates_when_ha_user_changes():
+    """If the HA user header changes, the session should update."""
+    print('Test: Session updates when HA user changes …')
+    data_file = _setup()
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+        client = app_mod.app.test_client()
+
+        # First request as user A
+        client.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'X-Remote-User-Id': 'ha-user-A',
+                'X-Remote-User-Name': 'UserA',
+            },
+        )
+        with client.session_transaction() as sess:
+            first_user = sess.get('username')
+
+        # Second request as user B (same client/browser, different HA user)
+        client.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'X-Remote-User-Id': 'ha-user-B',
+                'X-Remote-User-Name': 'UserB',
+            },
+        )
+        with client.session_transaction() as sess:
+            second_user = sess.get('username')
+
+        assert first_user != second_user, (
+            f'Session should have changed from "{first_user}" to a different user'
+        )
+        print(f'  ✓ Session changed from "{first_user}" to "{second_user}"')
+    finally:
+        _teardown(data_file)
+
+
+def test_returning_ha_user_reuses_account():
+    """A returning HA user should re-use their previously created account."""
+    print('Test: Returning HA user reuses account …')
+    data_file = _setup()
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+
+        client1 = app_mod.app.test_client()
+        client2 = app_mod.app.test_client()
+
+        # First visit
+        client1.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'X-Remote-User-Id': 'ha-user-returning',
+                'X-Remote-User-Name': 'Returning',
+            },
+        )
+        with client1.session_transaction() as sess:
+            first_username = sess.get('username')
+
+        # Second visit (new session)
+        client2.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'X-Remote-User-Id': 'ha-user-returning',
+                'X-Remote-User-Name': 'Returning',
+            },
+        )
+        with client2.session_transaction() as sess:
+            second_username = sess.get('username')
+
+        assert first_username == second_username, (
+            f'Should reuse same account, got "{first_username}" then "{second_username}"'
+        )
+        # Only one user entry should have been created (plus admin)
+        users = app_mod.load_users()
+        ha_users = [u for u in users.values() if u.get('ha_user_id') == 'ha-user-returning']
+        assert len(ha_users) == 1, f'Expected 1 HA user entry, got {len(ha_users)}'
+        print(f'  ✓ Returning HA user reused account "{first_username}"')
+    finally:
+        _teardown(data_file)
+
+
+def test_fallback_admin_login_without_user_headers():
+    """Without X-Remote-User-Id, fallback to admin login (legacy behaviour)."""
+    print('Test: Fallback to admin login without user headers …')
+    data_file = _setup()
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+        client = app_mod.app.test_client()
+
+        with client.session_transaction() as sess:
+            sess.clear()
+
+        resp = client.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+            },
+        )
+        assert resp.status_code == 200
+
+        with client.session_transaction() as sess:
+            username = sess.get('username')
+            assert username is not None, 'Session should be set'
+            users = app_mod.load_users()
+            assert users.get(username, {}).get('role') == 'admin', \
+                'Fallback should log in as admin'
+        print(f'  ✓ Fallback logged in as admin "{username}"')
+    finally:
+        _teardown(data_file)
+
+
 if __name__ == '__main__':
     passed = 0
     failed = 0
@@ -253,6 +474,11 @@ if __name__ == '__main__':
         test_already_logged_in_not_overwritten,
         test_no_auto_login_without_supervisor_token,
         test_login_overlay_hidden_in_ingress_mode,
+        test_per_user_ingress_creates_account,
+        test_different_ha_users_get_different_sessions,
+        test_session_updates_when_ha_user_changes,
+        test_returning_ha_user_reuses_account,
+        test_fallback_admin_login_without_user_headers,
     ]:
         try:
             test_fn()

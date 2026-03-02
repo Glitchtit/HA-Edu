@@ -1019,6 +1019,58 @@ def can_create_instance(request, instances):
     can_create = user_instance_count < MAX_INSTANCES
     return can_create, user_instance_count, MAX_INSTANCES
 
+def _resolve_ha_user(ha_user_id, ha_user_name, ha_display_name):
+    """Map a Home Assistant user to an app user account.
+
+    Looks up an existing app account linked to *ha_user_id*.  If none is
+    found a new account is created automatically.  The HA display-name is
+    used to derive a human-friendly app username.
+
+    Returns:
+        str: The app username that corresponds to the HA user.
+    """
+    users = load_users()
+
+    # 1. Check if an existing app user is already linked to this HA user ID
+    for uname, u in users.items():
+        if u.get('ha_user_id') == ha_user_id:
+            return uname
+
+    # 2. No mapping yet – create a new app account
+    base_name = ha_display_name or ha_user_name or (
+        f'ha_user_{ha_user_id[:8]}' if ha_user_id else 'ha_user'
+    )
+    # Sanitise to characters allowed by the registration endpoint
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', base_name).strip('_')
+    if len(sanitized) < 2:
+        sanitized = f'ha_{sanitized}' if sanitized else (
+            f'ha_user_{ha_user_id[:8]}' if ha_user_id else 'ha_user'
+        )
+
+    # Avoid clashes with existing usernames
+    username = sanitized
+    counter = 1
+    while username in users:
+        username = f'{sanitized}_{counter}'
+        counter += 1
+
+    users[username] = {
+        'password_hash': hash_password(secrets.token_urlsafe(32)),
+        'role': 'user',
+        'ha_user_id': ha_user_id,
+        'ha_user_name': ha_user_name,
+        'ha_display_name': ha_display_name,
+        'created_at': datetime.now().isoformat(),
+        'created_via': 'ingress_auto',
+    }
+    save_users(users)
+    logger.info(
+        'Created app user "%s" for HA user %s (id=%s)',
+        username, ha_display_name or ha_user_name, ha_user_id,
+    )
+    return username
+
+
 @app.before_request
 def _ingress_auto_auth():
     """Auto-authenticate users coming through Home Assistant Ingress.
@@ -1030,6 +1082,13 @@ def _ingress_auto_auth():
     the ingress proxy is the sole entry-point.  The add-on port is not
     exposed by default (``5000/tcp: null``), so external clients cannot
     reach the application to spoof these headers.
+
+    If the Supervisor sends ``X-Remote-User-Id`` / ``X-Remote-User-Name``
+    headers (available since Home Assistant 2024.x) the add-on maps the
+    HA user to a dedicated app account so that each HA user gets their own
+    session.  When these headers are absent (older HA versions) the
+    previous behaviour of logging in as the first admin account is
+    preserved as a fallback.
     """
     # Only apply when running inside the HA Supervisor environment
     if not os.environ.get('SUPERVISOR_TOKEN'):
@@ -1039,11 +1098,25 @@ def _ingress_auto_auth():
     if not request.headers.get('X-Ingress-Path'):
         return
 
-    # Already logged in – nothing to do
+    # --- Per-user identity (newer HA versions) ---
+    ha_user_id = request.headers.get('X-Remote-User-Id')
+    ha_user_name = request.headers.get('X-Remote-User-Name')
+    ha_display_name = request.headers.get('X-Remote-User-Display-Name')
+
+    if ha_user_id:
+        app_username = _resolve_ha_user(ha_user_id, ha_user_name, ha_display_name)
+        if session.get('username') != app_username:
+            session['username'] = app_username
+            logger.info(
+                'Ingress auto-auth: session set to HA user %s (ha_id=%s)',
+                app_username, ha_user_id,
+            )
+        return
+
+    # --- Fallback: no user-identity headers (older HA) ---
     if session.get('username'):
         return
 
-    # HA has already validated the user; auto-login as the first admin account
     users = load_users()
     admin_username = next(
         (uname for uname, u in users.items() if u.get('role') == 'admin'),
@@ -1051,7 +1124,7 @@ def _ingress_auto_auth():
     )
     if admin_username:
         session['username'] = admin_username
-        logger.info('Ingress auto-auth: session set to admin user %s', admin_username)
+        logger.info('Ingress auto-auth: session set to admin user %s (no user headers)', admin_username)
 
 
 @app.route('/')
