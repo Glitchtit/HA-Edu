@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Make the add-on sidebar panel visible to non-admin Home Assistant users by setting `panel_admin: false`
+
 ## 1.2.0
 
 - Overhaul dark mode support: extend CSS custom property overrides for the full neutral palette so buttons, badges, info boxes, and form controls remain readable when the browser prefers a dark color scheme

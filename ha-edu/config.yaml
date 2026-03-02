@@ -1,6 +1,6 @@
 name: "HA-Edu"
 description: "Educational portal for Home Assistant – manage student HA instances"
-version: "1.2.0"
+version: "1.2.1"
 slug: "ha-edu"
 url: "https://github.com/Glitchtit/HA-Edu"
 arch:
@@ -13,6 +13,7 @@ ingress: true
 ingress_port: 5000
 panel_icon: "mdi:school"
 panel_title: "HA-Edu"
+panel_admin: false
 homeassistant_api: false
 hassio_api: false
 auth_api: false
