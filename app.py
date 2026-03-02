@@ -1172,7 +1172,7 @@ def create_instance():
         try:
             logger.info(f'Pulling latest image: {HA_IMAGE}')
             client.images.pull(HA_IMAGE)
-        except Exception as e:
+        except docker.errors.APIError as e:
             logger.warning(f'Failed to pull latest image, using cached version: {e}')
         
         # Network configuration: Create container with bridge network for internet access
@@ -1413,7 +1413,7 @@ def reset_instance(server_name):
         try:
             logger.info(f'Pulling latest image: {HA_IMAGE}')
             client.images.pull(HA_IMAGE)
-        except Exception as e:
+        except docker.errors.APIError as e:
             logger.warning(f'Failed to pull latest image, using cached version: {e}')
         
         # Create a new container with the same configuration
