@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- Fix "Öppna" button to always open the container instance in a new tab instead of navigating inside the ingress iframe (which showed the main Home Assistant interface)
+- Add AI rules (`.github/copilot-instructions.md`) so GitHub agents automatically bump the version number and update the changelog on every pull request
+
 ## 1.0.0
 
 - Initial release as a Home Assistant add-on
