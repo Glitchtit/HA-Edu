@@ -26,6 +26,8 @@ def _setup():
     )
     tmpfile.close()
     os.environ['DATA_FILE'] = tmpfile.name
+    # Simulate running inside HA Supervisor
+    os.environ['SUPERVISOR_TOKEN'] = 'test-supervisor-token'
     # Prevent Docker import issues during testing
     os.environ.setdefault('DOCKER_HOST_IP', '127.0.0.1')
     return tmpfile.name
@@ -36,6 +38,7 @@ def _teardown(path):
         os.unlink(path)
     except OSError:
         pass
+    os.environ.pop('SUPERVISOR_TOKEN', None)
 
 
 def test_ingress_bearer_auto_login():
@@ -172,6 +175,39 @@ def test_already_logged_in_not_overwritten():
         _teardown(data_file)
 
 
+def test_no_auto_login_without_supervisor_token():
+    """Without SUPERVISOR_TOKEN env var, ingress auto-auth should be disabled."""
+    print('Test: No auto-login without SUPERVISOR_TOKEN …')
+    data_file = _setup()
+    # Remove SUPERVISOR_TOKEN to simulate standalone (non-HA) deployment
+    os.environ.pop('SUPERVISOR_TOKEN', None)
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+        client = app_mod.app.test_client()
+
+        with client.session_transaction() as sess:
+            sess.clear()
+
+        resp = client.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'Authorization': 'Bearer some-supervisor-token',
+            },
+        )
+        assert resp.status_code == 200
+
+        with client.session_transaction() as sess:
+            assert sess.get('username') is None, 'Session should remain empty without SUPERVISOR_TOKEN'
+        print('  ✓ No auto-login without SUPERVISOR_TOKEN')
+    finally:
+        _teardown(data_file)
+
+
 if __name__ == '__main__':
     passed = 0
     failed = 0
@@ -180,6 +216,7 @@ if __name__ == '__main__':
         test_no_auto_login_without_ingress_header,
         test_no_auto_login_without_bearer,
         test_already_logged_in_not_overwritten,
+        test_no_auto_login_without_supervisor_token,
     ]:
         try:
             test_fn()

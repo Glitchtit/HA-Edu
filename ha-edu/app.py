@@ -1026,10 +1026,17 @@ def _ingress_auto_auth():
 
     When the add-on is accessed via Ingress the HA Supervisor has already
     authenticated the user and injects an ``Authorization: Bearer <token>``
-    header.  We trust this header (it can only be present on requests that
-    passed through the Supervisor) and automatically log the user in as the
-    first admin account so no separate login step is needed.
+    header.  We trust this combination of headers **only** when the
+    ``SUPERVISOR_TOKEN`` environment variable is present, which proves we
+    are running inside the HA Supervisor environment where the ingress
+    proxy is the sole entry-point.  The add-on port is not exposed by
+    default (``5000/tcp: null``), so external clients cannot reach the
+    application to spoof these headers.
     """
+    # Only apply when running inside the HA Supervisor environment
+    if not os.environ.get('SUPERVISOR_TOKEN'):
+        return
+
     # Only apply when accessed via HA Ingress
     if not request.headers.get('X-Ingress-Path'):
         return
