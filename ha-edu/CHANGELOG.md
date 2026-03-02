@@ -2,7 +2,7 @@
 
 ## 1.6.1
 
-- Reduce HA role cache TTL from 300 s to 30 s so admin promotions and demotions in Home Assistant propagate to the app more quickly
+- Reduce HA role cache TTL from 300s to 30s so admin promotions and demotions in Home Assistant propagate to the app more quickly
 
 ## 1.6.0
 
