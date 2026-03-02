@@ -116,6 +116,10 @@ ONBOARDING_CACHE_TTL = int(os.getenv('ONBOARDING_CACHE_TTL', '60'))
 # Or set to 'localhost' when running the portal directly on the host (not in Docker)
 DOCKER_HOST_IP = os.getenv('DOCKER_HOST_IP', 'host.docker.internal')
 
+# Local image name for student containers to avoid HA Supervisor
+# "unsupported software" warning about ghcr.io/home-assistant/home-assistant
+STUDENT_IMAGE_REPO = 'local/ha-edu-student'
+
 # Paths that trigger access logging (to avoid logging every asset request)
 ACCESS_LOG_PATHS = ['', 'index.html', 'lovelace']
 
@@ -215,6 +219,37 @@ def ensure_admin_account():
         }
         save_users(users)
         logger.info('Auto-created default admin account (admin / admin)')
+
+def pull_and_retag_image():
+    """Pull the HA image and re-tag it for student instances.
+    
+    Re-tags the image to a local name to prevent HA Supervisor from
+    flagging student containers as 'unsupported software'.
+    
+    Returns:
+        str: The image name to use for creating student containers.
+    """
+    tag = HA_IMAGE.partition(':')[2] or 'latest'
+    student_image = f'{STUDENT_IMAGE_REPO}:{tag}'
+    
+    try:
+        logger.info(f'Pulling latest image: {HA_IMAGE}')
+        client.images.pull(HA_IMAGE)
+    except docker.errors.APIError as e:
+        logger.warning(f'Failed to pull latest image, using cached version: {e}')
+    
+    try:
+        image = client.images.get(HA_IMAGE)
+        image.tag(STUDENT_IMAGE_REPO, tag)
+        logger.info(f'Re-tagged image as: {student_image}')
+        return student_image
+    except docker.errors.ImageNotFound:
+        try:
+            client.images.get(student_image)
+            return student_image
+        except docker.errors.ImageNotFound:
+            logger.warning(f'Could not re-tag image, using original: {HA_IMAGE}')
+            return HA_IMAGE
 
 def get_available_port():
     """Get next available port for a new instance
@@ -1173,17 +1208,13 @@ def create_instance():
         # Copy master configuration to the volume before starting the container
         copy_master_config_to_volume(volume_name)
         
-        # Pull the latest HA image to ensure new instances use the newest version
-        try:
-            logger.info(f'Pulling latest image: {HA_IMAGE}')
-            client.images.pull(HA_IMAGE)
-        except docker.errors.APIError as e:
-            logger.warning(f'Failed to pull latest image, using cached version: {e}')
+        # Pull the latest HA image and re-tag for student use
+        student_image = pull_and_retag_image()
         
         # Network configuration: Create container with bridge network for internet access
         # but isolated from host LAN.
         container = client.containers.run(
-            HA_IMAGE,
+            student_image,
             name=container_name,
             detach=True,
             ports={'8123/tcp': port},
@@ -1416,17 +1447,13 @@ def reset_instance(server_name):
         # Copy master configuration to the volume before starting the container
         copy_master_config_to_volume(volume_name)
         
-        # Pull the latest HA image to ensure reset instances use the newest version
-        try:
-            logger.info(f'Pulling latest image: {HA_IMAGE}')
-            client.images.pull(HA_IMAGE)
-        except docker.errors.APIError as e:
-            logger.warning(f'Failed to pull latest image, using cached version: {e}')
+        # Pull the latest HA image and re-tag for student use
+        student_image = pull_and_retag_image()
         
         # Create a new container with the same configuration
         # Network configuration: Use bridge network for isolation from host LAN
         new_container = client.containers.run(
-            HA_IMAGE,
+            student_image,
             name=container_name,
             detach=True,
             ports={'8123/tcp': port},
