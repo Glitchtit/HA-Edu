@@ -107,9 +107,13 @@ def test_no_auto_login_without_ingress_header():
         _teardown(data_file)
 
 
-def test_no_auto_login_without_bearer():
-    """Ingress requests without Bearer token should NOT auto-login."""
-    print('Test: No auto-login without Bearer token …')
+def test_auto_login_without_bearer():
+    """Ingress requests without Bearer token should still auto-login.
+
+    The presence of SUPERVISOR_TOKEN + X-Ingress-Path is sufficient proof
+    that the Supervisor has already authenticated the user.
+    """
+    print('Test: Auto-login without Bearer token …')
     data_file = _setup()
     try:
         import importlib
@@ -129,8 +133,8 @@ def test_no_auto_login_without_bearer():
         assert resp.status_code == 200, f'Expected 200, got {resp.status_code}'
 
         with client.session_transaction() as sess:
-            assert sess.get('username') is None, 'Session should remain empty without bearer token'
-        print('  ✓ No auto-login without bearer token')
+            assert sess.get('username') is not None, 'Session should be set even without bearer token'
+        print('  ✓ Auto-login without bearer token')
     finally:
         _teardown(data_file)
 
@@ -208,15 +212,47 @@ def test_no_auto_login_without_supervisor_token():
         _teardown(data_file)
 
 
+def test_login_overlay_hidden_in_ingress_mode():
+    """The login overlay should not appear when accessed via Ingress."""
+    print('Test: Login overlay hidden in ingress mode …')
+    data_file = _setup()
+    try:
+        import importlib
+        import app as app_mod
+        importlib.reload(app_mod)
+        app_mod.DATA_FILE = data_file
+        app_mod.ensure_admin_account()
+        client = app_mod.app.test_client()
+
+        with client.session_transaction() as sess:
+            sess.clear()
+
+        resp = client.get(
+            '/',
+            headers={
+                'X-Ingress-Path': '/api/hassio_ingress/abc123',
+                'Authorization': 'Bearer some-supervisor-token',
+            },
+        )
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert 'loginOverlay' not in html, 'Login overlay should not be present in ingress mode'
+        assert 'Logga ut' not in html, 'Logout button should not be present in ingress mode'
+        print('  ✓ Login overlay and logout button hidden in ingress mode')
+    finally:
+        _teardown(data_file)
+
+
 if __name__ == '__main__':
     passed = 0
     failed = 0
     for test_fn in [
         test_ingress_bearer_auto_login,
         test_no_auto_login_without_ingress_header,
-        test_no_auto_login_without_bearer,
+        test_auto_login_without_bearer,
         test_already_logged_in_not_overwritten,
         test_no_auto_login_without_supervisor_token,
+        test_login_overlay_hidden_in_ingress_mode,
     ]:
         try:
             test_fn()

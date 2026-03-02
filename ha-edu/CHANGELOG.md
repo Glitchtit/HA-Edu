@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Remove the login/register overlay and logout button when running inside Home Assistant Ingress, since the Supervisor already authenticates users before forwarding requests
+- Relax ingress auto-auth to no longer require the Bearer header; the presence of `SUPERVISOR_TOKEN` and `X-Ingress-Path` is sufficient proof the request was authenticated by the Supervisor
+
 ## 1.3.0
 
 - Auto-authenticate users arriving through Home Assistant Ingress by reading the `Authorization: Bearer` token that the Supervisor injects, removing the need for a separate login step
