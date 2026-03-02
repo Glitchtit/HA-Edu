@@ -1502,6 +1502,8 @@
         // student instance origin instead of escaping to the main HA UI.
         function openInstance(event, port) {
             event.preventDefault();
+            port = Number(port);
+            if (!Number.isInteger(port) || port < 1 || port > 65535) return;
             window.open(window.location.protocol + '//' + window.location.hostname + ':' + port + '/', '_blank');
         }
 
