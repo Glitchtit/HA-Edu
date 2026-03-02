@@ -1168,7 +1168,7 @@
                     {% endif %}
                     <div class="instance-actions">
                         <div class="instance-actions-row">
-                            <a href="{{ ingress_path }}/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                            <a href="{{ ingress_path }}/proxy/{{ instance.port }}/" {% if not ingress_path %}target="_blank" rel="noopener"{% endif %} class="btn-access">Öppna</a>
                             <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">Starta om</button>
                             {% if is_admin %}
                             <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
