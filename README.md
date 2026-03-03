@@ -166,7 +166,6 @@ HA-Edu/
   Dockerfile                    # Standalone container build
   docker-compose.yml            # Standalone Compose file
   requirements.txt              # Python dependencies (standalone)
-  test_*.py                     # Test suite
   README.md                     # This file
 ```
 
