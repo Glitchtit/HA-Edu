@@ -909,7 +909,7 @@ def verify_password(password, hashed):
 # Ensure the default admin account exists on startup
 try:
     ensure_admin_account()
-except Exception as e:
+except OSError as e:
     logger.warning(
         'Could not ensure admin account on startup: %s. '
         'The admin account will be created when the data directory becomes available.',
