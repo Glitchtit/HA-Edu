@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.4
+
+- Remove unused `privileged: [SYS_ADMIN]` capability from the add-on manifest; the app does not require this Linux capability
+- Remove unused `map: [share:rw, ssl:ro]` directory mappings; the app does not access `/share` or `/ssl`
+
 ## 1.7.1
 
 - Remove old test scripts, demo scripts, and implementation/fix summary markdown files from the repository root and docs/ directory to reduce clutter
