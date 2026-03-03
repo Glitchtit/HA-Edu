@@ -1,0 +1,59 @@
+#include <tunables/global>
+
+profile ha-edu flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # Capabilities required by Gunicorn worker management
+  capability chown,
+  capability dac_override,
+  capability setuid,
+  capability setgid,
+  capability net_bind_service,
+
+  # Send signals to child workers (Gunicorn/gevent)
+  signal (send) set=(kill,term,int,hup,cont),
+
+  # Network access (HTTP/WebSocket to Supervisor API and student containers)
+  network inet  tcp,
+  network inet  udp,
+  network inet6 tcp,
+  network inet6 udp,
+  network unix  stream,
+  network unix  dgram,
+
+  # Entrypoint
+  /run.sh ix,
+
+  # Shell and core utilities used by run.sh
+  /bin/**            ix,
+  /usr/bin/**        ix,
+  /usr/local/bin/**  ix,
+
+  # Python packages and shared libraries
+  /usr/lib/**            mr,
+  /usr/local/lib/**      mr,
+  /lib/**                mr,
+
+  # Application code (read-only)
+  /app/**  r,
+
+  # Data persistence (read-write)
+  /data/** rw,
+
+  # Temp files (gevent / Gunicorn may need these)
+  /tmp/** rwk,
+
+  # Docker socket (required for container lifecycle management)
+  /run/docker.sock rw,
+
+  # Proc filesystem (needed by Gunicorn and gevent for process info)
+  @{PROC}/@{pid}/** r,
+
+  # System configuration files (read-only)
+  /etc/** r,
+
+  # Device access for TTY (logging)
+  /dev/tty  rw,
+  /dev/null rw,
+  /dev/urandom r,
+}
