@@ -1,6 +1,6 @@
 name: "HA-Edu"
 description: "Educational portal for Home Assistant – manage student HA instances"
-version: "1.7.4"
+version: "1.7.5"
 slug: "ha-edu"
 url: "https://github.com/Glitchtit/HA-Edu"
 arch:

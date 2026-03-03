@@ -1,9 +1,10 @@
 # Changelog
 
-## 1.7.4
+## 1.7.5
 
 - Remove unused `privileged: [SYS_ADMIN]` capability from the add-on manifest; the app does not require this Linux capability
 - Remove unused `map: [share:rw, ssl:ro]` directory mappings; the app does not access `/share` or `/ssl`
+- Add custom AppArmor profile (`apparmor.txt`) restricting filesystem, network, and capability access for defense-in-depth hardening
 
 ## 1.7.1
 
