@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1
+
+- Restyle teacher settings button from solid violet (btn-accent) to a subtle outlined style (btn-settings) that matches the admin toolbar theme
+- Replace teacher emoji icon with gear icon for clarity
+
 ## 1.9.0
 
 - Redesign page layout: replace centered card header with a slim top-bar (brand left, user right) and a page-header section with instance count and primary CTA

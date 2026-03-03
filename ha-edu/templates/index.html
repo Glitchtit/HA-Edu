@@ -271,16 +271,18 @@
             box-shadow: 0 4px 12px oklch(0.52 0.12 25 / 0.18);
         }
         
-        /* Accent Button - Special actions (Teacher access) */
-        .btn-accent {
-            background: var(--color-secondary);
-            color: white;
+        /* Settings Button - Subtle outlined style for config actions */
+        .btn-settings {
+            background: transparent;
+            color: var(--foreground);
+            border: 1px solid var(--border);
         }
         
-        .btn-accent:hover:not(:disabled) {
-            background: oklch(0.46 0.10 290);
+        .btn-settings:hover:not(:disabled) {
+            background: var(--color-gray-100);
+            border-color: var(--color-gray-500);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.52 0.10 290 / 0.20);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
         }
         
         /* Ghost Button - Minimal visual presence */
@@ -1436,7 +1438,7 @@
             <div class="toolbar-divider"></div>
             <div class="toolbar-group">
                 <button id="teacherAccessAllBtn" class="btn-teacher-access" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
-                <button id="teacherSettingsBtn" class="btn-accent" onclick="openTeacherSettingsModal()">👨‍🏫 Inställningar</button>
+                <button id="teacherSettingsBtn" class="btn-settings" onclick="openTeacherSettingsModal()">⚙ Inställningar</button>
             </div>
             <div class="toolbar-divider"></div>
             <label class="toggle-container" id="toggleContainer">
