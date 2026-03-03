@@ -1,156 +1,61 @@
 # HA-Edu
-Educational Portal for Home Assistant
 
-A web-based portal for managing multiple Home Assistant demo instances for educational purposes. Perfect for classroom environments where students need their own isolated Home Assistant instances.
+A web-based portal for managing multiple Home Assistant demo instances in educational settings. Designed for classrooms and workshops where each student needs an isolated Home Assistant environment to learn with.
 
 ## Features
 
-- 🚀 **Easy Instance Creation**: Create new Home Assistant instances with a simple web interface - no password required
-- 🔑 **Admin Password Protected**: Admin password required for deleting and resetting instances
-- 🔐 **Role-Based Access Control**: Control admin access via local network or Cloudflare Zero Trust email authentication
-- 👨‍🏫 **Teacher Access**: Optional feature to add teacher admin accounts to student instances after onboarding
-- ♻️ **Instance Reset**: Reset any instance to default HA image using admin password
-- 📊 **Instance Management**: View and manage unlimited instances
-- 📝 **Interaction Logging**: Comprehensive logging of all user and admin interactions (create, delete, access, etc.)
-- 🔒 **GDPR Compliance**: Automatic log retention with 90-day maximum (configurable)
-- 🐳 **Docker Based**: Fully containerized for easy deployment on Unraid or any Docker host
-- 🔄 **Automatic Port Assignment**: Dynamically assigns ports starting from BASE_PORT (default: 8124)
-- ♻️ **Port Reuse**: Automatically reuses ports from deleted instances
-- 🌐 **Network Isolation**: Instances have internet access but are isolated from host LAN
-- 📱 **Responsive UI**: Clean, modern interface that works on all devices
-- ☁️ **Cloudflare Tunnel Ready**: Designed to work with Cloudflare tunnel for secure external access
-- 🔀 **Built-in Proxy**: Access all instances through a single endpoint without exposing individual ports
+- **One-click instance creation** -- students create their own Home Assistant instance from a simple web interface
+- **Role-based access control** -- admin privileges are derived from the Home Assistant Owner role when running as an add-on, or from a local user/password system in standalone mode
+- **Teacher access** -- optionally inject a secondary admin account into student instances so instructors can monitor progress without disrupting student work
+- **Instance lifecycle management** -- create, delete, reset, restart, lock/unlock, start-all, stop-all, and delete-all operations
+- **Built-in reverse proxy** -- all instance traffic is routed through a single endpoint; individual container ports do not need to be exposed
+- **Dynamic port assignment** -- ports are allocated automatically starting from a configurable base port and reused when instances are deleted
+- **Network isolation** -- instances run in a bridge network with internet access but no visibility into the host LAN
+- **Interaction logging with configurable retention** -- all user and admin actions are logged; logs are automatically pruned after a configurable number of days (default 90) for GDPR compliance
+- **Dark mode support** -- the interface adapts to the browser's preferred color scheme
+- **Responsive design** -- works on desktops, tablets, and phones
+- **WebSocket proxying** -- the built-in proxy forwards WebSocket connections so the Home Assistant frontend works without modification
 
-## Installation on Home Assistant OS (Recommended)
+## Installation
 
-The portal runs as a native Home Assistant add-on and appears in the sidebar as **HA-Edu**.
+### Home Assistant Add-on (recommended)
 
-1. In Home Assistant go to **Settings → Add-ons → Add-on Store**.
-2. Click the three-dot menu (⋮) in the top-right corner and choose **Repositories**.
-3. Paste the repository URL and click **Add**:
+The portal runs as a native Home Assistant add-on and appears in the sidebar.
+
+1. In Home Assistant, navigate to **Settings > Add-ons > Add-on Store**.
+2. Open the three-dot menu in the top-right corner and select **Repositories**.
+3. Add the repository URL:
    ```
    https://github.com/Glitchtit/HA-Edu
    ```
-4. The **HA-Edu** add-on will appear in the store – click it, then click **Install**.
-5. After installation, open the **Configuration** tab to set options (admin password, HA image, etc.).
-6. Start the add-on. It will be available in the sidebar as **HA-Edu**.
+4. Locate the **HA-Edu** add-on in the store and click **Install**.
+5. Open the **Configuration** tab to adjust options (HA image, base port, max instances, etc.).
+6. Start the add-on. A new **HA-Edu** entry will appear in the sidebar.
 
-## Quick Start (Standalone Docker)
+When running as an add-on, authentication is handled automatically by Home Assistant Ingress. Each Home Assistant user receives a dedicated app account on first access. Users whose HA account has the **Owner** role are granted admin privileges in the portal.
 
-### Prerequisites
+### Standalone Docker
 
-- Docker and Docker Compose installed
-- Access to Docker socket (for container management)
+#### Prerequisites
 
-### Deployment with Docker Compose
+- Docker and Docker Compose
+- Access to the Docker socket
 
-1. Clone this repository:
+#### Docker Compose
+
 ```bash
 git clone https://github.com/Glitchtit/HA-Edu.git
 cd HA-Edu
-```
-
-2. Start the portal:
-```bash
 docker-compose up -d
 ```
 
-3. Access the portal at `http://localhost:5000`
+The portal will be available at `http://localhost:5000`.
 
-### Deployment on Unraid
-
-#### Option 1: Using Template (Recommended)
-
-1. In Unraid's Docker tab, click "Add Container"
-2. In the "Template" dropdown, select "ha-edu-portal" or add the template URL:
-   ```
-   https://raw.githubusercontent.com/Glitchtit/HA-Edu/main/ha-edu.xml
-   ```
-3. Configure the settings as needed (all environment variables have sensible defaults)
-4. Click "Apply" to create the container
-
-#### Option 2: Manual Configuration
-
-1. Add a new container in Unraid's Docker tab
-2. Configure the following settings:
-   - **Repository**: Build from this repository or use a pre-built image
-   - **Port**: `5000` (WebUI)
-   - **Ports for HA instances**: Dynamic - no need to pre-allocate ports
-   - **Volume Mappings**:
-     - Container Path: `/var/run/docker.sock` → Host Path: `/var/run/docker.sock`
-     - Container Path: `/data` → Host Path: `/mnt/user/appdata/ha-edu`
-   - **Environment Variables**:
-     - `BASE_PORT`: `8124` (starting port for instances, assigned dynamically)
-     - `HA_IMAGE`: `ghcr.io/home-assistant/home-assistant:stable`
-     - `ADMIN_PASSWORD`: (optional) Admin password for reset functionality
-     - `ADMINS`: (optional) Comma-separated list of email addresses for admin access via Cloudflare Zero Trust
-   - **Network Mode**: `bridge` (for proper isolation)
-
-### Admin Access Control
-
-The portal supports fine-grained admin access control based on network location and Cloudflare Zero Trust authentication:
-
-**Admin access is granted if:**
-- User is accessing from the local network (`192.168.50.0/24` subnet), OR
-- User is authenticated via Cloudflare Zero Trust with an email address in the `ADMINS` environment variable
-
-**Configuration:**
-```bash
-# Example: Grant admin access to specific email addresses
-ADMINS=admin@example.com,teacher@example.com
-```
-
-**How it works:**
-- When users access the portal through Cloudflare Zero Trust, Cloudflare sets the `Cf-Access-Authenticated-User-Email` header
-- The portal checks if this email is in the approved `ADMINS` list (case-insensitive)
-- Users without admin access won't see the unlock button or admin controls
-- Local network users (192.168.50.x) always have admin access regardless of the `ADMINS` setting
-
-**Security features:**
-- Email comparison is case-insensitive
-- Supports reverse proxy configurations (checks `X-Forwarded-For` header)
-- Admin buttons are hidden client-side for non-admin users
-- Server-side validation ensures only authorized users can perform admin actions
-
-### Network Isolation & Cloudflare Tunnel
-
-The portal is designed to work with Cloudflare tunnel for secure external access:
-- **Internet Access**: ✅ Instances can access the internet (via NAT)
-- **LAN Access**: ❌ Instances are isolated from the host's LAN network
-- **Device Discovery**: ❌ Instances cannot discover devices on the main network
-- **External Access**: ✅ Via Cloudflare tunnel (e.g., edu.wredlund.fi)
-- **Port Exposure**: ✅ No need to expose individual instance ports - built-in proxy routes all traffic through port 5000
-
-#### Proxy Feature
-
-The portal includes a built-in proxy that allows all Home Assistant instances to be accessed through the portal's single endpoint (port 5000). When users click "Access" on an instance, they're redirected to `/proxy/<port>/` which internally forwards all requests to the appropriate Home Assistant instance.
-
-**Benefits:**
-- ✅ Only port 5000 needs to be exposed through Cloudflare tunnel
-- ✅ No need to configure individual ports for each instance
-- ✅ Works seamlessly with firewall restrictions
-- ✅ Simplified network configuration
-
-**Technical Details:**
-- The proxy forwards all HTTP methods (GET, POST, PUT, DELETE, etc.)
-- Query strings and URL paths are preserved
-- Response headers and status codes are passed through correctly
-- Validates that requested ports belong to actual instances
-- WebSocket upgrade requests are forwarded to the backend (the backend handles the websocket protocol)
-
-To set up Cloudflare tunnel:
-1. Install cloudflared on your Unraid server
-2. Create a tunnel and point it to the portal (port 5000)
-3. Configure authentication in Cloudflare dashboard
-4. Users access instances through the portal UI via the tunnel - all instance access automatically goes through the proxy
-
-### Manual Docker Build
+#### Manual Docker Build
 
 ```bash
-# Build the image
 docker build -t ha-edu-portal .
 
-# Run the container
 docker run -d \
   --name ha-edu-portal \
   -p 5000:5000 \
@@ -160,203 +65,135 @@ docker run -d \
   ha-edu-portal
 ```
 
+In standalone mode the portal provides its own login and registration system. The first registered user is automatically assigned the admin role.
+
 ## Usage
 
-### Creating a New Instance
+### Creating an instance
 
-1. Click the "**+ Add New Instance**" button
-2. Enter a **Server Name** (e.g., "Student-Lab-01")
-3. Click "**Create**"
-4. Wait for the instance to be created (may take 1-2 minutes)
-5. Click "**Access**" to open the Home Assistant instance
+1. Click **+ Add New Instance**.
+2. Enter a server name (for example, `Student-Lab-01`).
+3. Click **Create**.
+4. Wait one to two minutes for the Home Assistant container to start.
+5. Click **Access** to open the instance.
 
-### Deleting an Instance (Admin Only)
+Each new instance is provisioned with a master configuration that enables demo mode and a set of sample entities (lights, climate, weather, camera, device trackers, and input buttons).
 
-Deleting an instance requires the admin password:
+### Admin operations
 
-1. Click the "**Delete**" button on the instance card
-2. Enter the **Admin Password**
-3. Confirm the deletion
-4. The instance and its data will be removed
+Admin users have access to additional controls on each instance card:
 
-### Resetting an Instance (Admin Only)
+- **Delete** -- remove the instance and its data.
+- **Reset** -- wipe all configuration and restore the instance to its initial demo state.
+- **Restart** -- restart the underlying container.
+- **Lock / Unlock** -- prevent or allow non-admin users from accessing the instance.
 
-If an admin password is configured, you can reset any instance to its default state:
+Bulk actions available to admins include **Start All**, **Stop All**, and **Delete All**.
 
-1. Click the "**Reset**" button on the instance card (only visible when admin password is set)
-2. Enter the **Admin Password**
-3. Confirm the reset
-4. The instance will be completely reset to a fresh Home Assistant installation
-5. **Warning**: This will delete all data and configurations for that instance!
+### Teacher access
 
-### Teacher Access (Optional Feature)
+The teacher access feature lets an instructor add a secondary admin account to a student's Home Assistant instance.
 
-The Teacher Access feature allows instructors to add a secondary admin account to student instances for monitoring purposes. This preserves the educational value of students going through onboarding themselves while giving teachers access.
+1. Configure teacher credentials in the portal settings (admin-only).
+2. Wait for the student to complete the Home Assistant onboarding wizard.
+3. Click the **Teacher** button on the instance card and confirm.
+4. The instructor can now log in to that instance with the configured teacher credentials.
 
-**Requirements:**
-- Both `TEACHER_USERNAME` and `TEACHER_PASSWORD` environment variables must be configured
-- Admin password must be configured
-- Students must complete the onboarding process first
-
-**How to use:**
-
-1. Students create and set up their instances using the onboarding wizard
-2. After students complete onboarding, click the "**👨‍🏫 Teacher**" button on the instance card
-3. Enter the **Admin Password**
-4. Confirm to create the teacher admin account
-5. Teacher can now log in using the configured teacher credentials
-
-**Key Features:**
-- Teacher account is created as a secondary administrator
-- Student's account and data remain unchanged
-- Teacher can monitor student progress and configurations
-- Cannot be added until student completes onboarding
-- Instance cards show a "👨‍🏫 Teacher Access" badge when enabled
+A **Teacher Access** badge appears on the instance card once the account has been added. The student's own account and data are not affected.
 
 ## Configuration
 
-Environment variables can be configured to customize the portal:
+### Add-on options
+
+When running as a Home Assistant add-on, options are set through the add-on **Configuration** tab.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `BASE_PORT` | `8124` | Starting port number for instance containers |
+| `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Docker image used for new instances |
+| `LOG_RETENTION_DAYS` | `90` | Days to retain interaction logs (0 = unlimited) |
+| `DOCKER_HOST_IP` | `172.30.32.1` | IP used by the portal container to reach instance containers |
+| `MAX_INSTANCES` | `0` | Maximum instances a non-admin user may create (0 = unlimited) |
+| `ONBOARDING_CACHE_TTL` | `60` | Seconds to cache onboarding status checks |
+| `SECRET_KEY` | (auto-generated) | Flask session secret; generated and persisted automatically if not set |
+
+### Standalone environment variables
+
+For standalone Docker deployments, configuration is provided through environment variables. See `.env.example` for a full reference. Key variables include:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_PORT` | `8124` | Starting port number for HA instances (dynamically assigned) |
-| `DATA_FILE` | `/data/instances.json` | Path to store instance data |
-| `LOG_DIR` | `/logs` | Path to store interaction logs |
-| `LOG_RETENTION_DAYS` | `90` | **GDPR Compliance**: Maximum days to retain logs. Set to `0` for unlimited retention |
-| `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Home Assistant Docker image to use |
-| `ADMIN_PASSWORD` | (empty) | **Required** admin password for delete and reset operations. If not set, delete and reset operations will fail |
-| `TEACHER_USERNAME` | (empty) | *Optional* Username for teacher admin account. Required for Teacher Access feature |
-| `TEACHER_PASSWORD` | (empty) | *Optional* Password for teacher admin account. Required for Teacher Access feature |
-| `ADMINS` | (empty) | *Optional* Comma-separated list of admin email addresses for Cloudflare authentication |
-| `MAX_INSTANCES` | `0` (unlimited) | *Optional* Maximum instances per non-admin user (0 = unlimited) |
-| `DOCKER_HOST_IP` | `host.docker.internal` | *Optional* IP/hostname to access instance containers from portal container. Use `host.docker.internal` on Docker Desktop, or set to host's IP if needed |
-
-**GDPR Compliance**: The portal automatically removes logs older than 90 days by default. Adjust `LOG_RETENTION_DAYS` based on your data protection requirements.
-
-For more details on interaction logging and GDPR compliance, see [LOGGING.md](LOGGING.md).
+| `BASE_PORT` | `8124` | Starting port number for instance containers |
+| `DATA_FILE` | `/data/instances.json` | Path to the instance metadata file |
+| `LOG_DIR` | `/logs` | Directory for interaction logs |
+| `LOG_RETENTION_DAYS` | `90` | Days to retain interaction logs (0 = unlimited) |
+| `HA_IMAGE` | `ghcr.io/home-assistant/home-assistant:stable` | Docker image used for new instances |
+| `MAX_INSTANCES` | `0` | Maximum instances a non-admin user may create (0 = unlimited) |
+| `ONBOARDING_CACHE_TTL` | `60` | Seconds to cache onboarding status checks |
+| `DOCKER_HOST_IP` | `host.docker.internal` | IP/hostname to reach instance containers from the portal container |
+| `SECRET_KEY` | (auto-generated) | Flask session secret; generated and persisted automatically if not set |
 
 ## Architecture
 
-The portal consists of:
-- **Flask Web Application**: Provides the UI and API
-- **Built-in Proxy Server**: Routes all instance traffic through the portal
-- **Docker SDK**: Manages Home Assistant containers
-- **Instance Storage**: JSON-based storage for instance metadata
+The portal is built with:
 
-Each Home Assistant instance:
-- Runs in its own Docker container
-- Has a dedicated volume for configuration
-- Is accessible on a unique dynamically-assigned port (internal)
-- Accessible via the proxy at `/proxy/<port>/` (external)
-- Uses bridge network mode for isolation from host LAN
-- Has internet access but cannot discover LAN devices
-- Runs in demo mode for educational purposes
-- Starts with a pre-configured master configuration that includes:
-  - 5 demo lights
-  - 1 weather entity
-  - 1 thermostat
-  - 2 device trackers
-  - 1 camera
-  - 2 buttons
+- **Flask** -- serves the web UI and REST API
+- **Gunicorn with gevent workers** -- handles concurrent requests and WebSocket connections
+- **Docker SDK for Python** -- creates and manages Home Assistant containers
+- **Built-in reverse proxy** -- forwards HTTP and WebSocket traffic to instance containers
+- **JSON file storage** -- persists instance metadata and portal settings
 
-## Master Configuration
+Each Home Assistant instance runs in its own Docker container with a dedicated volume. Instances are placed on a bridge network that provides internet access through NAT but prevents communication with the host LAN. All instance traffic is routed through the portal's reverse proxy, so only a single port needs to be exposed.
 
-The portal uses a master `configuration.yaml` file that is automatically copied to each new instance or reset instance. This configuration enables Home Assistant's demo mode and provides sample entities for educational purposes.
-
-The master configuration includes:
-- **Demo Platform**: Enables all demo integrations
-- **5 Lights**: Demo Light 1-5 for testing automations and controls
-- **Weather**: Demo weather entity for location-based scenarios
-- **Climate**: Demo thermostat for temperature control learning
-- **Device Trackers**: 2 demo trackers for presence detection scenarios
-- **Camera**: Demo camera for media and security scenarios
-- **Buttons**: 2 input buttons for triggering automations
-
-When an instance is created or reset, this master configuration is automatically deployed, ensuring a consistent starting point for all users.
-
-## Port Assignment
-
-Ports are assigned dynamically for internal container communication:
-- Portal UI: `5000` (exposed externally)
-- HA Instance 1: `8124` (BASE_PORT, internal only)
-- HA Instance 2: `8125` (BASE_PORT + 1, internal only)
-- HA Instance 3: `8126` (BASE_PORT + 2, internal only)
-- ... and so on
-
-When an instance is deleted, its port becomes available for reuse by new instances.
-
-**Note**: With the built-in proxy, only port 5000 needs to be exposed externally. All instances are accessed via `/proxy/<port>/` through the portal.
-
-## Security Considerations
-
-- The portal requires access to the Docker socket (`/var/run/docker.sock`)
-- Consider running behind a reverse proxy with authentication (e.g., Cloudflare tunnel)
-- **Admin password is required** for delete and reset operations - store securely (e.g., in Unraid environment variables)
-- Admin password provides elevated access for managing all instances
-- Limit network access to trusted networks only
-- **Network Isolation**: Instances are isolated from host LAN but have internet access
-- **Proxy Security**: The proxy validates that requested ports belong to actual instances before forwarding
-- **Cloudflare Tunnel**: Recommended for secure external access with authentication
-- Instances cannot discover or access devices on the host's network
-
-## Troubleshooting
-
-### Container won't start
-- Check that Docker socket is accessible
-- Check logs: `docker logs ha-edu-portal`
-
-### Can't create instances
-- Ensure Docker socket permissions are correct
-- Check available disk space
-- Verify Docker can pull the Home Assistant image
-- Check if ports are available (firewall rules)
-
-### Instance not accessible
-- Wait 1-2 minutes for Home Assistant to fully start
-- Check the container is running: `docker ps`
-- Check the proxy error message in browser (502 usually means instance is still starting)
-- For debugging, you can still access instances directly via their ports if they're exposed
-
-## Development
-
-### Local Development Setup
-
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the application
-python app.py
-```
-
-### File Structure
+## Repository Layout
 
 ```
 HA-Edu/
-├── repository.yaml               # HA add-on repository metadata
-├── ha-edu/                       # Home Assistant add-on package
-│   ├── config.yaml               # Add-on configuration (ingress, sidebar)
-│   ├── Dockerfile                # Add-on Docker build
-│   ├── build.yaml                # Multi-architecture build config
-│   ├── run.sh                    # Add-on entrypoint
-│   ├── CHANGELOG.md              # Add-on version history
-│   ├── app.py                    # Main Flask application
-│   ├── wsgi.py                   # WSGI entry point
-│   ├── interaction_logger.py     # Audit logging
-│   ├── requirements.txt          # Python dependencies
-│   ├── master_configuration.yaml # Master HA demo config
-│   └── templates/                # HTML templates
-├── app.py                        # Main Flask application (standalone)
-├── Dockerfile                    # Standalone Docker build
-├── docker-compose.yml            # Standalone Compose configuration
-├── requirements.txt              # Python dependencies
-├── test_*.py                     # Test files
-└── README.md                     # This file
+  repository.yaml               # Home Assistant add-on repository metadata
+  ha-edu/                       # Home Assistant add-on package
+    config.yaml                 # Add-on manifest (ingress, options, etc.)
+    Dockerfile                  # Add-on container build
+    build.yaml                  # Multi-architecture build configuration
+    run.sh                      # Add-on entrypoint script
+    CHANGELOG.md                # Add-on version history
+    app.py                      # Flask application
+    wsgi.py                     # WSGI entry point
+    interaction_logger.py       # Audit logging module
+    requirements.txt            # Python dependencies
+    master_configuration.yaml   # Default HA configuration for new instances
+    templates/                  # HTML templates
+  app.py                        # Flask application (standalone deployment)
+  Dockerfile                    # Standalone container build
+  docker-compose.yml            # Standalone Compose file
+  requirements.txt              # Python dependencies (standalone)
+  test_*.py                     # Test suite
+  README.md                     # This file
 ```
+
+## Development
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+## Troubleshooting
+
+**Container will not start**
+- Verify that the Docker socket is accessible.
+- Review container logs: `docker logs ha-edu-portal`.
+
+**Cannot create instances**
+- Check Docker socket permissions.
+- Confirm that sufficient disk space is available.
+- Ensure that the Home Assistant image can be pulled.
+
+**Instance not accessible after creation**
+- Allow one to two minutes for Home Assistant to finish starting.
+- Verify that the container is running: `docker ps`.
+- A 502 error from the proxy typically indicates the instance is still initializing.
 
 ## License
 
@@ -364,8 +201,4 @@ This project is open source and available for educational use.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## Support
-
-For issues or questions, please open an issue on GitHub.
+Contributions are welcome. Please open an issue or submit a pull request on GitHub.
