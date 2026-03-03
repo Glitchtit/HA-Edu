@@ -80,7 +80,33 @@ def get_or_create_secret_key():
 # Set a secret key for session management
 # Must be consistent across all Gunicorn workers for sessions to work correctly
 app.secret_key = get_or_create_secret_key()
-client = docker.from_env()
+
+
+class _LazyDockerClient:
+    """Lazy proxy for the Docker client.
+
+    ``docker.from_env()`` connects to the Docker daemon immediately (to
+    negotiate the API version).  When the module is imported before the
+    Docker socket is available (e.g. during Gunicorn worker boot) this
+    causes an unrecoverable ``DockerException`` that crashes the worker.
+
+    This thin proxy defers the real connection until the first attribute
+    access so the import always succeeds.
+    """
+
+    def __init__(self):
+        self._client = None
+
+    def _ensure_client(self):
+        if self._client is None:
+            self._client = docker.from_env()
+
+    def __getattr__(self, name):
+        self._ensure_client()
+        return getattr(self._client, name)
+
+
+client = _LazyDockerClient()
 
 # Initialize WebSocket support
 sock = Sock(app)
