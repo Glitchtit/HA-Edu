@@ -2,8 +2,9 @@
 """
 Tests for HA group-based admin access.
 
-When an HA user belongs to the Owner or Administrators (system-admin) group,
-they should automatically receive the 'admin' role in the app.
+Only HA users in the Owner group (is_owner=True) should automatically receive
+the 'admin' role in the app.  Members of the Administrators (system-admin)
+group are treated as normal users.
 """
 
 import sys
@@ -92,9 +93,9 @@ def test_owner_gets_admin_role():
         _teardown(data_file)
 
 
-def test_administrator_gets_admin_role():
-    """An HA user in the system-admin group should get the admin role."""
-    print('Test: HA Administrator gets admin role …')
+def test_administrator_gets_user_role():
+    """An HA user in the system-admin group (but not Owner) should get the user role."""
+    print('Test: HA Administrator gets user role …')
     data_file = _setup()
     try:
         import importlib
@@ -128,10 +129,10 @@ def test_administrator_gets_admin_role():
             None,
         )
         assert admin_user is not None, 'Admin user should exist'
-        assert admin_user['role'] == 'admin', (
-            f'Administrator should have admin role, got "{admin_user["role"]}"'
+        assert admin_user['role'] == 'user', (
+            f'Administrator (non-owner) should have user role, got "{admin_user["role"]}"'
         )
-        print('  ✓ HA Administrator (system-admin group) gets admin role')
+        print('  ✓ HA Administrator (system-admin group) gets user role')
     finally:
         _teardown(data_file)
 
@@ -216,10 +217,10 @@ def test_role_updated_on_subsequent_login():
         )
         assert changing_user['role'] == 'user', 'Should start as user'
 
-        # Second login: now promoted to admin
+        # Second login: now promoted to Owner
         app_mod._ha_role_cache.clear()
         supervisor_users_admin = [
-            {'username': 'ChangingUser', 'is_owner': False, 'is_active': True,
+            {'username': 'ChangingUser', 'is_owner': True, 'is_active': True,
              'group_ids': ['system-admin'], 'name': 'Changing User'},
         ]
         with patch('app.requests.get', return_value=_mock_supervisor_response(supervisor_users_admin)):
@@ -242,7 +243,7 @@ def test_role_updated_on_subsequent_login():
         assert changing_user['role'] == 'admin', (
             f'Role should be updated to admin, got "{changing_user["role"]}"'
         )
-        print('  ✓ Role updated from user to admin on subsequent login')
+        print('  ✓ Role updated from user to admin on subsequent login (promoted to Owner)')
     finally:
         _teardown(data_file)
 
@@ -259,9 +260,9 @@ def test_role_demoted_on_subsequent_login():
         app_mod.ensure_admin_account()
         app_mod._ha_role_cache.clear()
 
-        # First login: admin user
+        # First login: Owner user (admin)
         supervisor_users_admin = [
-            {'username': 'DemotedUser', 'is_owner': False, 'is_active': True,
+            {'username': 'DemotedUser', 'is_owner': True, 'is_active': True,
              'group_ids': ['system-admin'], 'name': 'Demoted User'},
         ]
         with patch('app.requests.get', return_value=_mock_supervisor_response(supervisor_users_admin)):
@@ -283,11 +284,11 @@ def test_role_demoted_on_subsequent_login():
         )
         assert demoted_user['role'] == 'admin', 'Should start as admin'
 
-        # Second login: now demoted to regular user
+        # Second login: no longer Owner, demoted to regular user
         app_mod._ha_role_cache.clear()
         supervisor_users_regular = [
             {'username': 'DemotedUser', 'is_owner': False, 'is_active': True,
-             'group_ids': ['system-users'], 'name': 'Demoted User'},
+             'group_ids': ['system-admin'], 'name': 'Demoted User'},
         ]
         with patch('app.requests.get', return_value=_mock_supervisor_response(supervisor_users_regular)):
             client2 = app_mod.app.test_client()
@@ -381,7 +382,7 @@ if __name__ == '__main__':
     failed = 0
     for test_fn in [
         test_owner_gets_admin_role,
-        test_administrator_gets_admin_role,
+        test_administrator_gets_user_role,
         test_regular_user_gets_user_role,
         test_role_updated_on_subsequent_login,
         test_role_demoted_on_subsequent_login,

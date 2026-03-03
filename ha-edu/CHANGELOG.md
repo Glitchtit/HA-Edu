@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0
+
+- Restrict admin access to the Owner group only: members of the Administrators (`system-admin`) group are now treated as normal users and no longer see admin tools in the interface
+
 ## 1.6.1
 
 - Reduce HA role cache TTL from 300s to 30s so admin promotions and demotions in Home Assistant propagate to the app more quickly

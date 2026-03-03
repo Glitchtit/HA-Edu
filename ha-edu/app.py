@@ -1029,14 +1029,16 @@ def _fetch_ha_user_role(ha_user_name):
     """Determine the app role for an HA user by querying the Supervisor API.
 
     Calls ``GET /auth/list`` on the Supervisor to retrieve the list of HA
-    users and checks whether *ha_user_name* is an Owner or belongs to the
-    Administrators group (``system-admin``).
+    users and checks whether *ha_user_name* is an Owner (``is_owner``).
+
+    Only the Owner group grants admin privileges; members of the
+    Administrators group (``system-admin``) are treated as normal users.
 
     Results are cached in memory for ``HA_ROLE_CACHE_TTL`` seconds to avoid
     calling the Supervisor API on every request.
 
     Returns:
-        str: ``'admin'`` if the user is an Owner or Administrator,
+        str: ``'admin'`` if the user is an Owner,
              ``'user'`` otherwise (including on API errors).
     """
     if not ha_user_name:
@@ -1066,7 +1068,7 @@ def _fetch_ha_user_role(ha_user_name):
             for u in data.get('users', []):
                 if u.get('username') == ha_user_name:
                     group_ids = u.get('group_ids') or []
-                    if u.get('is_owner') or 'system-admin' in group_ids:
+                    if u.get('is_owner'):
                         role = 'admin'
                     break
     except Exception:
