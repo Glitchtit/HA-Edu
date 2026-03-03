@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.9.0
+
+- Redesign page layout: replace centered card header with a slim top-bar (brand left, user right) and a page-header section with instance count and primary CTA
+- Add dedicated admin toolbar with grouped bulk-action buttons and visual dividers, only rendered for admin users
+- Redesign instance cards: add status-colored left border, compact metadata row with dot separators, full-width primary "Öppna" button, and secondary actions row
+- Add slide-in modal animation and improved backdrop blur
+- Improve empty state with icon and structured copy
+- Add responsive breakpoints for mobile (single-column grid, stacked header)
+- Add null-safety checks in JS for admin-only DOM elements
+
+## 1.8.0
+
+- Redesign UI with a modern, muted slate-blue color palette replacing the previous vibrant orange-pink gradient scheme
+- Reduce color chroma across all semantic colors (success, warning, danger, accent) for a more professional, cohesive appearance
+- Replace the dark gradient header with a clean card-style header that adapts to light and dark mode
+- Convert all hardcoded hex colors in utility boxes to oklch values with proper dark mode variants
+- Tighten border radii for a contemporary feel and soften shadow intensities throughout
+- Update the proxy error page to match the new design language
+
 ## 1.7.1
 
 - Remove old test scripts, demo scripts, and implementation/fix summary markdown files from the repository root and docs/ directory to reduce clutter

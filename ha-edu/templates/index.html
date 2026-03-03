@@ -6,64 +6,64 @@
     <title>HA-Edu - Utbildningsportal för Home Assistant</title>
     <style>
         :root {
-            /* Brand Colors - Orange to Pink Gradient Palette */
-            --color-primary: oklch(0.65 0.22 35);        /* Vibrant orange */
-            --color-secondary: oklch(0.58 0.24 340);     /* Pink/Magenta */
-            --color-tertiary: oklch(0.70 0.18 25);       /* Lighter orange accent */
+            /* Brand Colors - Slate Blue Palette */
+            --color-primary: oklch(0.55 0.14 260);        /* Slate blue */
+            --color-secondary: oklch(0.52 0.10 290);     /* Soft violet */
+            --color-tertiary: oklch(0.62 0.10 260);       /* Light blue accent */
             
             /* Neutral Palette */
-            --color-black: oklch(0.20 0.02 265);
-            --color-gray-900: oklch(0.25 0.02 265);
-            --color-gray-800: oklch(0.35 0.01 265);
-            --color-gray-700: oklch(0.45 0.01 265);
-            --color-gray-300: oklch(0.90 0.01 265);
-            --color-gray-100: oklch(0.96 0.01 265);
+            --color-black: oklch(0.16 0.01 265);
+            --color-gray-900: oklch(0.20 0.01 265);
+            --color-gray-800: oklch(0.28 0.005 265);
+            --color-gray-700: oklch(0.45 0.005 265);
+            --color-gray-300: oklch(0.91 0.005 265);
+            --color-gray-100: oklch(0.96 0.005 265);
             
             /* Semantic Colors */
-            --background: oklch(0.98 0.01 265);          /* Light neutral background */
-            --foreground: oklch(0.20 0.02 265);          /* Dark text */
+            --background: oklch(0.97 0.003 265);          /* Light neutral background */
+            --foreground: oklch(0.16 0.01 265);          /* Dark text */
             --card: oklch(1.00 0 0);                     /* White cards */
-            --card-foreground: oklch(0.20 0.02 265);
+            --card-foreground: oklch(0.16 0.01 265);
             
-            --border: oklch(0.90 0.01 265);
-            --input: oklch(0.90 0.01 265);
-            --ring: oklch(0.65 0.22 35);                 /* Orange focus ring */
+            --border: oklch(0.91 0.005 265);
+            --input: oklch(0.91 0.005 265);
+            --ring: oklch(0.55 0.14 260);                 /* Focus ring */
             
             /* Sidebar */
-            --sidebar: oklch(0.98 0.01 265);
-            --sidebar-foreground: oklch(0.20 0.02 265);
-            --sidebar-primary: oklch(0.65 0.22 35);
-            --sidebar-accent: oklch(0.96 0.01 265);
-            --sidebar-border: oklch(0.90 0.01 265);
+            --sidebar: oklch(0.97 0.003 265);
+            --sidebar-foreground: oklch(0.16 0.01 265);
+            --sidebar-primary: oklch(0.55 0.14 260);
+            --sidebar-accent: oklch(0.96 0.005 265);
+            --sidebar-border: oklch(0.91 0.005 265);
             
-            /* Shadows with orange tint */
-            --shadow-color: oklch(0.65 0.22 35 / 0.15);
+            /* Shadows */
+            --shadow-color: oklch(0.55 0.14 260 / 0.10);
             
             /* Border Radius */
-            --radius: 1rem;
-            --radius-sm: 0.5rem;
-            --radius-lg: 1.5rem;
+            --radius: 0.75rem;
+            --radius-sm: 0.375rem;
+            --radius-lg: 1rem;
         }
         
         /* Dark Mode Support */
         @media (prefers-color-scheme: dark) {
             :root {
-                --background: oklch(0.20 0.02 265);
-                --foreground: oklch(0.98 0.01 265);
-                --card: oklch(0.25 0.02 265);
-                --card-foreground: oklch(0.98 0.01 265);
-                --border: oklch(0.35 0.01 265);
-                --input: oklch(0.30 0.01 265);
-                --sidebar: oklch(0.25 0.02 265);
-                --sidebar-foreground: oklch(0.98 0.01 265);
-                --sidebar-accent: oklch(0.30 0.02 265);
-                --sidebar-border: oklch(0.35 0.01 265);
+                --background: oklch(0.16 0.01 265);
+                --foreground: oklch(0.97 0.003 265);
+                --card: oklch(0.20 0.01 265);
+                --card-foreground: oklch(0.97 0.003 265);
+                --border: oklch(0.28 0.005 265);
+                --input: oklch(0.26 0.005 265);
+                --sidebar: oklch(0.20 0.01 265);
+                --sidebar-foreground: oklch(0.97 0.003 265);
+                --sidebar-accent: oklch(0.25 0.02 265);
+                --sidebar-border: oklch(0.28 0.005 265);
                 
                 /* Neutral palette overrides for dark mode */
-                --color-gray-100: oklch(0.30 0.01 265);
-                --color-gray-300: oklch(0.40 0.01 265);
-                --color-gray-700: oklch(0.70 0.01 265);
-                --color-gray-800: oklch(0.80 0.01 265);
+                --color-gray-100: oklch(0.26 0.005 265);
+                --color-gray-300: oklch(0.36 0.005 265);
+                --color-gray-700: oklch(0.65 0.005 265);
+                --color-gray-800: oklch(0.78 0.005 265);
             }
         }
         
@@ -78,83 +78,99 @@
             background: var(--background);
             color: var(--foreground);
             min-height: 100vh;
-            padding: 20px;
+            padding: 0;
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1100px;
             margin: 0 auto;
+            padding: 0 1.5rem 2rem;
         }
         
-        /* Header */
-        header {
-            text-align: center;
-            margin-bottom: 2rem;
-            background: linear-gradient(135deg, 
-                var(--color-black) 0%, 
-                var(--color-gray-900) 100%
-            );
-            padding: 2.5rem 1.5rem;
-            border-radius: var(--radius);
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            margin-bottom: 1.75rem;
+            border-bottom: 1px solid var(--border);
         }
         
-        header h1 {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, 
-                var(--color-primary) 0%, 
-                var(--color-tertiary) 100%
-            );
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .top-bar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.0625rem;
             font-weight: 700;
+            color: var(--foreground);
+            letter-spacing: -0.02em;
         }
         
-        header p {
-            font-size: 1rem;
-            color: var(--color-gray-300);
+        .admin-badge {
+            background: var(--color-primary);
+            color: white;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
         }
         
-        /* Cards */
-        .controls {
-            background: var(--card);
-            color: var(--card-foreground);
-            padding: 1.25rem;
-            border-radius: var(--radius);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
-            border: 1px solid var(--border);
+        /* Page Header */
+        .page-header {
             margin-bottom: 1.5rem;
         }
         
-        .controls h2 {
-            margin-bottom: 1rem;
+        .page-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
             color: var(--foreground);
-            font-size: 1.125rem;
-            font-weight: 600;
+            letter-spacing: -0.025em;
+            margin-bottom: 0.75rem;
         }
         
-        .controls-row {
+        .page-header-row {
             display: flex;
-            gap: 0.75rem;
             align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        
+        .page-header-meta {
+            color: var(--color-gray-700);
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        /* Admin Toolbar */
+        .admin-toolbar {
+            background: var(--card);
+            color: var(--card-foreground);
+            padding: 0.625rem 1rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             flex-wrap: wrap;
         }
         
-        /* Button group for related actions */
-        .btn-group {
+        .toolbar-group {
             display: flex;
-            gap: 0.5rem;
             align-items: center;
-            padding: 0.5rem 0;
+            gap: 0.375rem;
         }
         
-        /* Separator between button groups */
-        .btn-separator {
+        .toolbar-divider {
             width: 1px;
-            height: 2rem;
+            height: 1.5rem;
             background: var(--border);
-            margin: 0 0.5rem;
+            margin: 0 0.25rem;
         }
         
         /* Modern Button System */
@@ -197,9 +213,9 @@
         }
         
         .btn-primary:hover:not(:disabled) {
-            background: oklch(0.58 0.22 35);
+            background: oklch(0.48 0.14 260);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.65 0.22 35 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.55 0.14 260 / 0.20);
         }
         
         .btn-primary:active:not(:disabled) {
@@ -221,38 +237,38 @@
         
         /* Success Button - Positive actions (Start, Open) */
         .btn-success {
-            background: oklch(0.55 0.18 150);
+            background: oklch(0.50 0.10 162);
             color: white;
         }
         
         .btn-success:hover:not(:disabled) {
-            background: oklch(0.48 0.18 150);
+            background: oklch(0.44 0.10 162);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.55 0.18 150 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.50 0.10 162 / 0.20);
         }
         
         /* Warning Button - Caution actions (Stop) */
         .btn-warning {
-            background: oklch(0.70 0.15 75);
-            color: oklch(0.30 0.10 75);
+            background: oklch(0.60 0.10 80);
+            color: oklch(0.30 0.08 80);
         }
         
         .btn-warning:hover:not(:disabled) {
-            background: oklch(0.65 0.15 75);
+            background: oklch(0.55 0.10 80);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.70 0.15 75 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.60 0.10 80 / 0.20);
         }
         
         /* Danger Button - Destructive actions */
         .btn-danger {
-            background: oklch(0.55 0.20 25);
+            background: oklch(0.52 0.12 25);
             color: white;
         }
         
         .btn-danger:hover:not(:disabled) {
-            background: oklch(0.48 0.22 25);
+            background: oklch(0.46 0.14 25);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.55 0.20 25 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.52 0.12 25 / 0.18);
         }
         
         /* Accent Button - Special actions (Teacher access) */
@@ -262,9 +278,9 @@
         }
         
         .btn-accent:hover:not(:disabled) {
-            background: oklch(0.52 0.24 340);
+            background: oklch(0.46 0.10 290);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.58 0.24 340 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.52 0.10 290 / 0.20);
         }
         
         /* Ghost Button - Minimal visual presence */
@@ -322,9 +338,9 @@
         }
         
         .add-button:hover:not(:disabled) {
-            background: oklch(0.58 0.22 35);
+            background: oklch(0.48 0.14 260);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.65 0.22 35 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.55 0.14 260 / 0.20);
         }
         
         .add-button:disabled {
@@ -359,7 +375,7 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            background: oklch(0.55 0.20 25);
+            background: oklch(0.52 0.12 25);
             color: white;
             border: none;
             padding: 0.625rem 1.25rem;
@@ -371,9 +387,9 @@
         }
         
         .btn-delete-all:hover:not(:disabled) {
-            background: oklch(0.48 0.22 25);
+            background: oklch(0.46 0.14 25);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.55 0.20 25 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.52 0.12 25 / 0.18);
         }
         
         .btn-start-all {
@@ -381,7 +397,7 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            background: oklch(0.55 0.18 150);
+            background: oklch(0.50 0.10 162);
             color: white;
             border: none;
             padding: 0.625rem 1.25rem;
@@ -393,9 +409,9 @@
         }
         
         .btn-start-all:hover:not(:disabled) {
-            background: oklch(0.48 0.18 150);
+            background: oklch(0.44 0.10 162);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.55 0.18 150 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.50 0.10 162 / 0.20);
         }
         
         .btn-stop-all {
@@ -403,8 +419,8 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            background: oklch(0.70 0.15 75);
-            color: oklch(0.30 0.10 75);
+            background: oklch(0.60 0.10 80);
+            color: oklch(0.30 0.08 80);
             border: none;
             padding: 0.625rem 1.25rem;
             font-size: 0.875rem;
@@ -415,9 +431,9 @@
         }
         
         .btn-stop-all:hover:not(:disabled) {
-            background: oklch(0.65 0.15 75);
+            background: oklch(0.55 0.10 80);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.70 0.15 75 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.60 0.10 80 / 0.20);
         }
         
         .toggle-container {
@@ -471,12 +487,29 @@
             transform: translateX(1.25rem);
         }
         
-        .instance-count {
-            margin-top: 0.75rem;
+        /* Instance card badges row */
+        .instance-card-badges {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Compact metadata row */
+        .instance-meta {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.25rem;
             color: var(--color-gray-700);
-            font-size: 0.875rem;
-            padding-top: 0.75rem;
-            border-top: 1px solid var(--border);
+            font-size: 0.8125rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .meta-dot {
+            color: var(--color-gray-300);
+            user-select: none;
         }
         
         .instances-grid {
@@ -492,10 +525,34 @@
             color: var(--card-foreground);
             border-radius: var(--radius);
             padding: 1.25rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+            padding-left: 1.125rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
             border: 1px solid var(--border);
+            border-left: 3px solid var(--color-gray-300);
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
+        }
+        
+        .instance-card.status-border-running {
+            border-left-color: oklch(0.50 0.10 162);
+        }
+        
+        .instance-card.status-border-stopped,
+        .instance-card.status-border-exited {
+            border-left-color: oklch(0.52 0.12 25);
+        }
+        
+        .instance-card.status-border-restarting {
+            border-left-color: oklch(0.60 0.10 80);
+        }
+        
+        .instance-card.status-border-created {
+            border-left-color: var(--color-primary);
+        }
+        
+        .instance-card.status-border-paused,
+        .instance-card.status-border-removing {
+            border-left-color: var(--color-gray-700);
         }
         
         .instance-card:hover {
@@ -513,13 +570,12 @@
         .instance-card h3 {
             color: var(--foreground);
             margin: 0;
-            font-size: 1.125rem;
+            font-size: 1rem;
             font-weight: 600;
             flex: 1;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .btn-lock {
@@ -545,8 +601,8 @@
         }
         
         .btn-lock.locked {
-            background: oklch(0.90 0.08 35);
-            border-color: oklch(0.70 0.15 35);
+            background: oklch(0.92 0.04 260);
+            border-color: oklch(0.65 0.08 260);
         }
         
         .instance-info {
@@ -561,24 +617,26 @@
         }
         
         .instance-actions {
-            margin-top: 1rem;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.375rem;
         }
         
-        .instance-actions-row {
+        .instance-actions-secondary {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.375rem;
             flex-wrap: wrap;
         }
         
         .btn-access {
-            display: inline-flex;
+            display: flex;
             align-items: center;
             justify-content: center;
             gap: 0.375rem;
-            background: oklch(0.55 0.18 150);
+            background: var(--color-primary);
             color: white;
             border: none;
             padding: 0.5rem 0.75rem;
@@ -588,15 +646,14 @@
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             font-weight: 500;
             font-size: 0.8125rem;
-            flex: 1;
+            width: 100%;
             text-align: center;
-            min-width: 0;
         }
         
         .btn-access:hover:not(:disabled) {
-            background: oklch(0.48 0.18 150);
+            background: oklch(0.48 0.14 260);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.55 0.18 150 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.55 0.14 260 / 0.20);
         }
         
         .btn-delete {
@@ -604,7 +661,7 @@
             align-items: center;
             justify-content: center;
             gap: 0.375rem;
-            background: oklch(0.55 0.20 25);
+            background: oklch(0.52 0.12 25);
             color: white;
             border: none;
             padding: 0.5rem 0.75rem;
@@ -619,9 +676,9 @@
         }
         
         .btn-delete:hover:not(:disabled) {
-            background: oklch(0.48 0.22 25);
+            background: oklch(0.46 0.14 25);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.55 0.20 25 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.52 0.12 25 / 0.18);
         }
         
         .btn-reset {
@@ -707,17 +764,17 @@
             min-width: 0;
         }
         
-        /* Teacher access button in main controls (not in instance cards) */
-        .controls-row .btn-teacher-access {
+        /* Teacher access button in toolbar */
+        .admin-toolbar .btn-teacher-access {
             flex: 0 0 auto;
-            padding: 0.625rem 1.25rem;
-            font-size: 0.875rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.8125rem;
         }
         
         .btn-teacher-access:hover:not(:disabled) {
-            background: oklch(0.52 0.24 340);
+            background: oklch(0.46 0.10 290);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px oklch(0.58 0.24 340 / 0.35);
+            box-shadow: 0 4px 12px oklch(0.52 0.10 290 / 0.20);
         }
         
         .btn-teacher-access:disabled {
@@ -731,15 +788,14 @@
             display: inline-flex;
             align-items: center;
             gap: 0.25rem;
-            background: oklch(0.92 0.08 340);
-            color: oklch(0.40 0.20 340);
+            background: oklch(0.94 0.04 290);
+            color: oklch(0.42 0.08 290);
             padding: 0.25rem 0.5rem;
             border-radius: 9999px;
             font-size: 0.6875rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.025em;
-            margin-left: 0.5rem;
         }
         
         .status-badge {
@@ -755,51 +811,61 @@
         }
         
         .status-running {
-            background: oklch(0.92 0.10 145);
-            color: oklch(0.35 0.15 145);
+            background: oklch(0.94 0.04 162);
+            color: oklch(0.38 0.08 162);
         }
         
         .status-stopped {
-            background: oklch(0.92 0.08 25);
-            color: oklch(0.45 0.15 25);
+            background: oklch(0.94 0.03 25);
+            color: oklch(0.45 0.08 25);
         }
         
         .status-exited {
-            background: oklch(0.92 0.08 25);
-            color: oklch(0.45 0.15 25);
+            background: oklch(0.94 0.03 25);
+            color: oklch(0.45 0.08 25);
         }
         
         .status-restarting {
-            background: oklch(0.92 0.10 75);
-            color: oklch(0.45 0.15 75);
+            background: oklch(0.94 0.04 80);
+            color: oklch(0.45 0.08 80);
         }
         
         .status-paused {
-            background: oklch(0.92 0.04 265);
-            color: oklch(0.45 0.04 265);
+            background: oklch(0.94 0.02 265);
+            color: oklch(0.45 0.02 265);
         }
         
         .status-created {
-            background: oklch(0.92 0.08 230);
-            color: oklch(0.45 0.12 230);
+            background: oklch(0.94 0.04 240);
+            color: oklch(0.45 0.06 240);
         }
         
         .status-removing {
-            background: oklch(0.92 0.10 340);
-            color: oklch(0.45 0.15 340);
+            background: oklch(0.94 0.04 290);
+            color: oklch(0.45 0.06 290);
         }
         
         .status-removed {
-            background: oklch(0.92 0.02 265);
+            background: oklch(0.94 0.02 265);
             color: oklch(0.50 0.02 265);
         }
         
         .status-unknown {
-            background: oklch(0.92 0.02 265);
+            background: oklch(0.94 0.02 265);
             color: oklch(0.50 0.02 265);
         }
         
         /* Modal Styles */
+        @keyframes modalFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes modalSlideIn {
+            from { opacity: 0; transform: translateY(-0.75rem) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
         .modal {
             display: none;
             position: fixed;
@@ -809,19 +875,21 @@
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(2px);
+            backdrop-filter: blur(4px);
+            animation: modalFadeIn 0.15s ease-out;
         }
         
         .modal-content {
             background: var(--card);
             color: var(--card-foreground);
-            margin: 8% auto;
+            margin: 10vh auto 0;
             padding: 1.75rem;
             border-radius: var(--radius);
             max-width: 480px;
             width: calc(100% - 2rem);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
             border: 1px solid var(--border);
+            animation: modalSlideIn 0.2s ease-out;
         }
         
         .modal h2 {
@@ -858,7 +926,7 @@
         .form-group input:focus {
             outline: none;
             border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px oklch(0.65 0.22 35 / 0.15);
+            box-shadow: 0 0 0 3px oklch(0.55 0.14 260 / 0.10);
         }
         
         .modal-actions {
@@ -903,8 +971,8 @@
         }
         
         .btn-submit:hover:not(:disabled) {
-            background: oklch(0.58 0.22 35);
-            box-shadow: 0 4px 12px oklch(0.65 0.22 35 / 0.35);
+            background: oklch(0.48 0.14 260);
+            box-shadow: 0 4px 12px oklch(0.55 0.14 260 / 0.20);
         }
         
         .btn-submit:disabled {
@@ -913,33 +981,45 @@
         }
         
         .error-message {
-            background: oklch(0.95 0.06 25);
-            color: oklch(0.45 0.18 25);
+            background: oklch(0.96 0.03 25);
+            color: oklch(0.45 0.10 25);
             padding: 0.75rem;
             border-radius: var(--radius-sm);
             margin-top: 0.75rem;
-            border-left: 3px solid oklch(0.55 0.22 25);
+            border-left: 3px solid oklch(0.52 0.12 25);
             font-size: 0.875rem;
         }
         
         .success-message {
-            background: oklch(0.95 0.06 145);
-            color: oklch(0.40 0.15 145);
+            background: oklch(0.96 0.03 162);
+            color: oklch(0.38 0.08 162);
             padding: 0.75rem;
             border-radius: var(--radius-sm);
             margin-top: 0.75rem;
-            border-left: 3px solid oklch(0.55 0.18 145);
+            border-left: 3px solid oklch(0.50 0.10 162);
             font-size: 0.875rem;
         }
         
         .no-instances {
             text-align: center;
             color: var(--color-gray-700);
-            font-size: 1rem;
-            padding: 3rem;
+            font-size: 0.9375rem;
+            padding: 4rem 2rem;
             background: var(--card);
             border-radius: var(--radius);
-            border: 2px dashed var(--border);
+            border: 1px dashed var(--border);
+            grid-column: 1 / -1;
+        }
+        
+        .no-instances-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .no-instances-title {
+            font-weight: 600;
+            color: var(--foreground);
+            margin-bottom: 0.25rem;
         }
         
         .hidden {
@@ -1022,20 +1102,18 @@
         .user-bar {
             display: flex;
             align-items: center;
-            justify-content: flex-end;
             gap: 0.75rem;
-            margin-top: 0.75rem;
         }
         
         .user-bar span {
-            color: var(--color-gray-300);
+            color: var(--color-gray-700);
             font-size: 0.875rem;
         }
         
         .user-bar button {
-            background: rgba(255,255,255,0.1);
-            color: var(--color-gray-300);
-            border: 1px solid rgba(255,255,255,0.2);
+            background: var(--color-gray-100);
+            color: var(--foreground);
+            border: 1px solid var(--border);
             padding: 0.375rem 0.75rem;
             border-radius: var(--radius-sm);
             cursor: pointer;
@@ -1044,14 +1122,14 @@
         }
         
         .user-bar button:hover {
-            background: rgba(255,255,255,0.2);
-            color: white;
+            background: var(--color-gray-300);
+            color: var(--foreground);
         }
         
         /* Utility classes for modal info/warning/danger boxes */
         .info-box {
-            background: #bee3f8;
-            color: #2c5282;
+            background: oklch(0.92 0.03 240);
+            color: oklch(0.40 0.06 240);
             padding: 15px;
             border-radius: var(--radius-sm);
             margin: 15px 0;
@@ -1063,8 +1141,8 @@
         }
         
         .success-box {
-            background: #c6f6d5;
-            color: #276749;
+            background: oklch(0.94 0.04 162);
+            color: oklch(0.40 0.06 162);
             padding: 15px;
             border-radius: var(--radius-sm);
             margin: 15px 0;
@@ -1076,8 +1154,8 @@
         }
         
         .caution-box {
-            background: #feebc8;
-            color: #c05621;
+            background: oklch(0.94 0.04 80);
+            color: oklch(0.48 0.08 50);
             padding: 15px;
             border-radius: var(--radius-sm);
             margin: 15px 0;
@@ -1089,13 +1167,13 @@
         }
         
         .danger-text {
-            color: #e53e3e;
+            color: oklch(0.52 0.12 25);
             margin: 10px 0;
         }
         
         .teacher-badge-box {
-            background: #d6bcfa;
-            color: #553c9a;
+            background: oklch(0.86 0.05 290);
+            color: oklch(0.38 0.10 290);
             padding: 10px;
             border-radius: var(--radius-sm);
             margin: 10px 0;
@@ -1118,115 +1196,157 @@
         
         /* Dark mode overrides for elements with hardcoded colors */
         @media (prefers-color-scheme: dark) {
+            .instance-card.status-border-running {
+                border-left-color: oklch(0.45 0.08 162);
+            }
+            
+            .instance-card.status-border-stopped,
+            .instance-card.status-border-exited {
+                border-left-color: oklch(0.48 0.10 25);
+            }
+            
+            .instance-card.status-border-restarting {
+                border-left-color: oklch(0.50 0.08 80);
+            }
+            
+            .instance-card.status-border-created {
+                border-left-color: oklch(0.48 0.12 260);
+            }
+            
             /* Warning button needs visible text */
             .btn-warning,
             .btn-stop-all {
-                background: oklch(0.45 0.15 75);
-                color: oklch(0.95 0.05 75);
+                background: oklch(0.45 0.08 80);
+                color: oklch(0.92 0.04 80);
             }
             
             .btn-warning:hover:not(:disabled),
             .btn-stop-all:hover:not(:disabled) {
-                background: oklch(0.40 0.15 75);
+                background: oklch(0.38 0.10 80);
             }
             
             /* Status badges */
             .status-running {
-                background: oklch(0.30 0.10 145);
-                color: oklch(0.80 0.12 145);
+                background: oklch(0.25 0.06 162);
+                color: oklch(0.78 0.06 162);
             }
             
             .status-stopped,
             .status-exited {
-                background: oklch(0.30 0.08 25);
-                color: oklch(0.80 0.10 25);
+                background: oklch(0.25 0.04 25);
+                color: oklch(0.78 0.06 25);
             }
             
             .status-restarting {
-                background: oklch(0.30 0.10 75);
-                color: oklch(0.80 0.10 75);
+                background: oklch(0.30 0.08 80);
+                color: oklch(0.78 0.06 80);
             }
             
             .status-paused {
-                background: oklch(0.30 0.04 265);
-                color: oklch(0.80 0.04 265);
+                background: oklch(0.26 0.02 265);
+                color: oklch(0.78 0.02 265);
             }
             
             .status-created {
-                background: oklch(0.30 0.08 230);
-                color: oklch(0.80 0.10 230);
+                background: oklch(0.25 0.04 240);
+                color: oklch(0.78 0.06 240);
             }
             
             .status-removing {
-                background: oklch(0.30 0.10 340);
-                color: oklch(0.80 0.10 340);
+                background: oklch(0.25 0.04 290);
+                color: oklch(0.78 0.06 290);
             }
             
             .status-removed,
             .status-unknown {
-                background: oklch(0.30 0.02 265);
+                background: oklch(0.25 0.02 265);
                 color: oklch(0.75 0.02 265);
             }
             
             /* Teacher access badge */
             .teacher-access-badge {
-                background: oklch(0.30 0.10 340);
-                color: oklch(0.82 0.12 340);
+                background: oklch(0.25 0.04 290);
+                color: oklch(0.80 0.06 290);
             }
             
             /* Lock button */
             .btn-lock.locked {
-                background: oklch(0.35 0.10 35);
-                border-color: oklch(0.45 0.15 35);
+                background: oklch(0.30 0.06 260);
+                border-color: oklch(0.40 0.08 260);
             }
             
             /* Error / success messages */
             .error-message {
-                background: oklch(0.25 0.08 25);
-                color: oklch(0.80 0.12 25);
-                border-left-color: oklch(0.50 0.20 25);
+                background: oklch(0.22 0.04 25);
+                color: oklch(0.78 0.06 25);
+                border-left-color: oklch(0.48 0.10 25);
             }
             
             .success-message {
-                background: oklch(0.25 0.08 145);
-                color: oklch(0.80 0.10 145);
-                border-left-color: oklch(0.50 0.15 145);
+                background: oklch(0.22 0.04 162);
+                color: oklch(0.78 0.06 162);
+                border-left-color: oklch(0.48 0.08 162);
             }
             
             /* Status code badge on proxy error page */
             .status-code {
-                background: oklch(0.30 0.10 25);
-                color: oklch(0.80 0.15 25);
+                background: oklch(0.25 0.06 25);
+                color: oklch(0.78 0.08 25);
             }
             
             /* Info / success / caution boxes in modals */
             .info-box {
-                background: oklch(0.25 0.06 230);
-                color: oklch(0.82 0.08 230);
+                background: oklch(0.22 0.04 240);
+                color: oklch(0.80 0.06 240);
             }
             
             .success-box {
-                background: oklch(0.25 0.06 145);
-                color: oklch(0.82 0.08 145);
+                background: oklch(0.22 0.04 162);
+                color: oklch(0.80 0.06 162);
             }
             
             .caution-box {
-                background: oklch(0.28 0.06 75);
-                color: oklch(0.85 0.08 75);
+                background: oklch(0.25 0.04 80);
+                color: oklch(0.82 0.06 80);
             }
             
             .danger-text {
-                color: oklch(0.70 0.18 25);
+                color: oklch(0.68 0.10 25);
             }
             
             .teacher-badge-box {
-                background: oklch(0.30 0.10 300);
-                color: oklch(0.82 0.10 300);
+                background: oklch(0.25 0.06 290);
+                color: oklch(0.80 0.06 290);
             }
             
             /* No instances empty state */
             .no-instances {
                 color: var(--color-gray-700);
+            }
+        }
+        
+        /* Responsive */
+        @media (max-width: 640px) {
+            .top-bar {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            
+            .page-header-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .admin-toolbar {
+                padding: 0.5rem 0.75rem;
+            }
+            
+            .toolbar-divider {
+                display: none;
+            }
+            
+            .instances-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -1278,76 +1398,85 @@
         </div>
         {% endif %}
 
-        <header>
-            <h1>🏠 HA-Edu</h1>
-            <p>Utbildningsportal för Home Assistant</p>
+        <div class="top-bar">
+            <div class="top-bar-brand">
+                <span>🏠</span>
+                <span>HA-Edu</span>
+            </div>
             {% if logged_in %}
             <div class="user-bar">
-                <span>👤 {{ username }}</span>
-                {% if is_admin %}<span style="background:var(--color-primary);color:white;padding:0.2rem 0.5rem;border-radius:9999px;font-size:0.75rem;">Admin</span>{% endif %}
+                <span>{{ username }}</span>
+                {% if is_admin %}<span class="admin-badge">Admin</span>{% endif %}
                 {% if not ingress_mode %}<button onclick="logout()">Logga ut</button>{% endif %}
             </div>
             {% endif %}
-        </header>
+        </div>
         
-        <div class="controls">
-            <h2>Hantera instanser</h2>
-            <div class="controls-row">
+        <div class="page-header">
+            <h1>Hantera instanser</h1>
+            <div class="page-header-row">
+                <div class="page-header-meta">
+                    <span><span id="instanceCount">{{ instances|length }}</span> aktiva instanser</span>
+                    {% if not is_admin and max_instances > 0 %}
+                    <span>(Gräns: {{ user_instance_count }}/{{ max_instances }})</span>
+                    {% endif %}
+                </div>
                 <button id="addNewBtn" class="add-button" onclick="openModal()" 
                         {% if user_has_instance %}disabled title="{{ create_button_tooltip }}"{% endif %}>+ Skapa ny instans</button>
-                <button id="startAllBtn" class="btn-start-all {% if not is_admin %}hidden{% endif %}" onclick="openStartAllModal()">Starta alla</button>
-                <button id="stopAllBtn" class="btn-stop-all {% if not is_admin %}hidden{% endif %}" onclick="openStopAllModal()">Stoppa alla</button>
-                <button id="deleteAllBtn" class="btn-delete-all {% if not is_admin %}hidden{% endif %}" onclick="openDeleteAllModal()">Ta bort alla</button>
-                <button id="teacherAccessAllBtn" class="btn-teacher-access {% if not is_admin %}hidden{% endif %}" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
-                <button id="teacherSettingsBtn" class="btn-accent {% if not is_admin %}hidden{% endif %}" onclick="openTeacherSettingsModal()">👨‍🏫 Lärarinställningar</button>
-                <label class="toggle-container {% if not is_admin %}hidden{% endif %}" id="toggleContainer">
-                    <span class="toggle-label">Skapa instanser:</span>
-                    <input type="checkbox" id="instanceCreationToggle" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-            <div class="instance-count">
-                <span id="instanceCount">{{ instances|length }}</span> aktiva instanser
-                {% if not is_admin and max_instances > 0 %}
-                <span style="margin-left: 10px; color: var(--color-gray-700);">(Gräns: {{ user_instance_count }}/{{ max_instances }})</span>
-                {% endif %}
             </div>
         </div>
+        
+        {% if is_admin %}
+        <div class="admin-toolbar">
+            <div class="toolbar-group">
+                <button id="startAllBtn" class="btn-start-all" onclick="openStartAllModal()">▶ Starta alla</button>
+                <button id="stopAllBtn" class="btn-stop-all" onclick="openStopAllModal()">■ Stoppa alla</button>
+                <button id="deleteAllBtn" class="btn-delete-all" onclick="openDeleteAllModal()">✕ Ta bort alla</button>
+            </div>
+            <div class="toolbar-divider"></div>
+            <div class="toolbar-group">
+                <button id="teacherAccessAllBtn" class="btn-teacher-access" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
+                <button id="teacherSettingsBtn" class="btn-accent" onclick="openTeacherSettingsModal()">👨‍🏫 Inställningar</button>
+            </div>
+            <div class="toolbar-divider"></div>
+            <label class="toggle-container" id="toggleContainer">
+                <span class="toggle-label">Instansskapande:</span>
+                <input type="checkbox" id="instanceCreationToggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        {% endif %}
         
         <div class="instances-grid" id="instancesGrid">
             {% if instances %}
                 {% for name, instance in instances.items() %}
-                <div class="instance-card" data-server-name="{{ name }}" data-locked="{{ 'true' if instance.get('locked', False) else 'false' }}">
+                <div class="instance-card status-border-{{ instance.status }}" data-server-name="{{ name }}" data-locked="{{ 'true' if instance.get('locked', False) else 'false' }}">
                     <div class="instance-card-header">
-                        <h3>
-                            {{ name }}
-                            {% if instance.get('teacher_access_added', False) %}
-                            <span class="teacher-access-badge">Läraråtkomst</span>
-                            {% endif %}
-                        </h3>
+                        <h3>{{ name }}</h3>
                         <button class="btn-lock {% if instance.get('locked', False) %}locked{% endif %}" 
                                 onclick="toggleLock('{{ name }}')" 
                                 title="{% if instance.get('locked', False) %}Låst - klicka för att låsa upp{% else %}Olåst - klicka för att låsa{% endif %}">
                             {% if instance.get('locked', False) %}🔒{% else %}🔓{% endif %}
                         </button>
                     </div>
-                    <div class="instance-info">
-                        <strong>Port:</strong> {{ instance.port }}
+                    <div class="instance-card-badges">
+                        <span class="status-badge status-{{ instance.status }}">{{ instance.status }}</span>
+                        {% if instance.get('teacher_access_added', False) %}
+                        <span class="teacher-access-badge">Läraråtkomst</span>
+                        {% endif %}
                     </div>
-                    <div class="instance-info">
-                        <strong>Status:</strong> <span class="status-badge status-{{ instance.status }}">{{ instance.status }}</span>
+                    <div class="instance-meta">
+                        <span>Port {{ instance.port }}</span>
+                        <span class="meta-dot">·</span>
+                        <span>{{ instance.created_at.split('T')[0] }}</span>
+                        {% if is_admin and instance.get('created_by') %}
+                        <span class="meta-dot">·</span>
+                        <span>{{ instance.created_by }}</span>
+                        {% endif %}
                     </div>
-                    <div class="instance-info">
-                        <strong>Skapad:</strong> {{ instance.created_at.split('T')[0] }}
-                    </div>
-                    {% if is_admin and instance.get('created_by') %}
-                    <div class="instance-info">
-                        <strong>Skapad av:</strong> {{ instance.created_by }}
-                    </div>
-                    {% endif %}
                     {% if is_admin %}
-                    <div class="instance-info">
-                        <strong>Onboarded:</strong> 
+                    <div class="instance-meta">
+                        <span>Onboarded:</span>
                         {% if instance.get('onboarded') %}
                         <span class="status-badge status-running">Ja</span>
                         {% else %}
@@ -1356,26 +1485,17 @@
                     </div>
                     {% endif %}
                     <div class="instance-actions">
-                        <div class="instance-actions-row">
-                            <a href="{{ ingress_path }}/proxy/{{ instance.port }}/" onclick="openInstance(event, {{ instance.port }})" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                        <a href="{{ ingress_path }}/proxy/{{ instance.port }}/" onclick="openInstance(event, {{ instance.port }})" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                        <div class="instance-actions-secondary">
                             <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">Starta om</button>
                             {% if is_admin %}
                             <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Återställ</button>
-                            {% else %}
-                            <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Nollställ</button>
-                            {% endif %}
-                        </div>
-                        <div class="instance-actions-row">
-                            {% if is_admin %}
                             <button class="btn-teacher-access" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
                                     {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
                                 Lärare
                             </button>
                             {% else %}
-                            <button class="btn-teacher-access hidden" onclick="addTeacherAccess('{{ name }}')" id="teacher-access-{{ name }}" 
-                                    {% if instance.get('teacher_access_added', False) %}disabled{% endif %}>
-                                Lärare
-                            </button>
+                            <button class="btn-reset" onclick="resetInstance('{{ name }}')" id="reset-{{ name }}">Nollställ</button>
                             {% endif %}
                             <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
                         </div>
@@ -1384,7 +1504,9 @@
                 {% endfor %}
             {% else %}
                 <div class="no-instances">
-                    Inga instanser skapade än. Klicka på "Skapa ny instans" för att komma igång!
+                    <div class="no-instances-icon">📦</div>
+                    <div class="no-instances-title">Inga instanser ännu</div>
+                    <div>Klicka på "Skapa ny instans" för att komma igång</div>
                 </div>
             {% endif %}
         </div>
@@ -1901,11 +2023,12 @@
                 
                 const toggle = document.getElementById('instanceCreationToggle');
                 const addBtn = document.getElementById('addNewBtn');
-                toggle.checked = data.instance_creation_enabled;
-                addBtn.disabled = !data.instance_creation_enabled;
-                
-                if (!data.instance_creation_enabled) {
-                    addBtn.title = 'Skapande av instanser är för närvarande inaktiverat';
+                if (toggle) toggle.checked = data.instance_creation_enabled;
+                if (addBtn) {
+                    addBtn.disabled = !data.instance_creation_enabled;
+                    if (!data.instance_creation_enabled) {
+                        addBtn.title = 'Skapande av instanser är för närvarande inaktiverat';
+                    }
                 }
             } catch (error) {
                 console.error('Failed to check instance creation status:', error);
