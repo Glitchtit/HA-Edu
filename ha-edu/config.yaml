@@ -46,3 +46,4 @@ environment:
 privileged:
   - SYS_ADMIN
 docker_api: true
+protection: false
