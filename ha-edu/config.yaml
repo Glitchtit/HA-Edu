@@ -43,4 +43,6 @@ schema:
 environment:
   DATA_FILE: /data/instances.json
   LOG_DIR: /data/logs
+privileged:
+  - SYS_ADMIN
 docker_api: true
