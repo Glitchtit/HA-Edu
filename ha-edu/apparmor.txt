@@ -22,12 +22,12 @@ profile ha-edu flags=(attach_disconnected,mediate_deleted) {
   network unix  dgram,
 
   # Entrypoint
-  /run.sh ix,
+  /run.sh rix,
 
   # Shell and core utilities used by run.sh
   /bin/**            ix,
   /usr/bin/**        ix,
-  /usr/local/bin/**  ix,
+  /usr/local/bin/**  rix,
 
   # Python packages and shared libraries
   /usr/lib/**            mr,
