@@ -907,7 +907,14 @@ def verify_password(password, hashed):
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 # Ensure the default admin account exists on startup
-ensure_admin_account()
+try:
+    ensure_admin_account()
+except Exception as e:
+    logger.warning(
+        'Could not ensure admin account on startup: %s. '
+        'The admin account will be created when the data directory becomes available.',
+        e,
+    )
 
 def validate_instance_password(password, instance):
     """Validate password for instance operations (delete/reset)

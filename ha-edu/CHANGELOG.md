@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.8
+
+- Fix startup crash when the data directory is not writable during worker boot; `ensure_admin_account()` now catches errors and logs a warning instead of aborting the import
+
 ## 1.7.7
 
 - Fix startup crash caused by `docker.from_env()` running at module import time; the Docker client is now created lazily on first use so workers boot even when the Docker socket is momentarily unavailable
