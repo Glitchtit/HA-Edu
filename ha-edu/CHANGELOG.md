@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.1
+
+- Remove old test scripts, demo scripts, and implementation/fix summary markdown files from the repository root and docs/ directory to reduce clutter
+
 ## 1.7.0
 
 - Restrict admin access to the Owner group only: members of the Administrators (`system-admin`) group are now treated as normal users and no longer see admin tools in the interface
