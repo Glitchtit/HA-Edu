@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.6
+
+- Fix `bash: /run.sh: Permission denied` on add-on startup by granting read (`r`) permission in the AppArmor profile so the bash interpreter can read the entrypoint script
+- Grant read permission to `/usr/local/bin/**` in the AppArmor profile so pip-installed scripts (e.g. gunicorn) can be read by the Python interpreter
+
 ## 1.7.5
 
 - Remove unused `privileged: [SYS_ADMIN]` capability from the add-on manifest; the app does not require this Linux capability
