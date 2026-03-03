@@ -1067,7 +1067,6 @@ def _fetch_ha_user_role(ha_user_name):
             data = resp.json().get('data', {})
             for u in data.get('users', []):
                 if u.get('username') == ha_user_name:
-                    group_ids = u.get('group_ids') or []
                     if u.get('is_owner'):
                         role = 'admin'
                     break
