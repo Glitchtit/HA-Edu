@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.7
+
+- Fix startup crash caused by `docker.from_env()` running at module import time; the Docker client is now created lazily on first use so workers boot even when the Docker socket is momentarily unavailable
+
 ## 1.7.6
 
 - Fix `bash: /run.sh: Permission denied` on add-on startup by granting read (`r`) permission in the AppArmor profile so the bash interpreter can read the entrypoint script
