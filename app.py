@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 # Disable Flask's default static folder to avoid conflicts with Home Assistant's /static/ paths
 app = Flask(__name__, static_folder=None)
 
+@app.context_processor
+def inject_current_year():
+    return {'current_year': datetime.now().year}
+
 def get_or_create_secret_key():
     """Get or create a persistent secret key for session management
     
