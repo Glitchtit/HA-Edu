@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.2
+
+- Auto-set copyright year in footer to the current year instead of a hardcoded value
+
 ## 1.9.1
 
 - Restyle teacher settings button from solid violet (btn-accent) to a subtle outlined style (btn-settings) that matches the admin toolbar theme
