@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 # Disable Flask's default static folder to avoid conflicts with Home Assistant's /static/ paths
 app = Flask(__name__, static_folder=None)
 
+@app.context_processor
+def inject_current_year():
+    return {'current_year': datetime.now().year}
+
 def get_or_create_secret_key():
     """Get or create a persistent secret key for session management
     
@@ -1029,9 +1033,10 @@ def index():
             create_button_tooltip = "Du kan bara ha en instans åt gången. Ta bort din befintliga instans för att skapa en ny."
     
     # Pass admin status, user_has_instance, and max instances info to template
-    return render_template('index.html', 
-                         instances=instances, 
-                         is_admin=is_admin, 
+    return render_template('index.html',
+                         instances=instances,
+                         is_admin=is_admin,
+                         current_user=user_id,
                          user_has_instance=user_has_instance,
                          max_instances=max_allowed,
                          user_instance_count=user_count,

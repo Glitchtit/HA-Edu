@@ -17,7 +17,7 @@ def test_access_button_has_noopener_noreferrer():
     # Find the Access button link
     # Pattern: <a ... class="btn-access" ... >Access</a>
     # Use a robust pattern that handles attributes in any order
-    access_button_pattern = r'<a[^>]*class="[^"]*btn-access[^"]*"[^>]*>Access</a>'
+    access_button_pattern = r'<a[^>]*class="[^"]*btn-access[^"]*"[^>]*>Öppna</a>'
     matches = re.findall(access_button_pattern, content)
     
     assert len(matches) > 0, "Access button not found in template"
