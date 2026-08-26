@@ -78,17 +78,12 @@ def test_auth_login_flow_headers():
             
             print(f"Response status: {response.status_code}")
             
-            # Verify that required headers are present
-            required_headers = ['X-Forwarded-For', 'X-Forwarded-Proto', 'X-Forwarded-Host']
-            for header in required_headers:
-                if header in sent_headers:
-                    print(f"✓ {header} header present: {sent_headers[header]}")
-                else:
-                    print(f"✗ {header} header missing")
-                    return False
-            
-            # Verify that problematic headers are NOT present
-            problematic_headers = ['X-Forwarded-Prefix', 'X-Ingress-Path']
+            # Verify that problematic headers are NOT present.
+            # X-Forwarded-* headers must not be sent: they trigger HA's
+            # trusted_proxies enforcement, which breaks instances with 400
+            # responses (HA 2026.8 stores that config and silently reverts it).
+            problematic_headers = ['X-Forwarded-Prefix', 'X-Ingress-Path',
+                                   'X-Forwarded-For', 'X-Forwarded-Proto', 'X-Forwarded-Host']
             for header in problematic_headers:
                 if header in sent_headers:
                     print(f"✗ {header} header should NOT be present but was: {sent_headers[header]}")

@@ -2167,7 +2167,12 @@ def proxy(port, path):
         # Forward the request to the HA instance
         # Copy headers but modify Host and other proxy-specific headers
         headers = {}
-        skip_headers = ['host', 'keep-alive', 'accept-encoding']
+        # X-Forwarded-* headers are stripped and never re-added: sending
+        # X-Forwarded-For makes HA enforce its trusted_proxies check, which
+        # since HA 2026.8 depends on a stored config that silently reverts
+        # unless confirmed in the UI, breaking instances with 400 responses.
+        skip_headers = ['host', 'keep-alive', 'accept-encoding',
+                        'x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host']
         # For websocket upgrade requests, we need to forward Connection and Upgrade headers
         if not is_websocket_upgrade:
             skip_headers.append('connection')
@@ -2179,12 +2184,7 @@ def proxy(port, path):
 
         # Set the correct Host header for the backend
         headers['Host'] = f'{DOCKER_HOST_IP}:{port}'
-        
-        # Add proxy headers that HA needs
-        headers['X-Forwarded-For'] = request.remote_addr
-        headers['X-Forwarded-Proto'] = request.scheme
-        headers['X-Forwarded-Host'] = request.host
-        
+
         # Make the request to the backend
         if request.method == 'GET':
             resp = requests.get(target_url, headers=headers, stream=True, timeout=30)
