@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.3
+
+- Remove the `http:` block (use_x_forwarded_for/trusted_proxies) from the master configuration baked into new instances. The proxy never sends X-Forwarded-* headers, so the block was unused — and on HA 2026.8 it triggered a pointless 5-minute config trial plus a "deprecated YAML http configuration" repair warning in every student instance (YAML http config stops working in HA 2027.2)
+
 ## 1.9.2
 
 - Auto-set copyright year in footer to the current year instead of a hardcoded value
