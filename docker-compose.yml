@@ -25,6 +25,16 @@ services:
       # Use 'localhost' when running portal directly on host (not in Docker)
       # Or set to host's IP address (e.g., 192.168.1.10) if needed
       - DOCKER_HOST_IP=host.docker.internal
+      # Optional: one hostname per instance (see README "Instance hostnames")
+      # - INSTANCE_URL_TEMPLATE=https://ha-{slug}.example.com
+      # Classroom settings written into every instance
+      - HA_TIME_ZONE=Europe/Helsinki
+      - HA_COUNTRY=FI
+      - HA_LANGUAGE=sv
+      # Resource limits per instance and idle stop (0 = never)
+      - INSTANCE_MEM_LIMIT=1g
+      - INSTANCE_CPUS=1
+      - IDLE_STOP_HOURS=0
     restart: unless-stopped
     networks:
       - ha-edu-network

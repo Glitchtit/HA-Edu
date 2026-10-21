@@ -1,0 +1,33 @@
+# Automationer: demo-enheter, hjälpare och en påbörjad automation att bygga vidare på
+# Lesson template: demo devices plus helpers and a starter automation for an
+# automations exercise. Students fix and extend the automation in automations.yaml.
+
+default_config:
+
+demo:
+
+input_boolean:
+  someone_home:
+    name: "Någon hemma"
+    icon: mdi:home-account
+  vacation_mode:
+    name: "Semesterläge"
+    icon: mdi:airplane
+
+input_number:
+  target_temperature:
+    name: "Önskad temperatur"
+    min: 15
+    max: 25
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer
+
+input_button:
+  goodnight:
+    name: "God natt"
+    icon: mdi:weather-night
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

@@ -21,6 +21,23 @@ import docker  # noqa: E402
 with patch.object(docker, 'from_env', return_value=MagicMock()):
     import app as appmod  # noqa: E402
 
+_TEST_ENV = {k: os.environ[k] for k in ('DATA_FILE', 'ADMIN_PASSWORD', 'LOG_DIR')}
+
+
+@pytest.fixture(autouse=True)
+def _intact_app():
+    """Re-import app if another test file left it half-reloaded
+
+    Some older tests call importlib.reload(app) without mocking Docker; without a
+    Docker daemon that reload fails part-way and leaves an app with no routes.
+    """
+    global appmod
+    if 'create_instance' not in appmod.app.view_functions or appmod.DATA_FILE != _TEST_ENV['DATA_FILE']:
+        import importlib
+        with patch.dict(os.environ, _TEST_ENV), patch.object(docker, 'from_env', return_value=MagicMock()):
+            appmod = importlib.reload(appmod)
+    yield
+
 # Remote (non-admin) students arriving through the Cloudflare tunnel
 STUDENT = {'Cf-Access-Authenticated-User-Email': 'a@school.fi', 'CF-Connecting-IP': '203.0.113.10'}
 OTHER = {'Cf-Access-Authenticated-User-Email': 'b@school.fi', 'CF-Connecting-IP': '203.0.113.11'}
@@ -41,7 +58,7 @@ def client():
         yield c, docker_client
 
 
-def create(c, name, headers=STUDENT, password=None):
+def create(c, name, headers=STUDENT, password='pw'):
     body = {'server_name': name}
     if password is not None:
         body['instance_password'] = password
@@ -214,8 +231,10 @@ def test_master_config_copied_with_put_archive():
     with tarfile.open(fileobj=io.BytesIO(data)) as tar:
         names = tar.getnames()
         config = tar.extractfile('configuration.yaml').read().decode()
-    assert sorted(names) == ['automations.yaml', 'configuration.yaml', 'scenes.yaml', 'scripts.yaml']
-    assert config == open(appmod.MASTER_CONFIG_PATH).read()
+    assert sorted(n for n in names if not n.startswith('.storage')) == ['automations.yaml', 'configuration.yaml', 'scenes.yaml', 'scripts.yaml']
+    # Classroom core settings are prepended to the master configuration verbatim
+    assert config.endswith(open(appmod.MASTER_CONFIG_PATH).read())
+    assert config.startswith(appmod.render_core_config())
 
 
 # --- Bugs 12 / 13: interaction logger ---

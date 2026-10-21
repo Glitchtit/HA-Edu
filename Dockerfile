@@ -12,6 +12,7 @@ COPY app.py .
 COPY interaction_logger.py .
 COPY templates/ templates/
 COPY master_configuration.yaml .
+COPY config_templates/ config_templates/
 
 # Create data directory
 RUN mkdir -p /data

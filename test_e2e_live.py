@@ -54,8 +54,8 @@ def api(method, path, headers=None, **kwargs):
     return requests.request(method, f'{PORTAL_URL}{path}', headers=headers or {}, timeout=600, **kwargs)
 
 
-def create(name, headers, password=None):
-    body = {'server_name': name}
+def create(name, headers, password='e2e-pass', **extra):
+    body = {'server_name': name, **extra}
     if password is not None:
         body['instance_password'] = password
     return api('POST', '/api/instances', headers, json=body)
@@ -332,7 +332,79 @@ def test_master_configuration_in_volume(owned):
     out = docker('run', '--rm', '-v', f'{owned["container"]}:/config:ro', 'alpine:latest',
                  'cat', '/config/configuration.yaml')
     expected = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'master_configuration.yaml')).read()
-    assert out == expected
+    # The classroom settings block is prepended to the master configuration verbatim
+    assert out.endswith(expected)
+    assert out.startswith('# Classroom settings') and '\nhomeassistant:\n' in out
+
+
+# --- Classroom features -----------------------------------------------------
+
+def test_password_required_on_create():
+    r = api('POST', '/api/instances', student(50), json={'server_name': f'NoPw {RUN_ID}'})
+    assert r.status_code == 400
+
+
+def test_templates_and_classroom_settings():
+    templates = api('GET', '/api/config-templates').json()['templates']
+    assert templates[0]['name'] == 'standard'
+    if 'automationer' not in [t['name'] for t in templates]:
+        pytest.skip('example lesson template not deployed')
+    r = create(f'Tmpl {RUN_ID}', student(51), config_template='automationer')
+    assert r.status_code == 201, r.text
+    volume = f'ha-edu-tmpl-{RUN_ID}'
+    config = docker('run', '--rm', '-v', f'{volume}:/config:ro', 'alpine:latest', 'cat', '/config/configuration.yaml')
+    assert 'homeassistant:' in config and 'input_boolean:' in config
+    assert 'starter_welcome_home' in docker('run', '--rm', '-v', f'{volume}:/config:ro', 'alpine:latest',
+                                            'cat', '/config/automations.yaml')
+    steps = {s['step']: s['done'] for s in wait_for_ha(r.json()['port'], student(51))}
+    assert steps.get('core_config') is True  # location step pre-completed
+
+
+def test_onboarding_callback_and_reload_stay_on_instance(owned):
+    s = requests.Session()
+    s.headers.update(student(1))
+    port = owned['port']
+    s.get(f'{PORTAL_URL}/proxy/{port}/', timeout=30)
+    r = s.get(f'{PORTAL_URL}/?auth_callback=1&code=x&state=y', allow_redirects=False, timeout=30)
+    assert r.status_code == 302 and r.headers['Location'].endswith(f'/proxy/{port}/?auth_callback=1&code=x&state=y')
+    r = s.get(f'{PORTAL_URL}/home/overview', timeout=30)
+    assert r.status_code == 200 and f'<base href="/proxy/{port}/">' in r.text
+
+
+def test_progress_push_and_export(owned):
+    assert api('GET', '/api/admin/progress', student(1)).status_code == 403
+    progress = {p['server_name']: p for p in api('GET', '/api/admin/progress', ADMIN).json()['instances']}
+    assert owned['name'] in progress and progress[owned['name']]['created_by'].startswith('student1-')
+
+    path = f'blueprints/automation/e2e/{RUN_ID}.yaml'
+    r = api('POST', '/api/admin/push-file', json={
+        'admin_password': ADMIN_PASSWORD, 'path': path, 'content': 'blueprint: {}\n', 'targets': [owned['name']]})
+    assert r.status_code == 200 and r.json()['results'][0]['status'] == 'success', r.text
+    assert docker('exec', owned['container'], 'cat', f'/config/{path}') == 'blueprint: {}\n'
+
+    assert api('GET', f'/api/instances/{owned["name"]}/export', student(2)).status_code == 403
+    r = api('GET', f'/api/instances/{owned["name"]}/export', student(1))
+    assert r.status_code == 200
+    import io
+    import tarfile
+    with tarfile.open(fileobj=io.BytesIO(r.content), mode='r:gz') as tar:
+        names = tar.getnames()
+    assert f'config/{path}' in names and 'config/.storage/auth' not in names
+
+
+def test_reset_can_be_undone(owned):
+    name, port = owned['name'], owned['port']
+    marker = f'blueprints/automation/e2e/undo-{RUN_ID}.yaml'
+    api('POST', '/api/admin/push-file', json={
+        'admin_password': ADMIN_PASSWORD, 'path': marker, 'content': 'x: 1\n', 'targets': [name]})
+    r = api('POST', f'/api/instances/{name}/reset', student(1), json={'password': 'lösenord-åäö'})
+    assert r.status_code == 200, r.text
+    with pytest.raises(subprocess.CalledProcessError):
+        docker('exec', f'ha-edu-lab-{RUN_ID}', 'cat', f'/config/{marker}')
+    r = api('POST', f'/api/instances/{name}/undo-reset', student(1), json={'password': 'lösenord-åäö'})
+    assert r.status_code == 200, r.text
+    assert docker('exec', owned['container'], 'cat', f'/config/{marker}') == 'x: 1\n'
+    wait_for_ha(port, student(1))
 
 
 # --- Delete -----------------------------------------------------------------

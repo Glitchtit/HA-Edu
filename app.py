@@ -8,15 +8,18 @@ import bcrypt
 import urllib.parse
 import ipaddress
 import time
+import base64
 import fcntl
 import io
+import posixpath
+import shutil
 import tarfile
 import tempfile
 from contextlib import contextmanager
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session, redirect
 from flask_sock import Sock
 import docker
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 import simple_websocket
 from interaction_logger import interaction_logger
@@ -109,6 +112,13 @@ _temp_container_semaphore = threading.Semaphore(5)
 _onboarding_cache = {}
 _onboarding_cache_lock = threading.Lock()
 
+# Per-worker throttle for activity tracking (port -> last touch time)
+_activity_last_touch = {}
+
+# Per-worker cache for the teacher progress overview (server_name -> (time, data))
+_progress_cache = {}
+PROGRESS_CACHE_TTL = 60
+
 # Configuration
 DATA_FILE = os.getenv('DATA_FILE', '/data/instances.json')
 BASE_PORT = int(os.getenv('BASE_PORT', '8123'))
@@ -122,6 +132,39 @@ ADMINS = os.getenv('ADMINS', '')  # Comma-separated list of admin email addresse
 MAX_INSTANCES_STR = os.getenv('MAX_INSTANCES', '').strip()
 MAX_INSTANCES = int(MAX_INSTANCES_STR) if MAX_INSTANCES_STR else 0
 MASTER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'master_configuration.yaml')
+# Additional starting configurations, one directory per template (e.g. per lesson)
+CONFIG_TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'config_templates')
+DEFAULT_CONFIG_TEMPLATE = 'standard'
+# Classroom core settings written into every instance's configuration.yaml
+# (set to an empty string to let students choose during onboarding)
+HA_TIME_ZONE = os.getenv('HA_TIME_ZONE', 'Europe/Helsinki').strip()
+HA_COUNTRY = os.getenv('HA_COUNTRY', 'FI').strip()
+HA_LANGUAGE = os.getenv('HA_LANGUAGE', 'sv').strip()
+HA_CURRENCY = os.getenv('HA_CURRENCY', 'EUR').strip()
+HA_UNIT_SYSTEM = os.getenv('HA_UNIT_SYSTEM', 'metric').strip()
+# Optional home location (e.g. the school); empty = Home Assistant's default
+HA_LATITUDE = os.getenv('HA_LATITUDE', '').strip()
+HA_LONGITUDE = os.getenv('HA_LONGITUDE', '').strip()
+# Skip onboarding's location/country step, which otherwise overwrites the settings
+# above with values guessed from the student's browser (e.g. GB/GBP)
+HA_SKIP_LOCATION_STEP = os.getenv('HA_SKIP_LOCATION_STEP', 'true').strip().lower() in ('1', 'true', 'yes')
+# Resource limits per instance container (empty / 0 = unlimited)
+INSTANCE_MEM_LIMIT = os.getenv('INSTANCE_MEM_LIMIT', '1g').strip()
+INSTANCE_CPUS = float(os.getenv('INSTANCE_CPUS', '1') or 0)
+# How often HA_IMAGE is pulled when instances are created or reset
+HA_IMAGE_PULL_INTERVAL_HOURS = float(os.getenv('HA_IMAGE_PULL_INTERVAL_HOURS', '24'))
+# Stop instances nobody has used for this many hours (0 = never)
+IDLE_STOP_HOURS = float(os.getenv('IDLE_STOP_HOURS', '0') or 0)
+# Snapshots of /config taken before each reset, so a reset can be undone
+SNAPSHOTS_TO_KEEP = int(os.getenv('SNAPSHOTS_TO_KEEP', '3'))
+DATA_DIR = os.path.dirname(DATA_FILE)
+ACTIVITY_DIR = os.path.join(DATA_DIR, 'activity')
+SNAPSHOT_DIR = os.path.join(DATA_DIR, 'snapshots')
+# Files left out of snapshots and exports (paths inside the archive, which starts with config/)
+SNAPSHOT_EXCLUDE = ('config/home-assistant_v2.db', 'config/backups/', 'config/deps/', 'config/tts/')
+EXPORT_EXCLUDE = SNAPSHOT_EXCLUDE + ('config/.storage/auth', 'config/.storage/auth_provider.homeassistant')
+# Largest file a teacher can push to all instances
+MAX_PUSH_FILE_BYTES = 1024 * 1024
 # Onboarding cache TTL in seconds - how long to cache onboarding status checks
 ONBOARDING_CACHE_TTL = int(os.getenv('ONBOARDING_CACHE_TTL', '60'))
 # Docker host IP for accessing instance containers from within the portal container
@@ -131,6 +174,24 @@ DOCKER_HOST_IP = os.getenv('DOCKER_HOST_IP', 'host.docker.internal')
 
 # Allowed server names; the name is lowercased and used in Docker container/volume names
 SERVER_NAME_PATTERN = re.compile(r'[A-Za-z0-9][A-Za-z0-9 _.-]{0,49}')
+
+# Optional per-instance hostnames, e.g. 'https://ha-{slug}.example.com'.
+# When set, every instance gets its own origin, so Home Assistant's absolute URLs,
+# page reloads and stored login tokens work, and several instances can be open in
+# one browser. Requires a wildcard DNS record and tunnel/proxy route to the portal.
+# When empty, instances are reached via /proxy/<port>/ on the portal's own host.
+INSTANCE_URL_TEMPLATE = os.getenv('INSTANCE_URL_TEMPLATE', '').strip().rstrip('/')
+
+def _instance_host_regex(template):
+    """Build a regex matching the host[:port] part of INSTANCE_URL_TEMPLATE"""
+    if not template:
+        return None
+    parsed = urllib.parse.urlparse(template)
+    if '{slug}' not in parsed.netloc:
+        raise ValueError('INSTANCE_URL_TEMPLATE must contain {slug} in the host name')
+    return re.compile(re.escape(parsed.netloc.lower()).replace(r'\{slug\}', r'([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)'))
+
+INSTANCE_HOST_REGEX = _instance_host_regex(INSTANCE_URL_TEMPLATE)
 
 # Paths that trigger access logging (to avoid logging every asset request)
 ACCESS_LOG_PATHS = ['', 'index.html', 'lovelace']
@@ -152,6 +213,42 @@ def get_client_ip(request):
     """
     cf_ip = request.headers.get('CF-Connecting-IP', '').strip()
     return cf_ip or request.remote_addr
+
+def instance_slug(server_name, instance):
+    """DNS-safe label for an instance, used in its hostname"""
+    base = instance.get('container_name') or server_name
+    if base.startswith('ha-edu-'):
+        base = base[len('ha-edu-'):]
+    return re.sub(r'[^a-z0-9]+', '-', base.lower()).strip('-')
+
+def instance_url(server_name, instance):
+    """URL a browser should use to open an instance"""
+    if INSTANCE_URL_TEMPLATE:
+        return INSTANCE_URL_TEMPLATE.replace('{slug}', instance_slug(server_name, instance)) + '/'
+    return f'/proxy/{instance["port"]}/'
+
+def find_instance_by_host(host):
+    """Find the instance whose hostname matches a request Host header
+    
+    Returns:
+        tuple: (matched, server_name, instance). matched is True when the host has
+        the instance hostname pattern, even if no instance has that slug.
+    """
+    if INSTANCE_HOST_REGEX is None:
+        return False, None, None
+    match = INSTANCE_HOST_REGEX.fullmatch((host or '').lower())
+    if not match:
+        return False, None, None
+    slug = match.group(1)
+    for name, inst in load_instances().items():
+        if instance_slug(name, inst) == slug:
+            return True, name, inst
+    return True, None, None
+
+def is_websocket_upgrade_request(request):
+    """True for a WebSocket handshake (RFC 6455 section 4.2.1)"""
+    connection_tokens = [t.strip().lower() for t in request.headers.get('Connection', '').split(',') if t.strip()]
+    return request.headers.get('Upgrade', '').lower() == 'websocket' and 'upgrade' in connection_tokens
 
 def is_admin_user(request):
     """Check if the current user has admin access
@@ -360,10 +457,13 @@ def get_available_port():
 def update_instances_status(instances):
     """Update status for all instances by checking actual container state
     
+    Also adds the URL a browser should use to open each instance.
+    
     Args:
         instances: Dictionary of instances to update (modified in place)
     """
     for server_name, instance in instances.items():
+        instance['url'] = instance_url(server_name, instance)
         try:
             container = client.containers.get(instance['container_id'])
             instance['status'] = container.status
@@ -438,20 +538,148 @@ def cleanup_orphaned_containers():
     except Exception as e:
         logger.error(f'Failed to cleanup orphaned containers: {str(e)}', exc_info=True)
 
-def copy_master_config_to_volume(volume_name):
-    """Copy master configuration.yaml to a Docker volume
+def build_tar(files):
+    """Build an in-memory tar archive for put_archive
     
-    Creates a temporary container to copy the master configuration
+    Args:
+        files: Dict of relative path -> str or bytes content
+    
+    Returns:
+        bytes: The tar archive
+    """
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode='w') as tar:
+        added_dirs = set()
+        for file_name, content in files.items():
+            # Add parent directories explicitly so nested paths extract everywhere
+            parts = file_name.split('/')[:-1]
+            for i in range(1, len(parts) + 1):
+                dir_name = '/'.join(parts[:i])
+                if dir_name not in added_dirs:
+                    dir_info = tarfile.TarInfo(name=dir_name)
+                    dir_info.type = tarfile.DIRTYPE
+                    dir_info.mode = 0o755
+                    dir_info.mtime = int(time.time())
+                    tar.addfile(dir_info)
+                    added_dirs.add(dir_name)
+            file_bytes = content.encode('utf-8') if isinstance(content, str) else content
+            file_info = tarfile.TarInfo(name=file_name)
+            file_info.size = len(file_bytes)
+            file_info.mode = 0o644
+            file_info.mtime = int(time.time())
+            tar.addfile(file_info, io.BytesIO(file_bytes))
+    return archive.getvalue()
+
+def list_config_templates():
+    """List available starting configurations
+    
+    'standard' is master_configuration.yaml; every directory in config_templates/
+    containing a configuration.yaml is another template (e.g. one per lesson).
+    The first comment line of a template's configuration.yaml is its description.
+    
+    Returns:
+        list: Dicts with 'name' and 'description'
+    """
+    def description(path):
+        try:
+            with open(path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('#'):
+                        return line.lstrip('#').strip()
+                    if line:
+                        break
+        except OSError:
+            pass
+        return ''
+    
+    templates = [{'name': DEFAULT_CONFIG_TEMPLATE, 'description': description(MASTER_CONFIG_PATH)}]
+    if os.path.isdir(CONFIG_TEMPLATES_DIR):
+        for name in sorted(os.listdir(CONFIG_TEMPLATES_DIR)):
+            config_path = os.path.join(CONFIG_TEMPLATES_DIR, name, 'configuration.yaml')
+            if name != DEFAULT_CONFIG_TEMPLATE and os.path.isfile(config_path):
+                templates.append({'name': name, 'description': description(config_path)})
+    return templates
+
+def render_core_config():
+    """YAML for the classroom's core settings (time zone, country, language, ...)
+    
+    Settings come from the HA_* environment variables; empty ones are left out so
+    students set them during onboarding instead.
+    """
+    settings = [
+        ('time_zone', HA_TIME_ZONE),
+        ('country', HA_COUNTRY),
+        ('language', HA_LANGUAGE),
+        ('currency', HA_CURRENCY),
+        ('unit_system', HA_UNIT_SYSTEM),
+    ]
+    lines = [f'  {key}: {json.dumps(value)}' for key, value in settings if value]
+    if HA_LATITUDE and HA_LONGITUDE:
+        lines += [f'  latitude: {float(HA_LATITUDE)}', f'  longitude: {float(HA_LONGITUDE)}']
+    if not lines:
+        return ''
+    return '# Classroom settings added by HA-Edu (HA_* environment variables)\nhomeassistant:\n' + '\n'.join(lines) + '\n\n'
+
+def load_config_template_files(template=None):
+    """Read the files of a starting configuration
+    
+    Returns:
+        dict: Relative path -> content, including empty automations/scripts/scenes
+        files and the classroom core settings
+    """
+    template = template or DEFAULT_CONFIG_TEMPLATE
+    files = {
+        'automations.yaml': '[]\n',
+        'scripts.yaml': '{}\n',
+        'scenes.yaml': '[]\n',
+    }
+    if template == DEFAULT_CONFIG_TEMPLATE:
+        with open(MASTER_CONFIG_PATH, 'r') as f:
+            files['configuration.yaml'] = f.read()
+    else:
+        if template not in [t['name'] for t in list_config_templates()]:
+            raise ValueError(f'Unknown configuration template: {template}')
+        template_dir = os.path.join(CONFIG_TEMPLATES_DIR, template)
+        for root, _, names in os.walk(template_dir):
+            for file_name in names:
+                full_path = os.path.join(root, file_name)
+                with open(full_path, 'rb') as f:
+                    files[os.path.relpath(full_path, template_dir).replace(os.sep, '/')] = f.read()
+        if isinstance(files['configuration.yaml'], bytes):
+            files['configuration.yaml'] = files['configuration.yaml'].decode('utf-8')
+    
+    # Templates that set their own homeassistant: block keep it
+    if not re.search(r'^homeassistant:', files['configuration.yaml'], re.MULTILINE):
+        files['configuration.yaml'] = render_core_config() + files['configuration.yaml']
+    
+    # Mark onboarding's location/country step as done so it cannot overwrite the
+    # classroom settings (Home Assistant adds the user step itself once a user exists)
+    if HA_SKIP_LOCATION_STEP and HA_COUNTRY and '.storage/onboarding' not in files:
+        files['.storage/onboarding'] = json.dumps({
+            'version': 4,
+            'minor_version': 1,
+            'key': 'onboarding',
+            'data': {'done': ['core_config']}
+        }, indent=2)
+    return files
+
+def copy_master_config_to_volume(volume_name, template=None):
+    """Copy a starting configuration to a Docker volume
+    
+    Creates a temporary container to copy the configuration template
     into the specified volume's /config directory.
     Uses semaphore to limit concurrent operations.
+    
+    Args:
+        volume_name: Name of the Docker volume
+        template: Name of the configuration template (default: standard)
     """
     # Use semaphore to limit concurrent temporary container operations
     with _temp_container_semaphore:
         temp_container = None
         try:
-            # Read the master configuration file
-            with open(MASTER_CONFIG_PATH, 'r') as f:
-                master_config_content = f.read()
+            config_files = load_config_template_files(template)
             
             # Pull alpine image if not present
             try:
@@ -460,40 +688,22 @@ def copy_master_config_to_volume(volume_name):
                 logger.info('Pulling alpine:latest image...')
                 client.images.pull('alpine:latest')
             
-            # Create a temporary container with the volume mounted
-            # Use alpine image - it's lightweight and has sh
+            # Create a temporary container with the volume mounted (it is never
+            # started; put_archive works on stopped containers)
             temp_container = client.containers.create(
                 'alpine:latest',
                 command=['sh', '-c', 'sleep 30'],
                 volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
             )
             
-            # Write the master config and empty files for automations, scripts, and scenes
-            # These files are required by the master configuration
             # Use put_archive rather than a shell heredoc so the file content is copied verbatim
-            config_files = {
-                'configuration.yaml': master_config_content,
-                'automations.yaml': '[]\n',
-                'scripts.yaml': '{}\n',
-                'scenes.yaml': '[]\n',
-            }
-            archive = io.BytesIO()
-            with tarfile.open(fileobj=archive, mode='w') as tar:
-                for file_name, content in config_files.items():
-                    file_bytes = content.encode('utf-8')
-                    file_info = tarfile.TarInfo(name=file_name)
-                    file_info.size = len(file_bytes)
-                    file_info.mode = 0o644
-                    file_info.mtime = int(time.time())
-                    tar.addfile(file_info, io.BytesIO(file_bytes))
-            
-            if not temp_container.put_archive('/config', archive.getvalue()):
+            if not temp_container.put_archive('/config', build_tar(config_files)):
                 raise RuntimeError('put_archive failed')
             
             # Clean up
             temp_container.remove()
             
-            logger.info(f'Successfully copied master configuration to volume {volume_name}')
+            logger.info(f'Successfully copied configuration template {template or DEFAULT_CONFIG_TEMPLATE} to volume {volume_name}')
             return True
             
         except Exception as e:
@@ -505,6 +715,259 @@ def copy_master_config_to_volume(volume_name):
                 except Exception as cleanup_error:
                     logger.warning(f'Failed to cleanup temp container: {cleanup_error}')
             return False
+
+def pull_ha_image_if_due():
+    """Pull HA_IMAGE at most once per HA_IMAGE_PULL_INTERVAL_HOURS
+    
+    Pulling on every create made each request wait on the registry, and 30
+    students creating at once meant 30 simultaneous pulls. The timestamp is kept
+    next to DATA_FILE so all workers share it.
+    """
+    stamp_file = os.path.join(os.path.dirname(DATA_FILE), '.last_image_pull')
+    try:
+        image_present = True
+        try:
+            client.images.get(HA_IMAGE)
+        except docker.errors.ImageNotFound:
+            image_present = False
+        if image_present and os.path.exists(stamp_file):
+            if time.time() - os.path.getmtime(stamp_file) < HA_IMAGE_PULL_INTERVAL_HOURS * 3600:
+                return
+        logger.info(f'Pulling latest image: {HA_IMAGE}')
+        client.images.pull(HA_IMAGE)
+        with open(stamp_file, 'w') as f:
+            f.write(datetime.now().isoformat())
+    except docker.errors.APIError as e:
+        logger.warning(f'Failed to pull latest image, using cached version: {e}')
+
+def run_instance_container(container_name, port):
+    """Start a Home Assistant container for an instance
+    
+    The volume has the same name as the container. Network configuration: default
+    bridge network for internet access, isolated from the host LAN (works with the
+    Cloudflare tunnel setup).
+    """
+    pull_ha_image_if_due()
+    kwargs = {}
+    if INSTANCE_MEM_LIMIT:
+        kwargs['mem_limit'] = INSTANCE_MEM_LIMIT
+    if INSTANCE_CPUS > 0:
+        kwargs['nano_cpus'] = int(INSTANCE_CPUS * 1e9)
+    return client.containers.run(
+        HA_IMAGE,
+        name=container_name,
+        detach=True,
+        ports={'8123/tcp': port},
+        environment={
+            'TZ': HA_TIME_ZONE or 'UTC'
+        },
+        volumes={
+            container_name: {'bind': '/config', 'mode': 'rw'}
+        },
+        restart_policy={'Name': 'unless-stopped'},
+        network_mode='bridge',
+        **kwargs
+    )
+
+class _IterStream(io.RawIOBase):
+    """File-like wrapper around a byte-chunk iterator (Docker archive streams)"""
+    def __init__(self, chunks):
+        self._chunks = iter(chunks)
+        self._buffer = b''
+    def readable(self):
+        return True
+    def readinto(self, b):
+        while not self._buffer:
+            try:
+                self._buffer = next(self._chunks)
+            except StopIteration:
+                return 0
+        n = min(len(b), len(self._buffer))
+        b[:n] = self._buffer[:n]
+        self._buffer = self._buffer[n:]
+        return n
+
+def read_container_file(container, path):
+    """Read one file from a container (running or stopped)
+    
+    Returns:
+        bytes: File content, or None if it does not exist
+    """
+    try:
+        stream, _ = container.get_archive(path)
+    except docker.errors.NotFound:
+        return None
+    with tarfile.open(fileobj=io.BufferedReader(_IterStream(stream)), mode='r|') as tar:
+        for member in tar:
+            if member.isfile():
+                return tar.extractfile(member).read()
+    return None
+
+def archive_container_config(container, exclude):
+    """Archive a container's /config as tar.gz, leaving out excluded paths
+    
+    Args:
+        container: Docker container with the instance volume at /config
+        exclude: Path prefixes inside the archive (which starts with 'config/')
+    
+    Returns:
+        bytes: gzip-compressed tar archive
+    """
+    stream, _ = container.get_archive('/config')
+    output = io.BytesIO()
+    with tarfile.open(fileobj=io.BufferedReader(_IterStream(stream)), mode='r|') as tar_in, \
+         tarfile.open(fileobj=output, mode='w:gz') as tar_out:
+        for member in tar_in:
+            if any(member.name.startswith(prefix) for prefix in exclude):
+                continue
+            tar_out.addfile(member, tar_in.extractfile(member) if member.isfile() else None)
+    return output.getvalue()
+
+def count_config_items(content, pattern):
+    """Count lines matching a pattern in a YAML file's content (None counts as 0)"""
+    if not content:
+        return 0
+    return len(re.findall(pattern, content.decode('utf-8', errors='replace'), re.MULTILINE))
+
+def touch_activity(port):
+    """Record that an instance was used (throttled to once a minute per worker)"""
+    now = time.time()
+    if now - _activity_last_touch.get(port, 0) < 60:
+        return
+    _activity_last_touch[port] = now
+    try:
+        os.makedirs(ACTIVITY_DIR, exist_ok=True)
+        path = os.path.join(ACTIVITY_DIR, str(port))
+        with open(path, 'a'):
+            pass
+        os.utime(path, (now, now))
+    except OSError as e:
+        logger.warning(f'Failed to record activity for port {port}: {e}')
+
+def last_activity(port):
+    """Time an instance was last used via the portal, or None"""
+    try:
+        return os.path.getmtime(os.path.join(ACTIVITY_DIR, str(port)))
+    except OSError:
+        return None
+
+def snapshot_paths(container_name):
+    """Snapshots of an instance, newest first"""
+    directory = os.path.join(SNAPSHOT_DIR, container_name)
+    if not os.path.isdir(directory):
+        return []
+    return sorted((os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.tar.gz')), reverse=True)
+
+def take_config_snapshot(container, container_name):
+    """Save the instance's /config before a reset; keeps SNAPSHOTS_TO_KEEP snapshots
+    
+    Returns:
+        str: Path of the snapshot, or None if it could not be taken
+    """
+    if SNAPSHOTS_TO_KEEP <= 0:
+        return None
+    try:
+        data = archive_container_config(container, SNAPSHOT_EXCLUDE)
+        directory = os.path.join(SNAPSHOT_DIR, container_name)
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, datetime.now().strftime('%Y%m%dT%H%M%S') + '.tar.gz')
+        with open(path, 'wb') as f:
+            f.write(data)
+        for old in snapshot_paths(container_name)[SNAPSHOTS_TO_KEEP:]:
+            os.remove(old)
+        logger.info(f'Saved snapshot of {container_name} to {path}')
+        return path
+    except Exception as e:
+        logger.error(f'Failed to snapshot {container_name}: {e}', exc_info=True)
+        return None
+
+def delete_snapshots(container_name):
+    """Remove all snapshots of an instance (when the instance is deleted)"""
+    shutil.rmtree(os.path.join(SNAPSHOT_DIR, container_name), ignore_errors=True)
+
+def restore_config_snapshot(instance, snapshot_path):
+    """Replace an instance's /config with a snapshot and restart it"""
+    container = client.containers.get(instance['container_id'])
+    container.stop(timeout=30)
+    with _temp_container_semaphore:
+        try:
+            client.images.get('alpine:latest')
+        except docker.errors.ImageNotFound:
+            client.images.pull('alpine:latest')
+        temp_container = client.containers.create(
+            'alpine:latest',
+            command=['sh', '-c', 'sleep 300'],
+            volumes={instance['container_name']: {'bind': '/config', 'mode': 'rw'}}
+        )
+        try:
+            temp_container.start()
+            result = temp_container.exec_run(['sh', '-c', 'find /config -mindepth 1 -delete'])
+            if result.exit_code != 0:
+                raise RuntimeError(f'Failed to clear /config: {result.output.decode(errors="replace")}')
+            with open(snapshot_path, 'rb') as f:
+                # The archive's entries start with config/, so extract at /
+                if not temp_container.put_archive('/', f.read()):
+                    raise RuntimeError('put_archive failed')
+        finally:
+            temp_container.remove(force=True)
+    container.start()
+
+def is_instance_ready(port):
+    """True when Home Assistant answers HTTP requests on the port"""
+    try:
+        resp = requests.get(f'http://{DOCKER_HOST_IP}:{port}/manifest.json', timeout=2)
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+def stop_idle_instances():
+    """Stop running, unlocked instances that nobody has used for IDLE_STOP_HOURS
+    
+    Activity is portal traffic to the instance; an instance that was started
+    recently counts as active from its start time.
+    """
+    cutoff = time.time() - IDLE_STOP_HOURS * 3600
+    stopped = {}
+    for server_name, instance in load_instances().items():
+        if instance.get('locked') or instance.get('container_id') == 'pending':
+            continue
+        try:
+            container = client.containers.get(instance['container_id'])
+            if container.status != 'running':
+                continue
+            # StartedAt is UTC with nanoseconds, e.g. 2026-10-21T14:20:12.123456789Z
+            match = re.match(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d', container.attrs.get('State', {}).get('StartedAt', ''))
+            started = (datetime.strptime(match.group(0), '%Y-%m-%dT%H:%M:%S')
+                       .replace(tzinfo=timezone.utc).timestamp()) if match else 0
+            if max(last_activity(instance['port']) or 0, started) < cutoff:
+                logger.info(f'Stopping idle instance {server_name}')
+                container.stop(timeout=30)
+                stopped[server_name] = {'status': 'exited'}
+        except docker.errors.NotFound:
+            continue
+        except Exception as e:
+            logger.warning(f'Idle check failed for {server_name}: {e}')
+    if stopped:
+        apply_instance_changes(stopped)
+
+def _idle_stop_loop():
+    """Background loop; only one worker at a time does the work (flock)"""
+    lock_path = os.path.join(DATA_DIR, '.idle_stop.lock')
+    while True:
+        time.sleep(300)
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            with open(lock_path, 'a') as lock_file:
+                try:
+                    fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue
+                try:
+                    stop_idle_instances()
+                finally:
+                    fcntl.flock(lock_file, fcntl.LOCK_UN)
+        except Exception as e:
+            logger.error(f'Idle stop check failed: {e}', exc_info=True)
 
 def check_instance_onboarding_complete(volume_name):
     """Check if a Home Assistant instance has completed onboarding
@@ -1112,9 +1575,50 @@ def can_create_instance(request, instances):
     can_create = user_instance_count < MAX_INSTANCES
     return can_create, user_instance_count, MAX_INSTANCES
 
+@app.before_request
+def route_instance_hostname():
+    """Serve requests for an instance's own hostname (INSTANCE_URL_TEMPLATE)
+    
+    Everything on such a host goes to that instance unchanged; only the WebSocket
+    handshake is left to the flask-sock route, which resolves the host itself.
+    """
+    matched, server_name, instance = find_instance_by_host(request.host)
+    if not matched:
+        return None
+    if instance is None:
+        return render_proxy_error(
+            404,
+            'Instance Not Found',
+            'There is no Home Assistant instance at this address.',
+            details='This instance may have been deleted or the address is incorrect.',
+            suggestions=['Go back to the portal homepage to see your instances']
+        )
+    if request.path == '/api/websocket' and is_websocket_upgrade_request(request):
+        return None
+    return forward_to_instance(instance['port'], request.path.lstrip('/'))
+
+@app.errorhandler(404)
+def not_found(error):
+    """Send unknown paths to the instance last opened via /proxy/<port>/
+    
+    Home Assistant's frontend changes the address bar to absolute paths such as
+    /home/overview, so a page reload or bookmark arrives here without the
+    /proxy/<port>/ prefix.
+    """
+    port = session.get('proxy_port')
+    if port is not None and request.method in ('GET', 'HEAD'):
+        return proxy(port, request.path.lstrip('/'))
+    return error
+
 @app.route('/')
 def index():
     """Main page with instance management UI"""
+    # Home Assistant's onboarding redirects to <origin>/?auth_callback=1 instead of
+    # the instance's /proxy/<port>/ path; send it back to the instance it came from
+    if request.args.get('auth_callback') and session.get('proxy_port') is not None:
+        query = request.query_string.decode('utf-8')
+        return redirect(f'/proxy/{session["proxy_port"]}/?{query}')
+    
     instances = load_instances()
     # Update status for each instance by checking actual container state
     update_instances_status(instances)
@@ -1216,12 +1720,20 @@ def create_instance():
             'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
         }), 403
     
-    data = request.json
+    data = request.json or {}
     server_name = data.get('server_name', '').strip()
     instance_password = data.get('instance_password', '').strip()
+    config_template = data.get('config_template') or DEFAULT_CONFIG_TEMPLATE
+    
+    if config_template not in [t['name'] for t in list_config_templates()]:
+        return jsonify({'error': 'Unknown configuration template'}), 400
     
     if not server_name:
         return jsonify({'error': 'Server name is required'}), 400
+    
+    # Without a password the student cannot restart, reset or delete their own instance
+    if not instance_password:
+        return jsonify({'error': 'An instance password is required. You need it to restart, reset or delete your instance.'}), 400
 
     # The name becomes part of the Docker container and volume name, so it must
     # only contain characters Docker accepts
@@ -1255,8 +1767,11 @@ def create_instance():
         # Check if server name already exists. Different names can map to the same
         # container/volume name ("Lab 1" and "lab-1"), and creating the second one
         # would remove the first one's container and volume below.
+        # Names must also give distinct hostnames ("lab.1" and "lab-1" share one)
+        new_slug = instance_slug(server_name, {'container_name': container_name})
         if server_name in instances or any(
-            inst.get('container_name') == container_name for inst in instances.values()
+            inst.get('container_name') == container_name or instance_slug(name, inst) == new_slug
+            for name, inst in instances.items()
         ):
             return jsonify({'error': 'Server name already exists'}), 400
         
@@ -1304,33 +1819,10 @@ def create_instance():
         except docker.errors.NotFound:
             pass  # No existing volume, which is expected
         
-        # Copy master configuration to the volume before starting the container
-        copy_master_config_to_volume(volume_name)
+        # Copy the starting configuration to the volume before starting the container
+        copy_master_config_to_volume(volume_name, config_template)
         
-        # Pull the latest HA image to ensure new instances use the newest version
-        try:
-            logger.info(f'Pulling latest image: {HA_IMAGE}')
-            client.images.pull(HA_IMAGE)
-        except docker.errors.APIError as e:
-            logger.warning(f'Failed to pull latest image, using cached version: {e}')
-        
-        # Network configuration: Create container with bridge network for internet access
-        # but isolated from host LAN. This works with Cloudflare tunnel setup.
-        container = client.containers.run(
-            HA_IMAGE,
-            name=container_name,
-            detach=True,
-            ports={'8123/tcp': port},
-            environment={
-                'TZ': 'UTC'
-            },
-            volumes={
-                volume_name: {'bind': '/config', 'mode': 'rw'}
-            },
-            restart_policy={'Name': 'unless-stopped'},
-            # Use default bridge network for isolation from host LAN
-            network_mode='bridge'
-        )
+        container = run_instance_container(container_name, port)
         
         # Update instance info with actual container details
         instance_info = {
@@ -1339,7 +1831,8 @@ def create_instance():
             'port': port,
             'created_at': datetime.now().isoformat(),
             'created_by': created_by,
-            'status': 'running'
+            'status': 'running',
+            'config_template': config_template
         }
         
         # Hash and store instance password if provided
@@ -1366,7 +1859,7 @@ def create_instance():
             'message': 'Instance created successfully',
             'server_name': server_name,
             'port': port,
-            'url': f'/proxy/{port}/'
+            'url': instance_url(server_name, instance_info)
         }), 201
         
     except Exception as e:
@@ -1441,6 +1934,7 @@ def delete_instance(server_name):
         
         # Remove from instances (re-reads the file so concurrent changes are kept)
         remove_instance(server_name)
+        delete_snapshots(instance['container_name'])
         
         return jsonify({'message': 'Instance deleted successfully'}), 200
         
@@ -1530,7 +2024,11 @@ def start_instance(server_name):
 
         update_instance(server_name, {'status': container.status})
 
-        return jsonify({'status': container.status, 'server_name': server_name}), 200
+        return jsonify({
+            'status': container.status,
+            'server_name': server_name,
+            'url': instance_url(server_name, instance)
+        }), 200
 
     except docker.errors.NotFound:
         update_instance(server_name, {'status': 'removed'})
@@ -1567,10 +2065,12 @@ def reset_instance(server_name):
         port = instance['port']
         old_container_id = instance['container_id']
         
-        # Stop and remove existing container
+        # Stop and remove existing container, keeping a snapshot so the reset can be undone
+        snapshot_path = None
         try:
             container = client.containers.get(old_container_id)
             container.stop()
+            snapshot_path = take_config_snapshot(container, container_name)
             container.remove()
         except docker.errors.NotFound:
             pass  # Container already removed
@@ -1583,39 +2083,21 @@ def reset_instance(server_name):
         except docker.errors.NotFound:
             pass  # Volume doesn't exist or already removed
         
-        # Copy master configuration to the volume before starting the container
-        copy_master_config_to_volume(volume_name)
-        
-        # Pull the latest HA image to ensure reset instances use the newest version
-        try:
-            logger.info(f'Pulling latest image: {HA_IMAGE}')
-            client.images.pull(HA_IMAGE)
-        except docker.errors.APIError as e:
-            logger.warning(f'Failed to pull latest image, using cached version: {e}')
+        # Copy the instance's starting configuration to the volume before starting the container
+        copy_master_config_to_volume(volume_name, instance.get('config_template'))
         
         # Create a new container with the same configuration
-        # Network configuration: Use bridge network for isolation from host LAN
-        new_container = client.containers.run(
-            HA_IMAGE,
-            name=container_name,
-            detach=True,
-            ports={'8123/tcp': port},
-            environment={
-                'TZ': 'UTC'
-            },
-            volumes={
-                volume_name: {'bind': '/config', 'mode': 'rw'}
-            },
-            restart_policy={'Name': 'unless-stopped'},
-            network_mode='bridge'
-        )
+        new_container = run_instance_container(container_name, port)
         
         # Update instance info with new container ID
-        update_instance(server_name, {
+        reset_changes = {
             'container_id': new_container.id,
             'status': 'running',
             'reset_at': datetime.now().isoformat()
-        })
+        }
+        if snapshot_path:
+            reset_changes['last_snapshot'] = os.path.basename(snapshot_path)
+        update_instance(server_name, reset_changes)
         
         # Log instance reset
         user_id, user_type = get_user_info_for_logging(request)
@@ -1788,6 +2270,7 @@ def delete_all_instances():
                 # Remove from instances dict
                 del instances[server_name]
                 deleted_names.append(server_name)
+                delete_snapshots(volume_name)
                 deleted_count += 1
             except Exception as e:
                 logger.error(f'Failed to delete instance {server_name}: {str(e)}')
@@ -1992,6 +2475,11 @@ def set_instance_creation_status():
         'message': 'Instance creation status updated successfully',
         'instance_creation_enabled': enabled
     }), 200
+
+@app.route('/api/config-templates', methods=['GET'])
+def get_config_templates():
+    """API endpoint listing the starting configurations an instance can be created from"""
+    return jsonify({'templates': list_config_templates(), 'default': DEFAULT_CONFIG_TEMPLATE}), 200
 
 @app.route('/api/settings/teacher-access', methods=['GET'])
 def check_teacher_access():
@@ -2290,7 +2778,18 @@ def proxy(port, path):
     """
     # Store the port in session for fallback requests
     session['proxy_port'] = port
+    return forward_to_instance(port, path, url_prefix=f'/proxy/{port}')
+
+def forward_to_instance(port, path, url_prefix=''):
+    """Check access and forward the current request to the instance on a port
     
+    Args:
+        port: Host port of the instance
+        path: Path to request from Home Assistant (without leading slash)
+        url_prefix: Path prefix the browser uses for this instance ('/proxy/<port>'
+            in path mode, '' when the instance has its own hostname). Redirects and
+            HTML are rewritten to include it.
+    """
     # Verify that the port belongs to a valid instance and log access
     instances = load_instances()
     valid_port = False
@@ -2332,6 +2831,8 @@ def proxy(port, path):
             ]
         )
     
+    touch_activity(port)
+    
     # Log instance access (only log on initial access, not every request)
     # We'll log on specific paths to avoid excessive logging of assets
     if path in ACCESS_LOG_PATHS:
@@ -2350,8 +2851,9 @@ def proxy(port, path):
     if request.query_string:
         target_url += f'?{request.query_string.decode("utf-8")}'
     
-    # Log the proxied request for debugging
-    logger.info(f'Proxying {request.method} request to: {target_url}')
+    # Log the proxied request for debugging (without the query string, which can
+    # contain one-time auth codes)
+    logger.debug(f'Proxying {request.method} request to port {port}: /{path}')
     
     # Check if this is a WebSocket upgrade request
     # Note: We forward the websocket handshake request to the backend even though
@@ -2439,9 +2941,9 @@ def proxy(port, path):
                 if key.lower() == 'location':
                     original_value = value
                     # Check if this is a relative path (starts with /) and not already prefixed
-                    if value.startswith('/') and not value.startswith(f'/proxy/{port}/'):
+                    if url_prefix and value.startswith('/') and not value.startswith(f'{url_prefix}/'):
                         # Rewrite to include /proxy/{port}/ prefix
-                        value = f'/proxy/{port}{value}'
+                        value = f'{url_prefix}{value}'
                         logger.debug(f'Rewrote Location header to: {value}')
                     # Handle absolute URLs that point to the backend instance
                     # This prevents users from being kicked back to the app index after onboarding
@@ -2477,7 +2979,7 @@ def proxy(port, path):
                             if parsed.fragment:
                                 path_to_rewrite += f'#{parsed.fragment}'
                             # Rewrite to proxy path
-                            value = f'/proxy/{port}{path_to_rewrite}'
+                            value = f'{url_prefix}{path_to_rewrite}'
                             logger.debug(f'Rewrote absolute URL Location header from {original_value} to: {value}')
                 response_headers.append((key, value))
         
@@ -2494,6 +2996,7 @@ def proxy(port, path):
         # For HTML responses, inject a <base> tag to help browsers resolve relative URLs
         # This is crucial for making the proxy work correctly with Home Assistant
         should_rewrite_html = (
+            url_prefix and
             content_type and 
             'text/html' in content_type and 
             resp.status_code == 200 and
@@ -2520,7 +3023,7 @@ def proxy(port, path):
                 
                 # Inject a <base> tag right after <head> to set the base URL for relative paths
                 # This tells the browser that all relative URLs should be resolved relative to /proxy/{port}/
-                base_tag = f'<base href="/proxy/{port}/">'
+                base_tag = f'<base href="{url_prefix}/">'
                 
                 # Use a simple string search and replace to avoid ReDoS
                 # Look for <head> or <head attributes> (case-insensitive)
@@ -2659,6 +3162,7 @@ def proxy_websocket_connection(client_ws, backend_url, port):
                             continue
                         # Send to backend
                         backend_ws.send(message)
+                        touch_activity(port)
                     except simple_websocket.ConnectionClosed:
                         logger.info(f'Client WebSocket closed for port {port}')
                         break
@@ -2737,10 +3241,13 @@ def _websocket_proxy_handler(ws, port=None):
         ws: The WebSocket connection object
         port: Optional port number (if not provided, will be determined from session/instance)
     """
-    # If port is not in the URL, try to determine it from session or single instance
+    # If port is not in the URL, try the instance hostname, then session or single instance
     if port is None:
+        _, _, host_instance = find_instance_by_host(request.host)
+        if host_instance is not None:
+            port = host_instance['port']
         # Try to get port from session
-        if 'proxy_port' in session:
+        elif 'proxy_port' in session:
             port = session['proxy_port']
             logger.info(f'Using port {port} from session for WebSocket')
         else:
@@ -2769,9 +3276,6 @@ def _websocket_proxy_handler(ws, port=None):
         ws.close(reason=1008, message='Access denied')
         return
     
-    # Store port in session for future requests
-    session['proxy_port'] = port
-    
     # Build the backend WebSocket URL
     backend_url = f'ws://{DOCKER_HOST_IP}:{port}/api/websocket'
     
@@ -2789,6 +3293,228 @@ def websocket_proxy_direct(ws):
 def websocket_proxy_with_port(ws, port):
     """WebSocket proxy endpoint for /proxy/{port}/api/websocket path"""
     _websocket_proxy_handler(ws, port=port)
+
+def instance_progress(server_name, instance):
+    """Collect what a student has built in an instance (cached per worker)"""
+    cached = _progress_cache.get(server_name)
+    if cached and time.time() - cached[0] < PROGRESS_CACHE_TTL and cached[1]['container_id'] == instance['container_id']:
+        return cached[1]
+    
+    progress = {
+        'server_name': server_name,
+        'container_id': instance['container_id'],
+        'created_by': instance.get('created_by'),
+        'config_template': instance.get('config_template', DEFAULT_CONFIG_TEMPLATE),
+        'port': instance['port'],
+        'url': instance_url(server_name, instance),
+        'status': 'removed',
+        'onboarded': False,
+        'automations': 0,
+        'scripts': 0,
+        'scenes': 0,
+        'users': 0,
+    }
+    try:
+        container = client.containers.get(instance['container_id'])
+        progress['status'] = container.status
+        provider = read_container_file(container, '/config/.storage/auth_provider.homeassistant')
+        progress['onboarded'] = provider is not None
+        if provider:
+            users = json.loads(provider).get('data', {}).get('users', [])
+            progress['users'] = len([u for u in users if u.get('username') != TEACHER_USERNAME])
+        # UI-created items are written as YAML list entries / top-level keys
+        progress['automations'] = count_config_items(read_container_file(container, '/config/automations.yaml'), r'^- ')
+        progress['scenes'] = count_config_items(read_container_file(container, '/config/scenes.yaml'), r'^- ')
+        progress['scripts'] = count_config_items(read_container_file(container, '/config/scripts.yaml'), r'^[A-Za-z0-9_]+:')
+    except docker.errors.NotFound:
+        pass
+    except Exception as e:
+        logger.warning(f'Failed to read progress for {server_name}: {e}')
+    
+    _progress_cache[server_name] = (time.time(), progress)
+    return progress
+
+@app.route('/api/admin/progress', methods=['GET'])
+def get_progress_overview():
+    """API endpoint with each student's progress (admin only)
+    
+    Returns onboarding state, number of users, automations, scripts and scenes,
+    and when the instance was last used through the portal.
+    """
+    if not is_admin_user(request):
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    overview = []
+    for server_name, instance in load_instances().items():
+        if instance.get('container_id') == 'pending':
+            continue
+        progress = dict(instance_progress(server_name, instance))
+        progress.pop('container_id', None)
+        activity = last_activity(instance['port'])
+        progress['last_active'] = datetime.fromtimestamp(activity).isoformat() if activity else None
+        overview.append(progress)
+    overview.sort(key=lambda p: p['server_name'].lower())
+    return jsonify({'instances': overview}), 200
+
+def validate_push_path(path):
+    """Normalise a path relative to /config for pushed files
+    
+    Returns:
+        str: Normalised path, or None if it is not allowed
+    """
+    if not isinstance(path, str) or not path.strip():
+        return None
+    normalized = posixpath.normpath(path.strip().lstrip('/'))
+    if normalized.startswith('..') or normalized == '.' or normalized.startswith('.storage'):
+        return None
+    return normalized
+
+@app.route('/api/admin/push-file', methods=['POST'])
+def push_file_to_instances():
+    """API endpoint to write a file into instances' /config (requires admin password)
+    
+    Body: admin_password, path (relative to /config, e.g.
+    blueprints/automation/lesson/motion_light.yaml), content (text) or
+    content_base64, targets (list of server names; empty = all), restart (bool).
+    """
+    if not ADMIN_PASSWORD:
+        return jsonify({'error': 'Admin password not configured'}), 403
+    
+    data = request.json or {}
+    if not admin_password_matches(data.get('admin_password', '')):
+        return jsonify({'error': 'Invalid admin password'}), 401
+    
+    path = validate_push_path(data.get('path'))
+    if path is None:
+        return jsonify({'error': 'Invalid path. Use a path inside the config folder, not .storage.'}), 400
+    
+    if data.get('content_base64') is not None:
+        try:
+            content = base64.b64decode(data['content_base64'], validate=True)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'content_base64 is not valid base64'}), 400
+    elif isinstance(data.get('content'), str):
+        content = data['content'].encode('utf-8')
+    else:
+        return jsonify({'error': 'content or content_base64 is required'}), 400
+    if len(content) > MAX_PUSH_FILE_BYTES:
+        return jsonify({'error': f'File is larger than {MAX_PUSH_FILE_BYTES // 1024} KB'}), 400
+    
+    instances = load_instances()
+    targets = data.get('targets') or list(instances)
+    archive = build_tar({path: content})
+    results = []
+    for server_name in targets:
+        instance = instances.get(server_name)
+        if instance is None or instance.get('container_id') == 'pending':
+            results.append({'server_name': server_name, 'status': 'failed', 'message': 'Instance not found'})
+            continue
+        try:
+            container = client.containers.get(instance['container_id'])
+            if not container.put_archive('/config', archive):
+                raise RuntimeError('put_archive failed')
+            restarted = False
+            if data.get('restart') and container.status == 'running':
+                container.restart(timeout=10)
+                restarted = True
+            results.append({'server_name': server_name, 'status': 'success', 'restarted': restarted})
+        except Exception as e:
+            logger.error(f'Failed to push {path} to {server_name}: {e}')
+            results.append({'server_name': server_name, 'status': 'failed', 'message': str(e)})
+    
+    user_id, _ = get_user_info_for_logging(request)
+    success_count = sum(1 for r in results if r['status'] == 'success')
+    interaction_logger.log_admin_operation(
+        operation='push_file',
+        user_id=user_id,
+        details={'path': path, 'success_count': success_count, 'failed_count': len(results) - success_count}
+    )
+    return jsonify({
+        'message': f'{path} written to {success_count} of {len(results)} instance(s)',
+        'path': path,
+        'results': results
+    }), 200
+
+@app.route('/api/instances/<server_name>/export', methods=['GET'])
+def export_instance(server_name):
+    """API endpoint to download an instance's configuration as tar.gz (owner or admin)
+    
+    Leaves out the history database, backups and the login data.
+    """
+    instances = load_instances()
+    instance = instances.get(server_name)
+    if instance is None:
+        return jsonify({'error': 'Instance not found'}), 404
+    if not can_view_instance(request, instance):
+        return jsonify({'error': 'Access denied'}), 403
+    try:
+        container = client.containers.get(instance['container_id'])
+        data = archive_container_config(container, EXPORT_EXCLUDE)
+    except docker.errors.NotFound:
+        return jsonify({'error': 'Instance container not found'}), 404
+    except Exception as e:
+        logger.error(f'Failed to export {server_name}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to export instance'}), 500
+    
+    filename = f'{instance_slug(server_name, instance)}-{datetime.now().strftime("%Y%m%d-%H%M")}.tar.gz'
+    return Response(data, mimetype='application/gzip', headers={
+        'Content-Disposition': f'attachment; filename="{filename}"'
+    })
+
+@app.route('/api/instances/<server_name>/undo-reset', methods=['POST'])
+def undo_instance_reset(server_name):
+    """API endpoint to restore the snapshot taken before the last reset
+    
+    Requires the instance password or admin password, like reset.
+    """
+    data = request.json or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({'error': 'Password is required'}), 400
+    
+    instance = load_instances().get(server_name)
+    if instance is None:
+        return jsonify({'error': 'Instance not found'}), 404
+    if not validate_instance_password(password, instance):
+        return jsonify({'error': 'Invalid password'}), 401
+    
+    snapshots = snapshot_paths(instance['container_name'])
+    if not snapshots:
+        return jsonify({'error': 'There is no snapshot to restore'}), 404
+    
+    try:
+        restore_config_snapshot(instance, snapshots[0])
+    except Exception as e:
+        logger.error(f'Failed to restore snapshot for {server_name}: {e}', exc_info=True)
+        return jsonify({'error': 'Failed to restore snapshot. Please try again or contact support.'}), 500
+    
+    # A snapshot is used once; the next undo goes one reset further back
+    os.remove(snapshots[0])
+    remaining = snapshot_paths(instance['container_name'])
+    update_instance(server_name, {
+        'status': 'running',
+        'last_snapshot': os.path.basename(remaining[0]) if remaining else None,
+        'restored_at': datetime.now().isoformat()
+    })
+    _onboarding_cache.pop(instance['container_name'], None)
+    
+    user_id, user_type = get_user_info_for_logging(request)
+    interaction_logger.log_admin_operation(
+        operation='undo_reset',
+        user_id=user_id,
+        details={'server_name': server_name, 'snapshot': os.path.basename(snapshots[0])}
+    )
+    return jsonify({'message': 'Instance restored to before the last reset', 'server_name': server_name}), 200
+
+@app.route('/api/instances/<server_name>/ready', methods=['GET'])
+def get_instance_ready(server_name):
+    """API endpoint telling whether Home Assistant answers yet (owner or admin)"""
+    instance = load_instances().get(server_name)
+    if instance is None:
+        return jsonify({'error': 'Instance not found'}), 404
+    if not can_view_instance(request, instance):
+        return jsonify({'error': 'Access denied'}), 403
+    return jsonify({'ready': is_instance_ready(instance['port'])}), 200
 
 @app.route('/api/logs', methods=['GET'])
 def get_interaction_logs():
@@ -2823,6 +3549,9 @@ def get_interaction_logs():
 # Clean up orphaned containers on startup (runs when module is imported)
 logger.info('Starting HA-Edu Portal...')
 cleanup_orphaned_containers()
+
+if IDLE_STOP_HOURS > 0:
+    threading.Thread(target=_idle_stop_loop, daemon=True).start()
 
 if __name__ == '__main__':
     # This block is used when running directly with Python (development mode)
