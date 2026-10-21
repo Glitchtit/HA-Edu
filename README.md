@@ -94,7 +94,7 @@ ADMINS=admin@example.com,teacher@example.com
 
 **Security features:**
 - Email comparison is case-insensitive
-- Supports reverse proxy configurations (checks `X-Forwarded-For` header)
+- Uses Cloudflare's `CF-Connecting-IP` header for the client IP (`X-Forwarded-For` is ignored because it can be forged)
 - Admin buttons are hidden client-side for non-admin users
 - Server-side validation ensures only authorized users can perform admin actions
 
@@ -335,8 +335,34 @@ HA-Edu/
 ├── test_proxy.py                # Proxy functionality tests
 ├── test_proxy_integration.py    # Proxy integration tests
 ├── test_master_config.py        # Master configuration tests
+├── test_bug_hunt_fixes.py       # Concurrency, access control and password regression tests
+├── test_e2e_live.py             # End-to-end tests against a running portal (real Docker)
 └── README.md                    # This file
 ```
+
+## Testing
+
+Unit tests mock Docker and run with plain `pytest`.
+
+`test_e2e_live.py` drives a running portal with real Home Assistant containers
+(access control, proxy, WebSocket, concurrent creation, start/stop, passwords,
+teacher access). It is skipped unless `PORTAL_URL` is set, and it deletes every
+unlocked instance when it finishes, so only point it at a throwaway deployment:
+
+```bash
+docker build -t ha-edu-portal:local .
+docker run -d --name ha-edu-portal -p 5000:5000 \
+  -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/test-data:/data" -v "$PWD/test-logs:/logs" \
+  --add-host host.docker.internal:host-gateway -e DOCKER_HOST_IP=host.docker.internal \
+  -e MAX_INSTANCES=2 -e ADMIN_PASSWORD=admin123 -e ADMINS=teacher@school.fi \
+  -e TEACHER_USERNAME=teacher -e TEACHER_PASSWORD='Lärare-123' ha-edu-portal:local
+
+PORTAL_URL=http://localhost:5000 ADMIN_PASSWORD=admin123 ADMIN_EMAIL=teacher@school.fi \
+TEACHER_USERNAME=teacher TEACHER_PASSWORD='Lärare-123' python -m pytest -v test_e2e_live.py
+```
+
+The tests expect `MAX_INSTANCES=2` and must reach the portal from outside the admin
+subnets (Docker's port publishing makes local requests appear as 172.x).
 
 ## License
 

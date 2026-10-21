@@ -29,7 +29,7 @@ class FakeContainer:
     def start(self):
         self.started = True
         
-    def wait(self):
+    def wait(self, timeout=None):
         return 0
         
     def logs(self):
@@ -40,7 +40,7 @@ class FakeContainer:
         else:
             return b'missing'
             
-    def remove(self):
+    def remove(self, force=False):
         self.removed = True
 
 

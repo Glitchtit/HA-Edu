@@ -8,6 +8,11 @@ import bcrypt
 import urllib.parse
 import ipaddress
 import time
+import fcntl
+import io
+import tarfile
+import tempfile
+from contextlib import contextmanager
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 from flask_sock import Sock
 import docker
@@ -89,8 +94,8 @@ client = docker.from_env()
 # Initialize WebSocket support
 sock = Sock(app)
 
-# Thread lock for port allocation to prevent race conditions when multiple
-# students create instances simultaneously
+# In-process half of data_lock(); guards port allocation and every
+# load-modify-save of instances.json
 _port_allocation_lock = threading.Lock()
 
 # Semaphore to limit concurrent temporary container operations
@@ -124,8 +129,29 @@ ONBOARDING_CACHE_TTL = int(os.getenv('ONBOARDING_CACHE_TTL', '60'))
 # Or set to 'localhost' when running the portal directly on the host (not in Docker)
 DOCKER_HOST_IP = os.getenv('DOCKER_HOST_IP', 'host.docker.internal')
 
+# Allowed server names; the name is lowercased and used in Docker container/volume names
+SERVER_NAME_PATTERN = re.compile(r'[A-Za-z0-9][A-Za-z0-9 _.-]{0,49}')
+
 # Paths that trigger access logging (to avoid logging every asset request)
 ACCESS_LOG_PATHS = ['', 'index.html', 'lovelace']
+
+def get_client_ip(request):
+    """Get the real client IP address
+
+    X-Forwarded-For is not used: Cloudflare keeps whatever value the client sent
+    at the start of that header, so anyone could claim to be 127.0.0.1.
+    Cloudflare always overwrites CF-Connecting-IP with the real client IP, so it is
+    trusted for requests arriving through the tunnel; direct (LAN) requests use
+    the socket address.
+
+    Args:
+        request: Flask request object
+
+    Returns:
+        str: Client IP address, or None if unknown
+    """
+    cf_ip = request.headers.get('CF-Connecting-IP', '').strip()
+    return cf_ip or request.remote_addr
 
 def is_admin_user(request):
     """Check if the current user has admin access
@@ -147,14 +173,7 @@ def is_admin_user(request):
         ipaddress.ip_network('127.0.0.0/8')  # Added localhost range
     ]
     
-    # Check if the request is from the local network
-    # First check X-Forwarded-For header (set by reverse proxies)
-    # Note: In production, you should validate the proxy is trusted before using this header
-    # For this application, we assume the Cloudflare tunnel is the only proxy
-    client_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-    if not client_ip:
-        # Fall back to direct remote_addr
-        client_ip = request.remote_addr
+    client_ip = get_client_ip(request)
     
     # Check if IP is in any of the allowed subnets
     if client_ip:
@@ -198,10 +217,87 @@ def load_data():
     return {'instances': {}, 'settings': {'instance_creation_enabled': True}}
 
 def save_data(data):
-    """Save all data to JSON file"""
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    """Save all data to JSON file
+
+    Writes to a temporary file and atomically renames it over DATA_FILE so that
+    concurrent readers never see a partially written file.
+    """
+    data_dir = os.path.dirname(DATA_FILE)
+    os.makedirs(data_dir, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=data_dir, prefix='.instances-', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, DATA_FILE)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+@contextmanager
+def data_lock():
+    """Lock DATA_FILE for a load-modify-save cycle
+
+    Gunicorn runs several worker processes, so a threading lock alone does not
+    protect instances.json. The in-process lock is taken first so that greenlets
+    in the same worker queue up on it instead of blocking the whole worker in flock.
+    Keep the critical section short - never hold this lock across slow Docker operations.
+    """
+    with _port_allocation_lock:
+        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+        with open(DATA_FILE + '.lock', 'a') as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+def update_instance(server_name, changes):
+    """Apply changes to a single instance under the data lock
+
+    Re-reads instances.json so that changes made by other requests in the meantime
+    are not overwritten with stale data.
+
+    Returns:
+        bool: True if the instance existed and was updated
+    """
+    with data_lock():
+        instances = load_instances()
+        if server_name not in instances:
+            return False
+        instances[server_name].update(changes)
+        save_instances(instances)
+        return True
+
+def apply_instance_changes(changes=None, removed=()):
+    """Apply field changes to several instances and remove others, under the data lock
+    
+    Used by bulk operations that work from a snapshot for a long time; only the
+    fields they changed are written back, on top of the current file.
+    
+    Args:
+        changes: Dict of server_name -> dict of fields to update
+        removed: Iterable of server names to remove
+    """
+    with data_lock():
+        instances = load_instances()
+        for server_name, fields in (changes or {}).items():
+            if server_name in instances:
+                instances[server_name].update(fields)
+        for server_name in removed:
+            instances.pop(server_name, None)
+        save_instances(instances)
+
+def remove_instance(server_name):
+    """Remove a single instance from instances.json under the data lock"""
+    with data_lock():
+        instances = load_instances()
+        if instances.pop(server_name, None) is not None:
+            save_instances(instances)
 
 def load_instances():
     """Load instances from JSON file"""
@@ -287,22 +383,26 @@ def cleanup_orphaned_containers():
     or when instances.json was lost/corrupted.
     """
     try:
-        instances = load_instances()
-        tracked_container_ids = set(inst['container_id'] for inst in instances.values())
-        
-        # Get all containers with ha-edu prefix
-        all_containers = client.containers.list(all=True, filters={'name': 'ha-edu-'})
-        
-        # Track if any instance data was modified to optimize file I/O
-        has_instance_updates = False
-        for container in all_containers:
-            # Skip the portal container itself
-            if container.name == 'ha-edu-portal':
-                continue
-            
-            if container.id not in tracked_container_ids:
-                logger.info(f'Found orphaned container: {container.name} ({container.id[:12]})')
-                try:
+        orphaned_containers = []
+
+        # Decide which containers are orphaned while holding the data lock, so that an
+        # instance being created by another worker is never mistaken for an orphan
+        with data_lock():
+            instances = load_instances()
+            tracked_container_ids = set(inst['container_id'] for inst in instances.values())
+
+            # Get all containers with ha-edu prefix
+            all_containers = client.containers.list(all=True, filters={'name': 'ha-edu-'})
+
+            # Track if any instance data was modified to optimize file I/O
+            has_instance_updates = False
+            for container in all_containers:
+                # Skip the portal container itself
+                if container.name == 'ha-edu-portal':
+                    continue
+
+                if container.id not in tracked_container_ids:
+                    logger.info(f'Found orphaned container: {container.name} ({container.id[:12]})')
                     # Try to find if this container belongs to a tracked instance by name
                     found = False
                     for server_name, inst in instances.items():
@@ -315,20 +415,24 @@ def cleanup_orphaned_containers():
                             found = True
                             has_instance_updates = True
                             break
-                    
+
                     if not found:
-                        # Truly orphaned - stop and remove
-                        logger.info(f'Removing truly orphaned container: {container.name}')
-                        if container.status == 'running':
-                            container.stop(timeout=10)
-                        container.remove()
-                except Exception as e:
-                    logger.error(f'Failed to handle orphaned container {container.name}: {str(e)}')
-        
-        # Save instances only once if any updates were made across all containers
-        if has_instance_updates:
-            save_instances(instances)
-        
+                        orphaned_containers.append(container)
+
+            # Save instances only once if any updates were made across all containers
+            if has_instance_updates:
+                save_instances(instances)
+
+        # Stop and remove truly orphaned containers outside the lock (stopping is slow)
+        for container in orphaned_containers:
+            try:
+                logger.info(f'Removing truly orphaned container: {container.name}')
+                if container.status == 'running':
+                    container.stop(timeout=10)
+                container.remove()
+            except Exception as e:
+                logger.error(f'Failed to handle orphaned container {container.name}: {str(e)}')
+
         logger.info('Orphaned container cleanup completed')
         
     except Exception as e:
@@ -364,21 +468,29 @@ def copy_master_config_to_volume(volume_name):
                 volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
             )
             
-            # Start the container
-            temp_container.start()
-            
             # Write the master config and empty files for automations, scripts, and scenes
             # These files are required by the master configuration
-            # Use exec_run to write files
-            temp_container.exec_run(
-                ['sh', '-c', f'cat > /config/configuration.yaml << \'EOF\'\n{master_config_content}\nEOF']
-            )
-            temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/automations.yaml'])
-            temp_container.exec_run(['sh', '-c', 'echo "{}" > /config/scripts.yaml'])
-            temp_container.exec_run(['sh', '-c', 'echo "[]" > /config/scenes.yaml'])
+            # Use put_archive rather than a shell heredoc so the file content is copied verbatim
+            config_files = {
+                'configuration.yaml': master_config_content,
+                'automations.yaml': '[]\n',
+                'scripts.yaml': '{}\n',
+                'scenes.yaml': '[]\n',
+            }
+            archive = io.BytesIO()
+            with tarfile.open(fileobj=archive, mode='w') as tar:
+                for file_name, content in config_files.items():
+                    file_bytes = content.encode('utf-8')
+                    file_info = tarfile.TarInfo(name=file_name)
+                    file_info.size = len(file_bytes)
+                    file_info.mode = 0o644
+                    file_info.mtime = int(time.time())
+                    tar.addfile(file_info, io.BytesIO(file_bytes))
             
-            # Stop and clean up
-            temp_container.stop(timeout=5)
+            if not temp_container.put_archive('/config', archive.getvalue()):
+                raise RuntimeError('put_archive failed')
+            
+            # Clean up
             temp_container.remove()
             
             logger.info(f'Successfully copied master configuration to volume {volume_name}')
@@ -389,7 +501,6 @@ def copy_master_config_to_volume(volume_name):
             # Clean up on error
             if temp_container:
                 try:
-                    temp_container.stop(timeout=5)
                     temp_container.remove(force=True)
                 except Exception as cleanup_error:
                     logger.warning(f'Failed to cleanup temp container: {cleanup_error}')
@@ -509,9 +620,11 @@ def create_teacher_account(volume_name, teacher_username, teacher_password, rese
                 client.images.pull('alpine:latest')
             
             # Create a temporary container with the volume mounted
+            # It must outlive the apk/pip installs below, which can take well over a
+            # minute on a slow mirror; it is stopped and removed explicitly afterwards
             temp_container = client.containers.create(
                 'alpine:latest',
-                command=['sh', '-c', 'sleep 60'],
+                command=['sh', '-c', 'sleep 900'],
                 volumes={volume_name: {'bind': '/config', 'mode': 'rw'}}
             )
             
@@ -593,18 +706,21 @@ provider_users_list = provider_root.setdefault('users', [])
 person_root = person_data.setdefault('data', dict())
 person_items = person_root.setdefault('items', [])
 
-# Check if teacher user already exists
-existing_users = [
-    u for u in auth_users
-    if u.get('username') == TEACHER_USERNAME
+def normalize_username(username):
+    # Same normalization as Home Assistant's auth provider
+    return (username or '').strip().casefold()
+
+# Check if teacher user already exists. Look in the auth provider, which is where
+# Home Assistant keeps usernames - it drops the 'username' key from .storage/auth
+# users the next time it saves that file.
+existing_provider_entries = [
+    p for p in provider_users_list
+    if normalize_username(p.get('username')) == normalize_username(TEACHER_USERNAME)
 ]
-if existing_users:
+if existing_provider_entries:
     if not RESET_IF_EXISTS:
         print('exists')
         exit(0)
-    # Reset existing account - update password in provider
-    existing_user = existing_users[0]
-    user_id = existing_user['id']
     
     # Generate new password hash
     password_hash_bytes = bcrypt.hashpw(
@@ -613,25 +729,15 @@ if existing_users:
     )
     password_hash = base64.b64encode(password_hash_bytes).decode('utf-8')
     
-    # Update password in provider
-    for provider_entry in provider_users_list:
-        if provider_entry.get('user_id') == user_id or provider_entry.get('username') == TEACHER_USERNAME:
-            # Update all possible password fields
-            password_keys = ['password', 'password_hash', 'hashed_password']
-            for key in password_keys:
-                if key in provider_entry:
-                    provider_entry[key] = password_hash
-            break
-    
-    # Save updated files
-    with open('/config/.storage/auth', 'w') as f:
-        json.dump(auth_data, f, indent=2)
+    # Update password in provider (Home Assistant validates logins against these entries)
+    for provider_entry in existing_provider_entries:
+        provider_entry['password'] = password_hash
+        for key in ['password_hash', 'hashed_password']:
+            if key in provider_entry:
+                provider_entry[key] = password_hash
     
     with open('/config/.storage/auth_provider.homeassistant', 'w') as f:
         json.dump(provider_data, f, indent=2)
-    
-    with open(person_path, 'w') as f:
-        json.dump(person_data, f, indent=2)
     
     print('reset')
     exit(0)
@@ -844,6 +950,19 @@ def verify_password(password, hashed):
     """
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
+def admin_password_matches(password):
+    """Constant-time check of a password against ADMIN_PASSWORD
+
+    Compares UTF-8 bytes because secrets.compare_digest raises TypeError for
+    str arguments containing non-ASCII characters (e.g. å, ä, ö).
+
+    Returns:
+        bool: True if ADMIN_PASSWORD is configured and matches
+    """
+    if not ADMIN_PASSWORD or not isinstance(password, str):
+        return False
+    return secrets.compare_digest(password.encode('utf-8'), ADMIN_PASSWORD.encode('utf-8'))
+
 def validate_instance_password(password, instance):
     """Validate password for instance operations (delete/reset)
     
@@ -859,12 +978,13 @@ def validate_instance_password(password, instance):
         bool: True if password is valid, False otherwise
     """
     # Check admin password first (if configured)
-    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
+    if admin_password_matches(password):
         return True
     
-    # Then check instance password (if set)
-    if instance.get('instance_password_hash'):
-        return verify_password(password, instance['instance_password_hash'])
+    # Then check instance password (if set). It was stripped when the instance
+    # was created, so strip it here too.
+    if instance.get('instance_password_hash') and isinstance(password, str):
+        return verify_password(password.strip(), instance['instance_password_hash'])
     
     return False
 
@@ -1102,10 +1222,21 @@ def create_instance():
     
     if not server_name:
         return jsonify({'error': 'Server name is required'}), 400
-    
+
+    # The name becomes part of the Docker container and volume name, so it must
+    # only contain characters Docker accepts
+    if not SERVER_NAME_PATTERN.fullmatch(server_name):
+        return jsonify({
+            'error': 'Server name may only contain letters A-Z, digits, spaces, dashes, dots and underscores (max 50 characters), and must start with a letter or digit.'
+        }), 400
+
+    container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
+    if container_name == 'ha-edu-portal':
+        return jsonify({'error': 'Server name is reserved'}), 400
+
     # Use lock to prevent race conditions when multiple students create instances simultaneously
     # This ensures port allocation and instance registration are atomic operations
-    with _port_allocation_lock:
+    with data_lock():
         instances = load_instances()
         
         # Re-check limit inside lock to prevent race condition
@@ -1121,8 +1252,12 @@ def create_instance():
                 'error': f'You have reached the maximum limit of {max_allowed} instance(s). Please delete an existing instance before creating a new one.'
             }), 403
         
-        # Check if server name already exists
-        if server_name in instances:
+        # Check if server name already exists. Different names can map to the same
+        # container/volume name ("Lab 1" and "lab-1"), and creating the second one
+        # would remove the first one's container and volume below.
+        if server_name in instances or any(
+            inst.get('container_name') == container_name for inst in instances.values()
+        ):
             return jsonify({'error': 'Server name already exists'}), 400
         
         # Get available port (no limit check - dynamic port assignment)
@@ -1133,7 +1268,6 @@ def create_instance():
         
         # Reserve the port immediately by adding a placeholder entry
         # This prevents other concurrent requests from selecting the same port
-        container_name = f'ha-edu-{server_name.lower().replace(" ", "-")}'
         instances[server_name] = {
             'container_id': 'pending',
             'container_name': container_name,
@@ -1213,7 +1347,7 @@ def create_instance():
             instance_info['instance_password_hash'] = hash_password(instance_password)
         
         # Update the instance with final info (use lock to prevent race conditions)
-        with _port_allocation_lock:
+        with data_lock():
             instances = load_instances()
             instances[server_name] = instance_info
             save_instances(instances)
@@ -1239,7 +1373,7 @@ def create_instance():
         logger.error(f'Failed to create instance: {str(e)}', exc_info=True)
         # Clean up the placeholder entry on failure (use lock to prevent race conditions)
         try:
-            with _port_allocation_lock:
+            with data_lock():
                 instances = load_instances()
                 if server_name in instances and instances[server_name].get('container_id') == 'pending':
                     del instances[server_name]
@@ -1305,9 +1439,8 @@ def delete_instance(server_name):
             container_id=instance['container_id']
         )
         
-        # Remove from instances
-        del instances[server_name]
-        save_instances(instances)
+        # Remove from instances (re-reads the file so concurrent changes are kept)
+        remove_instance(server_name)
         
         return jsonify({'message': 'Instance deleted successfully'}), 200
         
@@ -1317,21 +1450,26 @@ def delete_instance(server_name):
 
 @app.route('/api/instances/<server_name>/toggle-lock', methods=['POST'])
 def toggle_instance_lock(server_name):
-    """API endpoint to toggle instance lock state"""
-    instances = load_instances()
-    
-    if server_name not in instances:
-        return jsonify({'error': 'Instance not found'}), 404
-    
-    instance = instances[server_name]
-    
-    # Toggle the lock state (default to False if not set)
-    current_lock_state = instance.get('locked', False)
-    instance['locked'] = not current_lock_state
-    
-    # Save updated instances
-    instances[server_name] = instance
-    save_instances(instances)
+    """API endpoint to toggle instance lock state (admin or instance owner)"""
+    with data_lock():
+        instances = load_instances()
+        
+        if server_name not in instances:
+            return jsonify({'error': 'Instance not found'}), 404
+        
+        instance = instances[server_name]
+        
+        # Only admins or the user who created the instance may lock/unlock it
+        if not can_view_instance(request, instance):
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Toggle the lock state (default to False if not set)
+        current_lock_state = instance.get('locked', False)
+        instance['locked'] = not current_lock_state
+        
+        # Save updated instances
+        instances[server_name] = instance
+        save_instances(instances)
     
     logger.info(f'Instance {server_name} lock state changed to: {instance["locked"]}')
     
@@ -1342,7 +1480,11 @@ def toggle_instance_lock(server_name):
 
 @app.route('/api/instances/<server_name>/status', methods=['GET'])
 def get_instance_status(server_name):
-    """API endpoint to get instance status"""
+    """API endpoint to get instance status (admin or instance owner)
+    
+    Read-only: this is polled frequently, and the status is re-read from Docker
+    whenever instances are listed, so there is no need to store it.
+    """
     instances = load_instances()
     
     if server_name not in instances:
@@ -1350,21 +1492,14 @@ def get_instance_status(server_name):
     
     instance = instances[server_name]
     
+    if not can_view_instance(request, instance):
+        return jsonify({'error': 'Access denied'}), 403
+    
     try:
         container = client.containers.get(instance['container_id'])
-        status = container.status
-        
-        # Update status in storage
-        instance['status'] = status
-        instances[server_name] = instance
-        save_instances(instances)
-        
-        return jsonify({'status': status}), 200
+        return jsonify({'status': container.status}), 200
         
     except docker.errors.NotFound:
-        instance['status'] = 'removed'
-        instances[server_name] = instance
-        save_instances(instances)
         return jsonify({'status': 'removed'}), 200
 
 @app.route('/api/instances/<server_name>/start', methods=['POST'])
@@ -1385,21 +1520,20 @@ def start_instance(server_name):
 
     try:
         container = client.containers.get(instance['container_id'])
-        if container.status != 'running':
+        if container.status == 'paused':
+            container.unpause()
+            container.reload()
+        elif container.status != 'running':
             container.start()
             container.reload()
             logger.info(f'Started instance: {server_name}')
 
-        instance['status'] = container.status
-        instances[server_name] = instance
-        save_instances(instances)
+        update_instance(server_name, {'status': container.status})
 
         return jsonify({'status': container.status, 'server_name': server_name}), 200
 
     except docker.errors.NotFound:
-        instance['status'] = 'removed'
-        instances[server_name] = instance
-        save_instances(instances)
+        update_instance(server_name, {'status': 'removed'})
         return jsonify({'error': 'Instance not found'}), 404
     except docker.errors.APIError as e:
         logger.error(f'Failed to start instance {server_name}: {str(e)}')
@@ -1477,11 +1611,11 @@ def reset_instance(server_name):
         )
         
         # Update instance info with new container ID
-        instance['container_id'] = new_container.id
-        instance['status'] = 'running'
-        instance['reset_at'] = datetime.now().isoformat()
-        instances[server_name] = instance
-        save_instances(instances)
+        update_instance(server_name, {
+            'container_id': new_container.id,
+            'status': 'running',
+            'reset_at': datetime.now().isoformat()
+        })
         
         # Log instance reset
         user_id, user_type = get_user_info_for_logging(request)
@@ -1522,12 +1656,12 @@ def restart_instance(server_name):
     password_valid = False
     
     # First check admin password if configured
-    if ADMIN_PASSWORD and secrets.compare_digest(password, ADMIN_PASSWORD):
+    if admin_password_matches(password):
         password_valid = True
         logger.info(f'Instance {server_name} restart authorized with admin password')
     # Then check instance password if set
-    elif instance.get('instance_password_hash'):
-        if verify_password(password, instance['instance_password_hash']):
+    elif instance.get('instance_password_hash') and isinstance(password, str):
+        if verify_password(password.strip(), instance['instance_password_hash']):
             password_valid = True
             logger.info(f'Instance {server_name} restart authorized with instance password')
     
@@ -1543,10 +1677,10 @@ def restart_instance(server_name):
             return jsonify({'error': message}), 500
         
         # Update status
-        instance['status'] = 'restarting'
-        instance['last_restarted_at'] = datetime.now().isoformat()
-        instances[server_name] = instance
-        save_instances(instances)
+        update_instance(server_name, {
+            'status': 'restarting',
+            'last_restarted_at': datetime.now().isoformat()
+        })
         
         # Log instance restart
         user_id, user_type = get_user_info_for_logging(request)
@@ -1594,7 +1728,7 @@ def unlock_admin():
     admin_password = data.get('admin_password', '')
     
     # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+    if not admin_password_matches(admin_password):
         return jsonify({'error': 'Invalid admin password'}), 401
     
     return jsonify({'message': 'Admin features unlocked', 'unlocked': True}), 200
@@ -1609,7 +1743,7 @@ def delete_all_instances():
     admin_password = data.get('admin_password', '')
     
     # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+    if not admin_password_matches(admin_password):
         return jsonify({'error': 'Invalid admin password'}), 401
     
     instances = load_instances()
@@ -1620,6 +1754,7 @@ def delete_all_instances():
     deleted_count = 0
     failed_count = 0
     locked_count = 0
+    deleted_names = []
     
     try:
         # Delete all unlocked instances
@@ -1652,13 +1787,14 @@ def delete_all_instances():
                 
                 # Remove from instances dict
                 del instances[server_name]
+                deleted_names.append(server_name)
                 deleted_count += 1
             except Exception as e:
                 logger.error(f'Failed to delete instance {server_name}: {str(e)}')
                 failed_count += 1
         
         # Save updated instances (locked ones remain)
-        save_instances(instances)
+        apply_instance_changes(removed=deleted_names)
         
         # Log admin operation
         user_id, user_type = get_user_info_for_logging(request)
@@ -1693,7 +1829,7 @@ def start_all_instances():
     admin_password = data.get('admin_password', '')
     
     # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+    if not admin_password_matches(admin_password):
         return jsonify({'error': 'Invalid admin password'}), 401
     
     instances = load_instances()
@@ -1704,6 +1840,7 @@ def start_all_instances():
     started_count = 0
     failed_count = 0
     already_running_count = 0
+    status_changes = {}
     
     try:
         for server_name, instance in instances.items():
@@ -1713,12 +1850,12 @@ def start_all_instances():
                     already_running_count += 1
                     continue
                 container.start()
-                instance['status'] = 'running'
+                status_changes[server_name] = {'status': 'running'}
                 started_count += 1
                 logger.info(f'Started instance: {server_name}')
             except docker.errors.NotFound:
                 logger.warning(f'Container not found for instance {server_name}')
-                instance['status'] = 'removed'
+                status_changes[server_name] = {'status': 'removed'}
                 failed_count += 1
             except docker.errors.APIError as e:
                 logger.error(f'Failed to start instance {server_name}: {str(e)}')
@@ -1728,7 +1865,7 @@ def start_all_instances():
                 failed_count += 1
         
         # Save updated instances
-        save_instances(instances)
+        apply_instance_changes(status_changes)
         
         # Log admin operation
         user_id, user_type = get_user_info_for_logging(request)
@@ -1763,7 +1900,7 @@ def stop_all_instances():
     admin_password = data.get('admin_password', '')
     
     # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+    if not admin_password_matches(admin_password):
         return jsonify({'error': 'Invalid admin password'}), 401
     
     instances = load_instances()
@@ -1774,6 +1911,7 @@ def stop_all_instances():
     stopped_count = 0
     failed_count = 0
     already_stopped_count = 0
+    status_changes = {}
     
     try:
         for server_name, instance in instances.items():
@@ -1783,12 +1921,12 @@ def stop_all_instances():
                     already_stopped_count += 1
                     continue
                 container.stop(timeout=10)
-                instance['status'] = 'exited'
+                status_changes[server_name] = {'status': 'exited'}
                 stopped_count += 1
                 logger.info(f'Stopped instance: {server_name}')
             except docker.errors.NotFound:
                 logger.warning(f'Container not found for instance {server_name}')
-                instance['status'] = 'removed'
+                status_changes[server_name] = {'status': 'removed'}
                 failed_count += 1
             except docker.errors.APIError as e:
                 logger.error(f'Failed to stop instance {server_name}: {str(e)}')
@@ -1798,7 +1936,7 @@ def stop_all_instances():
                 failed_count += 1
         
         # Save updated instances
-        save_instances(instances)
+        apply_instance_changes(status_changes)
         
         # Log admin operation
         user_id, user_type = get_user_info_for_logging(request)
@@ -1842,12 +1980,13 @@ def set_instance_creation_status():
     enabled = data.get('enabled', True)
     
     # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+    if not admin_password_matches(admin_password):
         return jsonify({'error': 'Invalid admin password'}), 401
     
-    settings = load_settings()
-    settings['instance_creation_enabled'] = enabled
-    save_settings(settings)
+    with data_lock():
+        settings = load_settings()
+        settings['instance_creation_enabled'] = enabled
+        save_settings(settings)
     
     return jsonify({
         'message': 'Instance creation status updated successfully',
@@ -1876,7 +2015,7 @@ def add_teacher_access(server_name):
     admin_password = data.get('admin_password', '')
     
     # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+    if not admin_password_matches(admin_password):
         return jsonify({'error': 'Invalid admin password'}), 401
     
     instances = load_instances()
@@ -1905,10 +2044,10 @@ def add_teacher_access(server_name):
             return jsonify({'error': message}), 400
         
         # Update instance metadata
-        instance['teacher_access_added'] = True
-        instance['teacher_access_added_at'] = datetime.now().isoformat()
-        instances[server_name] = instance
-        save_instances(instances)
+        update_instance(server_name, {
+            'teacher_access_added': True,
+            'teacher_access_added_at': datetime.now().isoformat()
+        })
         
         # Log teacher access addition
         user_id, user_type = get_user_info_for_logging(request)
@@ -1956,7 +2095,7 @@ def add_teacher_access_all():
     admin_password = data.get('admin_password', '')
     
     # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(admin_password, ADMIN_PASSWORD):
+    if not admin_password_matches(admin_password):
         return jsonify({'error': 'Invalid admin password'}), 401
     
     instances = load_instances()
@@ -1968,6 +2107,7 @@ def add_teacher_access_all():
     failed_count = 0
     skipped_count = 0
     results = []
+    teacher_changes = {}
     
     for server_name, instance in instances.items():
         try:
@@ -1990,9 +2130,10 @@ def add_teacher_access_all():
             
             if success:
                 # Update instance metadata
-                instance['teacher_access_added'] = True
-                instance['teacher_access_added_at'] = datetime.now().isoformat()
-                instances[server_name] = instance
+                teacher_changes[server_name] = {
+                    'teacher_access_added': True,
+                    'teacher_access_added_at': datetime.now().isoformat()
+                }
                 
                 # Restart the instance to apply changes
                 restart_success, restart_message = restart_instance_container(instance['container_id'])
@@ -2025,7 +2166,7 @@ def add_teacher_access_all():
             logger.error(f'Exception while adding teacher access to instance {server_name}: {str(e)}', exc_info=True)
     
     # Save all instance updates
-    save_instances(instances)
+    apply_instance_changes(teacher_changes)
     
     # Log for audit trail
     logger.info(f'Bulk teacher access operation completed. Success: {success_count}, Failed: {failed_count}, Skipped: {skipped_count}')
@@ -2056,6 +2197,7 @@ def render_proxy_error(status_code, title, message, details=None, suggestions=No
     # Choose appropriate icon based on status code
     icons = {
         404: '🔍',
+        403: '🔒',
         400: '⚠️',
         502: '🔌',
         504: '⏱️',
@@ -2153,10 +2295,12 @@ def proxy(port, path):
     instances = load_instances()
     valid_port = False
     server_name = None
+    instance = None
     for name, inst in instances.items():
         if inst['port'] == port:
             valid_port = True
             server_name = name
+            instance = inst
             break
     
     if not valid_port:
@@ -2169,6 +2313,22 @@ def proxy(port, path):
                 'Go back to the portal homepage to see available instances',
                 'Check that you are using the correct access link',
                 'If the instance was recently deleted, this is expected'
+            ]
+        )
+    
+    # Only the instance owner and admins may access an instance. Without this,
+    # anyone could open another student's instance by guessing its port, and claim
+    # the owner account on an instance that has not completed onboarding.
+    if not can_view_instance(request, instance):
+        logger.warning(f'Denied proxy access to port {port} for {get_user_identifier(request) or request.remote_addr}')
+        return render_proxy_error(
+            403,
+            'Access Denied',
+            'You do not have access to this Home Assistant instance.',
+            details='Instances can only be opened by the student who created them, or by a teacher.',
+            suggestions=[
+                'Go back to the portal homepage to see your own instances',
+                'Check that you are signed in with the correct account'
             ]
         )
     
@@ -2596,15 +2756,17 @@ def _websocket_proxy_handler(ws, port=None):
     
     # Verify that the port belongs to a valid instance
     instances = load_instances()
-    valid_port = False
-    for inst in instances.values():
-        if inst['port'] == port:
-            valid_port = True
-            break
+    instance = next((inst for inst in instances.values() if inst['port'] == port), None)
     
-    if not valid_port:
+    if instance is None:
         logger.warning(f'Invalid port {port} requested for WebSocket')
         ws.close(reason=1008, message=f'Invalid instance port {port}')
+        return
+    
+    # Only the instance owner and admins may connect (same rule as the HTTP proxy)
+    if not can_view_instance(request, instance):
+        logger.warning(f'Denied WebSocket access to port {port}')
+        ws.close(reason=1008, message='Access denied')
         return
     
     # Store port in session for future requests

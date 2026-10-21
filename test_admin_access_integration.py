@@ -122,22 +122,39 @@ class TestAdminAccessControlAPI(unittest.TestCase):
             self.assertTrue(data['has_admin_access'],
                           "Email comparison should be case-insensitive")
     
-    def test_check_access_x_forwarded_for_header(self):
-        """Test that X-Forwarded-For header is checked for IP"""
+    def test_check_access_cf_connecting_ip_header(self):
+        """Test that the CF-Connecting-IP header is used as the client IP"""
         import importlib
         with patch.dict(os.environ, {'ADMIN_PASSWORD': 'test123', 'ADMINS': ''}):
             importlib.reload(self.app_module)
             
             response = self.client.get(
                 '/api/admin/check-access',
-                headers={'X-Forwarded-For': '192.168.50.50, 10.0.0.1'},
-                environ_base={'REMOTE_ADDR': '10.0.0.1'}
+                headers={'CF-Connecting-IP': '192.168.50.50'},
+                environ_base={'REMOTE_ADDR': '172.18.0.5'}
             )
             
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             self.assertTrue(data['has_admin_access'],
-                          "X-Forwarded-For local IP should grant admin access")
+                          "CF-Connecting-IP local IP should grant admin access")
+    
+    def test_check_access_x_forwarded_for_is_ignored(self):
+        """Test that a client-supplied X-Forwarded-For cannot grant admin access"""
+        import importlib
+        with patch.dict(os.environ, {'ADMIN_PASSWORD': 'test123', 'ADMINS': ''}):
+            importlib.reload(self.app_module)
+            
+            response = self.client.get(
+                '/api/admin/check-access',
+                headers={'X-Forwarded-For': '127.0.0.1', 'CF-Connecting-IP': '203.0.113.50'},
+                environ_base={'REMOTE_ADDR': '172.18.0.5'}
+            )
+            
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertFalse(data['has_admin_access'],
+                           "Spoofed X-Forwarded-For must not grant admin access")
     
     def test_check_access_no_admin_password(self):
         """Test response when admin password is not configured"""

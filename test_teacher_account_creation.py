@@ -31,7 +31,7 @@ class FakeContainer:
     def start(self):
         self.started = True
 
-    def stop(self):
+    def stop(self, timeout=None):
         self.stopped = True
 
     def remove(self, force=False):
