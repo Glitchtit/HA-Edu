@@ -193,6 +193,14 @@ def _instance_host_regex(template):
 
 INSTANCE_HOST_REGEX = _instance_host_regex(INSTANCE_URL_TEMPLATE)
 
+# Hostnames the portal itself is served on (comma-separated, e.g. 'edu.example.com').
+# With a wildcard DNS record every unknown subdomain reaches the portal; when this is
+# set, hosts under the instance domain that are neither listed here nor an instance
+# get a 404 instead of the portal (which may not be behind Cloudflare Access there).
+PORTAL_HOSTS = {h.strip().lower() for h in os.getenv('PORTAL_HOSTS', '').split(',') if h.strip()}
+INSTANCE_PARENT_DOMAIN = (urllib.parse.urlparse(INSTANCE_URL_TEMPLATE).netloc.lower().split('.', 1)[1]
+                          if INSTANCE_URL_TEMPLATE and '.' in INSTANCE_URL_TEMPLATE else '')
+
 # Paths that trigger access logging (to avoid logging every asset request)
 ACCESS_LOG_PATHS = ['', 'index.html', 'lovelace']
 
@@ -1584,6 +1592,14 @@ def route_instance_hostname():
     """
     matched, server_name, instance = find_instance_by_host(request.host)
     if not matched:
+        host = (request.host or '').lower()
+        if PORTAL_HOSTS and INSTANCE_PARENT_DOMAIN and host.endswith('.' + INSTANCE_PARENT_DOMAIN) and host not in PORTAL_HOSTS:
+            return render_proxy_error(
+                404,
+                'Not Found',
+                'There is nothing at this address.',
+                suggestions=['Check the address, or go to the portal homepage']
+            )
         return None
     if instance is None:
         return render_proxy_error(
