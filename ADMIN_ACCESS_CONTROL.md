@@ -56,7 +56,7 @@ This implementation adds environment variable-based admin access control with Cl
 | Cloudflare User (Approved) | 203.0.113.x | admin@example.com | ✅ YES | Unlock button visible |
 | Cloudflare User (Not Approved) | 203.0.113.x | student@example.com | ❌ NO | Admin buttons hidden |
 | Behind Proxy (Local IP) | 10.0.0.1 | (none) | ✅ YES | Unlock button visible |
-|  | (X-Forwarded-For: 192.168.50.x) | | | |
+|  | (CF-Connecting-IP: 192.168.50.x) | | | |
 
 ## Configuration
 
@@ -97,10 +97,10 @@ services:
 - Prevents invalid IP formats from bypassing checks
 - Validates against exact subnet (192.168.50.0/24)
 
-### X-Forwarded-For Header
-- Checks first IP in comma-separated list
-- **Note**: In production with multiple proxies, ensure only trusted proxies can set this header
-- Current implementation assumes Cloudflare tunnel is the only proxy
+### Client IP Detection
+- Uses the `CF-Connecting-IP` header (always overwritten by Cloudflare with the real client IP), otherwise the socket address
+- `X-Forwarded-For` is ignored: Cloudflare keeps the client-supplied value at the start of that header, so it can be forged
+- **Note**: The portal port must only be reachable through the Cloudflare tunnel or from the trusted LAN, since a direct connection could set `CF-Connecting-IP` itself
 
 ### Email Validation
 - Case-insensitive comparison
@@ -133,7 +133,7 @@ services:
    - Local IP scenarios
    - Remote IP scenarios
    - Cloudflare authentication scenarios
-   - X-Forwarded-For header scenarios
+   - CF-Connecting-IP header scenarios (X-Forwarded-For is ignored)
    - Case-insensitive email matching
 
 3. **Manual Tests** (`test_admin_access_manual.py`)
