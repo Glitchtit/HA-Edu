@@ -1,3 +1,4 @@
+# Standard: demo-enheter för att utforska Home Assistant
 # Master Home Assistant Configuration for HA-Edu
 # This configuration enables demo mode and provides sample entities for educational purposes
 
@@ -7,10 +8,6 @@ default_config:
 # Enable demo mode with predefined entities
 # This automatically creates lights, climate, weather, camera, and other demo entities
 demo:
-
-# Text to speech
-tts:
-  - platform: google_translate
 
 # Buttons (2 buttons using input_button helper)
 input_button:

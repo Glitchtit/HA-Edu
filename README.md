@@ -150,11 +150,11 @@ docker run -d \
 
 ### Creating a New Instance
 
-1. Click the "**+ Add New Instance**" button
-2. Enter a **Server Name** (e.g., "Student-Lab-01")
-3. Click "**Create**"
-4. Wait for the instance to be created (may take 1-2 minutes)
-5. Click "**Access**" to open the Home Assistant instance
+1. Click "**+ Skapa ny instans**"
+2. Enter a **Server Name** (e.g., "Student-Lab-01") and an **instance password**. The password is needed to restart, reset or delete the instance
+3. Pick a **starting configuration** if the teacher has added lesson templates
+4. Click "**Skapa**"
+5. When the button changes from "Startar…" to "**Öppna**", Home Assistant is ready
 
 ### Deleting an Instance (Admin Only)
 
@@ -216,6 +216,21 @@ Environment variables can be configured to customize the portal:
 | `ADMINS` | (empty) | *Optional* Comma-separated list of admin email addresses for Cloudflare authentication |
 | `MAX_INSTANCES` | `0` (unlimited) | *Optional* Maximum instances per non-admin user (0 = unlimited) |
 | `DOCKER_HOST_IP` | `host.docker.internal` | *Optional* IP/hostname to access instance containers from portal container. Use `host.docker.internal` on Docker Desktop, or set to host's IP if needed |
+| `INSTANCE_URL_TEMPLATE` | (empty) | *Recommended* Give each instance its own hostname, e.g. `https://ha-{slug}.example.com`. See [Instance hostnames](#instance-hostnames). Empty = instances are reached via `/proxy/<port>/` |
+| `HA_TIME_ZONE` | `Europe/Helsinki` | Time zone written into every instance's configuration and container |
+| `HA_COUNTRY` | `FI` | Country (ISO code) for every instance |
+| `HA_LANGUAGE` | `sv` | Home Assistant's backend language (the UI language follows each user's browser/profile) |
+| `HA_CURRENCY` | `EUR` | Currency for every instance |
+| `HA_UNIT_SYSTEM` | `metric` | `metric` or `us_customary` |
+| `HA_LATITUDE` / `HA_LONGITUDE` | (empty) | *Optional* Home location, e.g. the school |
+| `HA_SKIP_LOCATION_STEP` | `true` | Skip onboarding's location/country step, which would otherwise overwrite the settings above with values guessed from the browser. Only applies when `HA_COUNTRY` is set |
+| `INSTANCE_MEM_LIMIT` | `1g` | Memory limit per instance container (empty = unlimited). An idle demo instance uses about 450 MB |
+| `INSTANCE_CPUS` | `1` | CPU limit per instance container (0 = unlimited) |
+| `IDLE_STOP_HOURS` | `0` | Stop unlocked instances nobody has used through the portal for this many hours (0 = never). Students start them again with **Starta** |
+| `HA_IMAGE_PULL_INTERVAL_HOURS` | `24` | How often `HA_IMAGE` is pulled when instances are created or reset |
+| `SNAPSHOTS_TO_KEEP` | `3` | Snapshots of `/config` kept per instance before resets, for **Ångra senaste nollställning** (0 = off) |
+
+Set any of the `HA_*` classroom settings to an empty string to let students choose it during onboarding instead.
 
 **GDPR Compliance**: The portal automatically removes logs older than 90 days by default. Adjust `LOG_RETENTION_DAYS` based on your data protection requirements.
 
@@ -233,7 +248,7 @@ Each Home Assistant instance:
 - Runs in its own Docker container
 - Has a dedicated volume for configuration
 - Is accessible on a unique dynamically-assigned port (internal)
-- Accessible via the proxy at `/proxy/<port>/` (external)
+- Accessible via the proxy at `/proxy/<port>/`, or at its own hostname when `INSTANCE_URL_TEMPLATE` is set (external)
 - Uses bridge network mode for isolation from host LAN
 - Has internet access but cannot discover LAN devices
 - Runs in demo mode for educational purposes
@@ -245,13 +260,74 @@ Each Home Assistant instance:
   - 1 camera
   - 2 buttons
 
+## Instance hostnames
+
+By default every instance is served under the portal's own address at `/proxy/<port>/`.
+Home Assistant's frontend is not built for a path prefix, so in this mode:
+
+- Page reloads and deep links work only for the instance opened most recently in that browser.
+- Two instances cannot be used side by side in one browser: they share one origin, so they
+  share Home Assistant's stored login and the portal's routing cookie.
+
+With `INSTANCE_URL_TEMPLATE` each instance gets its own hostname and origin, and these
+limitations go away. The `{slug}` is the instance name in lowercase with other characters
+replaced by `-` (for example "Elev Lab 1" becomes `ha-elev-lab-1.example.com`).
+
+Setup with a Cloudflare tunnel (example domain `example.com`, portal at `edu.example.com`):
+
+1. **DNS**: add a proxied wildcard record `*` (CNAME) pointing at the tunnel, `<tunnel-id>.cfargotunnel.com`.
+   Specific records such as `www` keep working, because explicit records take precedence over a wildcard.
+2. **Tunnel**: add a public hostname `*.example.com` routing to the portal (`http://<portal-host>:5000`),
+   placed after any more specific hostnames.
+3. **Access**: add the application domain `ha-*.example.com` to the portal's Cloudflare Access application
+   (or create one with the same policy), so requests carry `Cf-Access-Authenticated-User-Email`.
+4. **Portal**: set `INSTANCE_URL_TEMPLATE=https://ha-{slug}.example.com` and restart it.
+
+Cloudflare's free Universal SSL certificate only covers one level of subdomains (`*.example.com`),
+which is why the template uses `ha-{slug}.example.com` and not `{slug}.ha.example.com`.
+
+For local testing, browsers resolve `*.localhost` to the local machine:
+`INSTANCE_URL_TEMPLATE=http://ha-{slug}.localhost:5000`.
+
+## Configuration Templates
+
+An instance can start from the standard configuration or from a lesson template. The
+standard configuration is `master_configuration.yaml`; every directory in `config_templates/`
+with a `configuration.yaml` is another template, and all files in the directory (e.g.
+`automations.yaml`, blueprints) are copied into the instance. The first comment line of
+`configuration.yaml` is the description shown in the create dialog. Resetting an instance
+restores the template it was created from.
+
+`config_templates/automationer/` is an example: demo devices, a few helpers and a starter
+automation with exercise instructions.
+
+The classroom settings (`HA_TIME_ZONE`, `HA_COUNTRY`, ...) are added at the top of every
+template's `configuration.yaml`, unless the template has its own `homeassistant:` block.
+
+## Teacher Tools
+
+Admins get two extra toolbar buttons:
+
+- **Översikt**: per instance, whether onboarding is done, how many automations, scripts and
+  scenes the student has made, and when the instance was last used through the portal.
+- **Skicka fil**: write a file (e.g. a blueprint under `blueprints/automation/...`) into the
+  config folder of all instances. `.storage` is off limits. Tick "Starta om" for files that
+  need a restart, such as `configuration.yaml`.
+
+Every card has **Exportera konfiguration**, which downloads the instance's config folder as
+`tar.gz` for grading. The history database, backups and login data are left out.
+
+Before an instance is reset, a snapshot of its config folder is saved under
+`<data dir>/snapshots/`. **Ångra senaste nollställning** on the card restores it (instance
+or admin password required). Snapshots are deleted together with the instance.
+
 ## Master Configuration
 
 The portal uses a master `configuration.yaml` file that is automatically copied to each new instance or reset instance. This configuration enables Home Assistant's demo mode and provides sample entities for educational purposes.
 
 The master configuration includes:
 - **Demo Platform**: Enables all demo integrations
-- **5 Lights**: Demo Light 1-5 for testing automations and controls
+- **Lights**: Demo lights for testing automations and controls
 - **Weather**: Demo weather entity for location-based scenarios
 - **Climate**: Demo thermostat for temperature control learning
 - **Device Trackers**: 2 demo trackers for presence detection scenarios

@@ -1,0 +1,16 @@
+# Uppgift: automationen tänder taklampan när någon kommer hem.
+# 1. Lägg till ett villkor så att den inte körs i semesterläge.
+# 2. Gör en ny automation som släcker alla lampor när "God natt" trycks.
+- id: "starter_welcome_home"
+  alias: "Välkommen hem"
+  description: "Tänder taklampan när någon kommer hem"
+  triggers:
+    - trigger: state
+      entity_id: input_boolean.someone_home
+      to: "on"
+  conditions: []
+  actions:
+    - action: light.turn_on
+      target:
+        entity_id: light.ceiling_lights
+  mode: single

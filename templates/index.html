@@ -881,6 +881,81 @@
             animation: modalFadeIn 0.15s ease-out;
         }
         
+        .modal-content.modal-wide {
+            max-width: 960px;
+        }
+        
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.625rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            background: var(--card);
+            color: var(--foreground);
+            font-family: inherit;
+        }
+        
+        .form-group textarea {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            min-height: 8rem;
+            resize: vertical;
+        }
+        
+        .admin-toolbar .btn-restart {
+            flex: 0 0 auto;
+            padding: 0.5rem 1rem;
+        }
+        
+        .btn-access.not-ready {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .instance-actions-extra {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        
+        .link-button {
+            background: none;
+            border: none;
+            padding: 0;
+            color: var(--color-gray-700);
+            font-size: 0.75rem;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        
+        .table-scroll {
+            overflow-x: auto;
+            max-height: 60vh;
+            margin: 1rem 0;
+        }
+        
+        .progress-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8125rem;
+        }
+        
+        .progress-table th,
+        .progress-table td {
+            text-align: left;
+            padding: 0.4rem 0.5rem;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        
+        .progress-table th {
+            position: sticky;
+            top: 0;
+            background: var(--card);
+        }
+        
         .modal-content {
             background: var(--card);
             color: var(--card-foreground);
@@ -1320,6 +1395,8 @@
             <div class="toolbar-divider"></div>
             <div class="toolbar-group">
                 <button id="teacherAccessAllBtn" class="btn-teacher-access hidden" onclick="openTeacherAccessAllModal()">Lärare på alla</button>
+                <button id="progressBtn" class="btn-restart" onclick="openProgressModal()">Översikt</button>
+                <button id="pushFileBtn" class="btn-restart" onclick="openPushFileModal()">Skicka fil</button>
             </div>
             <div class="toolbar-divider"></div>
             <label class="toggle-container" id="toggleContainer">
@@ -1368,9 +1445,9 @@
                     {% endif %}
                     <div class="instance-actions">
                         {% if instance.status in ['running', 'restarting', 'creating'] %}
-                        <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                        <a href="{{ instance.url }}" target="_blank" rel="noopener" class="btn-access" data-ready-check>Öppna</a>
                         {% else %}
-                        <button class="btn-access" onclick="startInstance('{{ name }}', {{ instance.port }}, this)">Starta</button>
+                        <button class="btn-access" onclick="startInstance('{{ name }}', this)">Starta</button>
                         {% endif %}
                         <div class="instance-actions-secondary">
                             <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">Starta om</button>
@@ -1389,6 +1466,12 @@
                             {% endif %}
                             <button class="btn-delete" onclick="deleteInstance('{{ name }}')">Ta bort</button>
                         </div>
+                    </div>
+                    <div class="instance-actions-extra">
+                        <a class="link-button" href="/api/instances/{{ name|urlencode }}/export">Exportera konfiguration</a>
+                        {% if instance.get('last_snapshot') %}
+                        <button class="link-button" onclick="openUndoResetModal('{{ name }}')">Ångra senaste nollställning</button>
+                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}
@@ -1415,17 +1498,98 @@
                            placeholder="t.ex. Student-Lab-01">
                 </div>
                 <div class="form-group">
-                    <label for="instancePassword">Instanslösenord (valfritt):</label>
-                    <input type="password" id="instancePassword" name="instancePassword" 
-                           placeholder="Ange ett lösenord för att tillåta omstart">
+                    <label for="instancePassword">Instanslösenord:</label>
+                    <input type="password" id="instancePassword" name="instancePassword" required
+                           placeholder="Välj ett lösenord för din instans">
                     <small style="color: var(--color-gray-700); display: block; margin-top: 5px;">
-                        Om du anger det kan detta lösenord användas för att starta om instansen. Adminlösenordet fungerar också.
+                        Du behöver lösenordet för att starta om, nollställa eller ta bort instansen. Adminlösenordet fungerar också.
                     </small>
+                </div>
+                <div class="form-group hidden" id="configTemplateGroup">
+                    <label for="configTemplate">Startkonfiguration:</label>
+                    <select id="configTemplate" name="configTemplate"></select>
                 </div>
                 <div id="modalMessage"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeModal()">Avbryt</button>
                     <button type="submit" class="btn-submit" id="submitBtn">Skapa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Undo Reset Modal -->
+    <div id="undoResetModal" class="modal">
+        <div class="modal-content">
+            <h2>Ångra nollställning</h2>
+            <p>Återställ <strong id="undoResetServerName"></strong> till hur den var före den senaste nollställningen. Det som gjorts efter nollställningen försvinner.</p>
+            <form id="undoResetForm">
+                <div class="form-group">
+                    <label for="undoResetPassword">Lösenord:</label>
+                    <input type="password" id="undoResetPassword" required placeholder="Ange instans- eller adminlösenord">
+                </div>
+                <div id="undoResetModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeUndoResetModal()">Avbryt</button>
+                    <button type="submit" class="btn-submit" id="undoResetSubmitBtn">Ångra</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Progress Overview Modal -->
+    <div id="progressModal" class="modal">
+        <div class="modal-content modal-wide">
+            <h2>Översikt</h2>
+            <p>Vad eleverna har byggt i sina instanser. Uppdateras högst en gång per minut.</p>
+            <div class="table-scroll">
+                <table class="progress-table">
+                    <thead>
+                        <tr>
+                            <th>Instans</th><th>Elev</th><th>Status</th><th>Onboardad</th>
+                            <th>Automationer</th><th>Skript</th><th>Scener</th><th>Senast aktiv</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="progressTableBody"></tbody>
+                </table>
+            </div>
+            <div id="progressModalMessage"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" onclick="closeProgressModal()">Stäng</button>
+                <button type="button" class="btn-submit" onclick="loadProgress()">Uppdatera</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Push File Modal -->
+    <div id="pushFileModal" class="modal">
+        <div class="modal-content">
+            <h2>Skicka fil till instanser</h2>
+            <p>Skriver en fil i config-mappen på alla instanser, t.ex. en blueprint. Finns filen redan skrivs den över.</p>
+            <form id="pushFileForm">
+                <div class="form-group">
+                    <label for="pushFilePath">Sökväg i config-mappen:</label>
+                    <input type="text" id="pushFilePath" required placeholder="blueprints/automation/lektion/rorelse_lampa.yaml">
+                </div>
+                <div class="form-group">
+                    <label for="pushFileUpload">Fil:</label>
+                    <input type="file" id="pushFileUpload">
+                </div>
+                <div class="form-group">
+                    <label for="pushFileContent">…eller innehåll:</label>
+                    <textarea id="pushFileContent" placeholder="Klistra in YAML här"></textarea>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="pushFileRestart" style="width: auto;"> Starta om instanserna efteråt (behövs för configuration.yaml, inte för blueprints)</label>
+                </div>
+                <div class="form-group">
+                    <label for="pushFileAdminPassword">Adminlösenord:</label>
+                    <input type="password" id="pushFileAdminPassword" required>
+                </div>
+                <div id="pushFileModalMessage"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closePushFileModal()">Stäng</button>
+                    <button type="submit" class="btn-submit" id="pushFileSubmitBtn">Skicka</button>
                 </div>
             </form>
         </div>
@@ -2001,12 +2165,13 @@
             
             try {
                 const requestBody = {
-                    server_name: serverName
+                    server_name: serverName,
+                    instance_password: instancePassword
                 };
                 
-                // Only include password if provided
-                if (instancePassword) {
-                    requestBody.instance_password = instancePassword;
+                const configTemplate = document.getElementById('configTemplate').value;
+                if (configTemplate) {
+                    requestBody.config_template = configTemplate;
                 }
                 
                 const response = await fetch('/api/instances', {
@@ -2503,7 +2668,7 @@
             openToggleModal(e.target.checked);
         });
         
-        async function startInstance(serverName, port, button) {
+        async function startInstance(serverName, button) {
             const card = button.closest('.instance-card');
             const badge = card.querySelector('.instance-card-badges .status-badge');
 
@@ -2546,12 +2711,14 @@
 
                 setStatus('running');
                 const link = document.createElement('a');
-                link.href = `/proxy/${port}/`;
+                link.href = data.url;
                 link.target = '_blank';
                 link.rel = 'noopener';
                 link.className = 'btn-access';
                 link.textContent = 'Öppna';
+                link.setAttribute('data-ready-check', '');
                 button.replaceWith(link);
+                waitUntilReady(card);
             } catch (error) {
                 alert(`Kunde inte starta instans: ${error.message}`);
                 button.disabled = false;
@@ -2621,8 +2788,205 @@
             document.getElementById('instanceCount').textContent = instanceCount;
         }
         
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+        
+        // Disable "Öppna" until Home Assistant answers, so students don't open an error page
+        async function waitUntilReady(card) {
+            const link = card.querySelector('a.btn-access[data-ready-check]');
+            if (!link) return;
+            const serverName = card.dataset.serverName;
+            for (let i = 0; i < 100; i++) {
+                try {
+                    const response = await fetch(`/api/instances/${encodeURIComponent(serverName)}/ready`);
+                    if (response.ok && (await response.json()).ready) {
+                        link.classList.remove('not-ready');
+                        link.textContent = 'Öppna';
+                        return;
+                    }
+                    if (!response.ok) return;
+                } catch (error) {
+                    // Try again
+                }
+                if (i === 0) {
+                    link.classList.add('not-ready');
+                    link.textContent = 'Startar…';
+                }
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        }
+        
+        async function loadConfigTemplates() {
+            try {
+                const response = await fetch('/api/config-templates');
+                const data = await response.json();
+                if (!response.ok || data.templates.length < 2) return;
+                const select = document.getElementById('configTemplate');
+                select.innerHTML = data.templates.map(t =>
+                    `<option value="${escapeHtml(t.name)}"${t.name === data.default ? ' selected' : ''}>${escapeHtml(t.name)}${t.description ? ' – ' + escapeHtml(t.description) : ''}</option>`
+                ).join('');
+                document.getElementById('configTemplateGroup').classList.remove('hidden');
+            } catch (error) {
+                console.error('Failed to load configuration templates:', error);
+            }
+        }
+        
+        let currentUndoResetServer = null;
+        
+        function openUndoResetModal(serverName) {
+            currentUndoResetServer = serverName;
+            document.getElementById('undoResetServerName').textContent = serverName;
+            document.getElementById('undoResetModalMessage').innerHTML = '';
+            document.getElementById('undoResetForm').reset();
+            document.getElementById('undoResetModal').style.display = 'block';
+        }
+        
+        function closeUndoResetModal() {
+            document.getElementById('undoResetModal').style.display = 'none';
+            currentUndoResetServer = null;
+        }
+        
+        document.getElementById('undoResetForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('undoResetSubmitBtn');
+            const messageDiv = document.getElementById('undoResetModalMessage');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Återställer...';
+            messageDiv.innerHTML = '';
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(currentUndoResetServer)}/undo-reset`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: document.getElementById('undoResetPassword').value})
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    messageDiv.innerHTML = '<div class="success-message">Instansen återställdes! Laddar om...</div>';
+                    setTimeout(() => location.reload(), 1500);
+                    return;
+                }
+                messageDiv.innerHTML = `<div class="error-message">${escapeHtml(data.error)}</div>`;
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte ångra: ${escapeHtml(error.message)}</div>`;
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Ångra';
+        });
+        
+        function formatTime(isoString) {
+            if (!isoString) return '–';
+            return new Date(isoString).toLocaleString('sv-FI', {dateStyle: 'short', timeStyle: 'short'});
+        }
+        
+        async function loadProgress() {
+            const body = document.getElementById('progressTableBody');
+            const messageDiv = document.getElementById('progressModalMessage');
+            messageDiv.innerHTML = '';
+            body.innerHTML = '<tr><td colspan="9">Laddar…</td></tr>';
+            try {
+                const response = await fetch('/api/admin/progress');
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Okänt fel');
+                if (data.instances.length === 0) {
+                    body.innerHTML = '<tr><td colspan="9">Inga instanser</td></tr>';
+                    return;
+                }
+                body.innerHTML = data.instances.map(p => `
+                    <tr>
+                        <td>${escapeHtml(p.server_name)}</td>
+                        <td>${escapeHtml(p.created_by || '–')}</td>
+                        <td>${escapeHtml(p.status)}</td>
+                        <td>${p.onboarded ? 'Ja' : 'Nej'}</td>
+                        <td>${p.automations}</td>
+                        <td>${p.scripts}</td>
+                        <td>${p.scenes}</td>
+                        <td>${escapeHtml(formatTime(p.last_active))}</td>
+                        <td><a class="link-button" href="/api/instances/${encodeURIComponent(p.server_name)}/export">Exportera</a></td>
+                    </tr>`).join('');
+            } catch (error) {
+                body.innerHTML = '';
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte hämta översikt: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+        
+        function openProgressModal() {
+            document.getElementById('progressModal').style.display = 'block';
+            loadProgress();
+        }
+        
+        function closeProgressModal() {
+            document.getElementById('progressModal').style.display = 'none';
+        }
+        
+        function openPushFileModal() {
+            document.getElementById('pushFileModalMessage').innerHTML = '';
+            document.getElementById('pushFileForm').reset();
+            document.getElementById('pushFileModal').style.display = 'block';
+        }
+        
+        function closePushFileModal() {
+            document.getElementById('pushFileModal').style.display = 'none';
+        }
+        
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',', 2)[1]);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        document.getElementById('pushFileUpload').addEventListener('change', function() {
+            const pathInput = document.getElementById('pushFilePath');
+            if (this.files.length && !pathInput.value) {
+                pathInput.value = this.files[0].name;
+            }
+        });
+        
+        document.getElementById('pushFileForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('pushFileSubmitBtn');
+            const messageDiv = document.getElementById('pushFileModalMessage');
+            const upload = document.getElementById('pushFileUpload');
+            const requestBody = {
+                path: document.getElementById('pushFilePath').value,
+                restart: document.getElementById('pushFileRestart').checked,
+                admin_password: document.getElementById('pushFileAdminPassword').value
+            };
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Skickar...';
+            messageDiv.innerHTML = '';
+            try {
+                if (upload.files.length) {
+                    requestBody.content_base64 = await readFileAsBase64(upload.files[0]);
+                } else {
+                    requestBody.content = document.getElementById('pushFileContent').value;
+                }
+                const response = await fetch('/api/admin/push-file', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(requestBody)
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Okänt fel');
+                const failed = data.results.filter(r => r.status !== 'success');
+                messageDiv.innerHTML = `<div class="${failed.length ? 'error-message' : 'success-message'}">${escapeHtml(data.message)}` +
+                    (failed.length ? '<br>Misslyckades: ' + failed.map(r => escapeHtml(r.server_name)).join(', ') : '') + '</div>';
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="error-message">Kunde inte skicka filen: ${escapeHtml(error.message)}</div>`;
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Skicka';
+        });
+        
         // Initialize page
         updateInstanceCount();
+        loadConfigTemplates();
+        document.querySelectorAll('.instance-card').forEach(card => waitUntilReady(card));
         checkAdminEnabled();
         checkTeacherAccessEnabled();
         checkInstanceCreationStatus();
