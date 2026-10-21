@@ -135,6 +135,25 @@ def test_hostname_redirects_not_prefixed(c, hostnames):
     assert r.headers['Location'] == '/onboarding.html'
 
 
+def test_unknown_subdomains_rejected_when_portal_hosts_set(c, hostnames):
+    with patch.object(appmod, 'PORTAL_HOSTS', {'edu.example.com'}), \
+         patch.object(appmod, 'INSTANCE_PARENT_DOMAIN', 'example.com'):
+        assert c.get('/api/config-templates', headers={'Host': 'edu.example.com'}).status_code == 200
+        assert c.get('/api/config-templates', headers={'Host': 'typo.example.com'}).status_code == 404
+        # Other hosts (e.g. LAN access by IP) still reach the portal
+        assert c.get('/api/config-templates', headers={'Host': '192.168.50.111:5000'}).status_code == 200
+
+
+def test_parent_domain_from_template():
+    import importlib
+    with patch.dict(os.environ, {**_TEST_ENV, 'INSTANCE_URL_TEMPLATE': 'https://ha-{slug}.wredlund.fi', 'PORTAL_HOSTS': 'edu.wredlund.fi'}), \
+         patch.object(docker, 'from_env', return_value=MagicMock()):
+        module = importlib.reload(appmod)
+        assert module.INSTANCE_PARENT_DOMAIN == 'wredlund.fi' and module.PORTAL_HOSTS == {'edu.wredlund.fi'}
+    with patch.dict(os.environ, _TEST_ENV), patch.object(docker, 'from_env', return_value=MagicMock()):
+        importlib.reload(appmod)
+
+
 def test_api_lists_instance_urls(c, hostnames):
     create(c, 'Lab 1')
     assert c.get('/api/instances', headers=STUDENT).json['Lab 1']['url'] == 'https://ha-lab-1.example.com/'

@@ -217,6 +217,7 @@ Environment variables can be configured to customize the portal:
 | `MAX_INSTANCES` | `0` (unlimited) | *Optional* Maximum instances per non-admin user (0 = unlimited) |
 | `DOCKER_HOST_IP` | `host.docker.internal` | *Optional* IP/hostname to access instance containers from portal container. Use `host.docker.internal` on Docker Desktop, or set to host's IP if needed |
 | `INSTANCE_URL_TEMPLATE` | (empty) | *Recommended* Give each instance its own hostname, e.g. `https://ha-{slug}.example.com`. See [Instance hostnames](#instance-hostnames). Empty = instances are reached via `/proxy/<port>/` |
+| `PORTAL_HOSTS` | (empty) | Hostnames the portal is served on, e.g. `edu.example.com`. With a wildcard DNS record, set this so other unknown subdomains get a 404 instead of the portal |
 | `HA_TIME_ZONE` | `Europe/Helsinki` | Time zone written into every instance's configuration and container |
 | `HA_COUNTRY` | `FI` | Country (ISO code) for every instance |
 | `HA_LANGUAGE` | `sv` | Home Assistant's backend language (the UI language follows each user's browser/profile) |
@@ -281,7 +282,8 @@ Setup with a Cloudflare tunnel (example domain `example.com`, portal at `edu.exa
    placed after any more specific hostnames.
 3. **Access**: add the application domain `ha-*.example.com` to the portal's Cloudflare Access application
    (or create one with the same policy), so requests carry `Cf-Access-Authenticated-User-Email`.
-4. **Portal**: set `INSTANCE_URL_TEMPLATE=https://ha-{slug}.example.com` and restart it.
+4. **Portal**: set `INSTANCE_URL_TEMPLATE=https://ha-{slug}.example.com` and `PORTAL_HOSTS=edu.example.com`
+   and restart it. `PORTAL_HOSTS` makes every other subdomain that the wildcard sends to the portal return 404.
 
 Cloudflare's free Universal SSL certificate only covers one level of subdomains (`*.example.com`),
 which is why the template uses `ha-{slug}.example.com` and not `{slug}.ha.example.com`.
