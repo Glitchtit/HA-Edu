@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.9.4
+
+- Fix lost or corrupted `instances.json` with several gunicorn workers: the data file is now locked across processes and written atomically, and slow operations (reset, delete, restart, bulk start/stop/delete, teacher access) save only their own changes instead of overwriting the file with stale data. Previously an instance created meanwhile could vanish, and the orphan cleanup then removed its container
+- Fix duplicate app accounts when a Home Assistant user's first visit sends several requests at once, and lost updates to user accounts and settings
+- Fix creating an instance whose name maps to an existing container name (e.g. "Lab 1" and "lab-1") deleting the existing instance's container and volume; names are now validated and "portal" is reserved
+- Require the instance owner or an admin for the proxy, WebSocket, lock toggle and status endpoints (another user could open or unlock someone else's instance)
+- `/status` no longer rewrites the data file on every poll
+- Fix the teacher account being duplicated on every re-add, since Home Assistant drops the username from `.storage/auth`
+- Fix teacher access failing when installing packages in the temporary container took over 60 seconds
+- Instance passwords are stripped consistently, so passwords with leading/trailing spaces work
+- Copy the master configuration with `put_archive` instead of a shell heredoc
+- Interaction logger: cross-process lock for writes, rotation and cleanup, and a daily GDPR retention cleanup
+
 ## 1.9.3
 
 - Remove the `http:` block (use_x_forwarded_for/trusted_proxies) from the master configuration baked into new instances. The proxy never sends X-Forwarded-* headers, so the block was unused — and on HA 2026.8 it triggered a pointless 5-minute config trial plus a "deprecated YAML http configuration" repair warning in every student instance (YAML http config stops working in HA 2027.2)
