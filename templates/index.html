@@ -1367,7 +1367,11 @@
                     </div>
                     {% endif %}
                     <div class="instance-actions">
+                        {% if instance.status in ['exited', 'stopped', 'created'] %}
+                        <button class="btn-access" onclick="startInstance('{{ name }}', {{ instance.port }}, this)">Starta</button>
+                        {% else %}
                         <a href="/proxy/{{ instance.port }}/" target="_blank" rel="noopener" class="btn-access">Öppna</a>
+                        {% endif %}
                         <div class="instance-actions-secondary">
                             <button class="btn-restart" onclick="restartInstance('{{ name }}')" id="restart-{{ name }}">Starta om</button>
                             {% if is_admin %}
@@ -2497,6 +2501,54 @@
             openToggleModal(e.target.checked);
         });
         
+        async function startInstance(serverName, port, button) {
+            const card = button.closest('.instance-card');
+            const badge = card.querySelector('.instance-card-badges .status-badge');
+
+            function setStatus(status) {
+                card.className = card.className.replace(/status-border-\S+/, `status-border-${status}`);
+                badge.className = `status-badge status-${status}`;
+                badge.textContent = status;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Startar...';
+
+            try {
+                const response = await fetch(`/api/instances/${encodeURIComponent(serverName)}/start`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Okänt fel');
+                }
+
+                // Poll until the container reports running
+                let status = data.status;
+                for (let i = 0; status !== 'running' && i < 30; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const statusResponse = await fetch(`/api/instances/${encodeURIComponent(serverName)}/status`);
+                    status = (await statusResponse.json()).status;
+                }
+                if (status !== 'running') {
+                    throw new Error(`Instansen har status "${status}"`);
+                }
+
+                setStatus('running');
+                const link = document.createElement('a');
+                link.href = `/proxy/${port}/`;
+                link.target = '_blank';
+                link.rel = 'noopener';
+                link.className = 'btn-access';
+                link.textContent = 'Öppna';
+                button.replaceWith(link);
+            } catch (error) {
+                alert(`Kunde inte starta instans: ${error.message}`);
+                button.disabled = false;
+                button.textContent = 'Starta';
+            }
+        }
+
         async function resetInstance(serverName) {
             openResetModal(serverName);
         }

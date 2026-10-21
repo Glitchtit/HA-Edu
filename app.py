@@ -1367,6 +1367,44 @@ def get_instance_status(server_name):
         save_instances(instances)
         return jsonify({'status': 'removed'}), 200
 
+@app.route('/api/instances/<server_name>/start', methods=['POST'])
+def start_instance(server_name):
+    """API endpoint to start a stopped instance (admin or instance owner)"""
+    instances = load_instances()
+
+    if server_name not in instances:
+        return jsonify({'error': 'Instance not found'}), 404
+
+    instance = instances[server_name]
+
+    # Only admins or the user who created the instance may start it
+    if not is_admin_user(request):
+        user_id = get_user_identifier(request)
+        if user_id is None or instance.get('created_by', '') != user_id:
+            return jsonify({'error': 'Access denied'}), 403
+
+    try:
+        container = client.containers.get(instance['container_id'])
+        if container.status != 'running':
+            container.start()
+            container.reload()
+            logger.info(f'Started instance: {server_name}')
+
+        instance['status'] = container.status
+        instances[server_name] = instance
+        save_instances(instances)
+
+        return jsonify({'status': container.status, 'server_name': server_name}), 200
+
+    except docker.errors.NotFound:
+        instance['status'] = 'removed'
+        instances[server_name] = instance
+        save_instances(instances)
+        return jsonify({'error': 'Instance not found'}), 404
+    except docker.errors.APIError as e:
+        logger.error(f'Failed to start instance {server_name}: {str(e)}')
+        return jsonify({'error': 'Failed to start instance. Please try again or contact support.'}), 500
+
 @app.route('/api/instances/<server_name>/reset', methods=['POST'])
 def reset_instance(server_name):
     """API endpoint to reset an instance to default HA image (requires instance password or admin password)"""
