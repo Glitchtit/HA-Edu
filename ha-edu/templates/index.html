@@ -1521,7 +1521,9 @@
             <form id="addInstanceForm">
                 <div class="form-group">
                     <label for="serverName">Servernamn:</label>
-                    <input type="text" id="serverName" name="serverName" required 
+                    <input type="text" id="serverName" name="serverName" required
+                           maxlength="50" pattern="[A-Za-z0-9][A-Za-z0-9 _.\-]{0,49}"
+                           title="Endast bokstäver A-Z, siffror, mellanslag, bindestreck, punkter och understreck. Måste börja med en bokstav eller siffra."
                            placeholder="t.ex. Student-Lab-01">
                 </div>
                 <div class="form-group">

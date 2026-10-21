@@ -12,12 +12,20 @@ Logs are stored in /logs directory with rotation support.
 import os
 import json
 import logging
+import fcntl
+import tempfile
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 import threading
 
 # Thread lock for log file writes to prevent race conditions
+# (in-process half of InteractionLogger._file_lock)
 _log_write_lock = threading.Lock()
+
+# How often the GDPR retention cleanup runs while the app is running
+CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
 # Configure log directory - use /logs in production, ./logs in development
 # Check if running as root or if /logs exists (production)
@@ -53,9 +61,14 @@ class InteractionLogger:
         self.log_file = os.path.join(log_dir, 'interactions.log')
         self.retention_days = retention_days
         self._dir_created = False
+        self._last_cleanup = 0.0
         
         # Clean up old logs on initialization
-        self._cleanup_old_logs()
+        try:
+            with self._file_lock():
+                self._cleanup_old_logs()
+        except Exception as e:
+            logger.error(f'Failed to run initial log cleanup: {str(e)}')
         
     def _ensure_log_dir(self):
         """Ensure log directory exists (lazy creation)"""
@@ -67,28 +80,46 @@ class InteractionLogger:
                 logger.error(f'Failed to create log directory {self.log_dir}: {str(e)}')
                 raise
         
+    @contextmanager
+    def _file_lock(self):
+        """Lock the log files across threads and processes
+        
+        Gunicorn runs several worker processes that all write, rotate and clean up
+        the same files; a threading lock alone does not serialise them.
+        """
+        with _log_write_lock:
+            self._ensure_log_dir()
+            with open(os.path.join(self.log_dir, '.interactions.lock'), 'a') as lock_file:
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lock_file, fcntl.LOCK_UN)
+    
     def _write_log(self, log_entry):
         """Write a log entry to the log file
         
         Args:
             log_entry: Dictionary containing log data
         """
-        with _log_write_lock:
-            try:
-                # Ensure log directory exists
-                self._ensure_log_dir()
-                
+        try:
+            with self._file_lock():
                 # Check if log rotation is needed
                 if os.path.exists(self.log_file):
                     if os.path.getsize(self.log_file) > MAX_LOG_SIZE:
                         self._rotate_logs()
                 
+                # Run the retention cleanup periodically, not only at startup and
+                # rotation, so expired entries are removed even on a quiet server
+                if time.time() - self._last_cleanup > CLEANUP_INTERVAL_SECONDS:
+                    self._cleanup_old_logs()
+                
                 # Write log entry as JSON line
                 with open(self.log_file, 'a') as f:
                     f.write(json.dumps(log_entry) + '\n')
                     
-            except Exception as e:
-                logger.error(f'Failed to write interaction log: {str(e)}')
+        except Exception as e:
+            logger.error(f'Failed to write interaction log: {str(e)}')
     
     def _rotate_logs(self):
         """Rotate log files when they exceed MAX_LOG_SIZE"""
@@ -125,6 +156,8 @@ class InteractionLogger:
         if self.retention_days <= 0:
             # If retention is set to 0 or negative, don't clean up (infinite retention)
             return
+        
+        self._last_cleanup = time.time()
             
         try:
             # Calculate cutoff timestamp
@@ -164,8 +197,11 @@ class InteractionLogger:
                     
                     # Only rewrite the file if we removed entries
                     if removed_count > 0:
-                        with open(log_file_path, 'w') as f:
+                        # Write atomically so a crash cannot leave a truncated log
+                        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(log_file_path), suffix='.tmp')
+                        with os.fdopen(fd, 'w') as f:
                             f.writelines(retained_entries)
+                        os.replace(tmp_path, log_file_path)
                         logger.info(f'GDPR cleanup: Removed {removed_count} expired log entries from {os.path.basename(log_file_path)}')
                     
                 except Exception as e:
